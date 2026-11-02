@@ -10,7 +10,7 @@ import {
   visibleWidth,
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
-import { type DelegateLink, delegateLink, focusPane } from "../agents/links.js";
+import { type DelegateLink, delegateLink, focusTerminal } from "../agents/links.js";
 import type { GitStatusCache } from "../git-status.js";
 import { formatWorksMarkdown } from "../markdown.js";
 import { openRepository } from "../open-repository.js";
@@ -20,6 +20,7 @@ import { safeMultiline, safeSingleLine } from "../text.js";
 import { formatTime, taskTime, workTime } from "../time.js";
 import type { Todo, WorkWithTodos } from "../types.js";
 import { border, type DelegateHitRegion, delegateHitRegion, frame, gitBorder, metricsColumn, metricsHeader, ownerBadge, recordId, rule, todoIcon } from "./panel.js";
+import { readTaskView } from "./task-view.js";
 
 type DashboardItem =
   | { key: `work:${string}`; kind: "work"; work: WorkWithTodos }
@@ -79,7 +80,8 @@ export class WorksDashboard implements Component, Focusable {
     this.toggleHitRegion = undefined;
     const dialogWidth = Math.max(1, width);
     const innerWidth = Math.max(1, dialogWidth - 2);
-    const works = this.state.listWorks();
+    const { works, error } = readTaskView(this.state);
+    if (error) return [border(innerWidth, "top", this.theme), frame(this.theme.fg("error", "Tasks unavailable · Escape closes"), innerWidth, this.theme), frame(truncateToWidth(error, innerWidth, "…"), innerWidth, this.theme), border(innerWidth, "bottom", this.theme)];
     const todos = works.flatMap((work) => work.tasks);
     const items = this.items(works);
     this.syncSelection(items);
@@ -161,7 +163,7 @@ export class WorksDashboard implements Component, Focusable {
       const link = selected?.kind === "todo" ? delegateLink(selected.todo.taskInfo) : undefined;
       if (link) void this.openLinkedDelegate(link);
       else {
-        this.message = "Select a delegated task with a Herdr pane link. Navigation requires Herdr.";
+        this.message = "Select a delegated task with a Core terminal link. Navigation requires the Herdr app.";
         this.messageColor = "warning";
         this.tui.requestRender();
       }
@@ -238,7 +240,7 @@ export class WorksDashboard implements Component, Focusable {
     clearInterval(this.refreshTimer);
   }
 
-  private items(works = this.state.listWorks()): DashboardItem[] {
+  private items(works = readTaskView(this.state).works): DashboardItem[] {
     const items: DashboardItem[] = [];
     for (const work of works) {
       items.push({ key: `work:${work.workId}`, kind: "work", work });
@@ -402,7 +404,7 @@ export class WorksDashboard implements Component, Focusable {
     this.messageColor = "warning";
     this.tui.requestRender();
     try {
-      await focusPane(link.paneId, this.cwd);
+      await focusTerminal(link.terminalId, this.cwd);
       this.message = "Opened delegated agent in Herdr.";
       this.messageColor = "success";
     } catch (error) {
@@ -444,8 +446,8 @@ export class WorksDashboard implements Component, Focusable {
     this.messageColor = "warning";
     this.tui.requestRender();
 
-    const works = this.state.listWorks();
     try {
+      const works = this.state.listWorks();
       await copyToClipboard(formatWorksMarkdown(works));
       const todoCount = works.reduce((total, work) => total + work.tasks.length, 0);
       this.message = `Copied ${works.length} work${works.length === 1 ? "" : "s"} and ${todoCount} todo${todoCount === 1 ? "" : "s"} as Markdown.`;

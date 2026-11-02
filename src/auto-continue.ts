@@ -109,7 +109,7 @@ export function registerTaskAutoContinue(pi: ExtensionAPI, state: TaskState): vo
     }
     if (!settings.enabled || event.continue || event.context.pendingMessages.length > 0 || ctx.hasPendingMessages()) return;
 
-    // Only task status controls continuation, across every Work on this branch.
+    // Only task status controls continuation, across every Work in this Pi session.
     const records = state.listTodos({ status: "active" })
       .map((todo) => ({ id: todo.taskId, workId: todo.workId, name: todo.taskName, status: todo.status }));
     if (records.length === 0) return;

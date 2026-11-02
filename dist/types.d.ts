@@ -24,7 +24,7 @@ export interface Todo {
     /** Accumulated measured time; missing/null means historical time is unknown. */
     elapsedMs?: number | null;
     delegatedTimes?: DelegatedTime[];
-    /** Current interval start, exposed only in live snapshots, never restored. */
+    /** Current interval start in the shared snapshot; cleared on process resume. */
     workingSince?: number;
     createdAt: number;
     updatedAt: number;

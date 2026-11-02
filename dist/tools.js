@@ -77,7 +77,7 @@ export function registerTaskTools(pi, state) {
     pi.registerTool({
         name: "WorkDelete",
         label: "WorkDelete",
-        description: "Delete a work and every associated todo from the current session branch. Use only for explicit cancellation or mistaken entries.",
+        description: "Delete a work and every associated todo from the current Pi session. Use only for explicit cancellation or mistaken entries.",
         parameters: Type.Object({ workId: Type.String() }, { additionalProperties: false }),
         execute(_id, params) {
             const work = state.getWork(params.workId);

@@ -41,7 +41,8 @@ export function registerTaskTiming(pi, state) {
     pi.on("session_before_fork", reset);
     pi.on("session_before_tree", reset);
     pi.on("session_shutdown", reset);
-    // restore() discards runtime state; these only reset the lifecycle gate.
+    // Session resume clears running markers. Tree navigation only pauses timing;
+    // it never restores or rolls back session-owned task records.
     pi.on("session_start", reset);
     pi.on("session_tree", reset);
 }

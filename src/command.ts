@@ -4,7 +4,7 @@ import type { TaskState } from "./state.js";
 import { runWorksOverlay } from "./ui/overlay.js";
 import { WorksDashboard } from "./ui/works-dashboard.js";
 
-export function registerWorksCommand(pi: ExtensionAPI, state: TaskState, git: GitStatusCache, getOpenCommand: () => string[]): void {
+export function registerWorksCommand(pi: ExtensionAPI, state: TaskState, git: GitStatusCache, getOpenCommand: () => string[], handleAction: (args: string, ctx: ExtensionCommandContext) => Promise<void>): void {
   let closeActiveDashboard: (() => void) | undefined;
 
   pi.on("session_start", () => {
@@ -18,8 +18,12 @@ export function registerWorksCommand(pi: ExtensionAPI, state: TaskState, git: Gi
   });
 
   pi.registerCommand("works", {
-    description: "Open the session works and todos dashboard",
-    handler: async (_args: string, ctx: ExtensionCommandContext) => {
+    description: "Open the dashboard; compact-on/off controls the Pi display, herdr-on/off controls the native panel",
+    handler: async (args: string, ctx: ExtensionCommandContext) => {
+      if (args.trim()) {
+        await handleAction(args.trim(), ctx);
+        return;
+      }
       if (ctx.mode !== "tui") {
         ctx.ui.notify("/works requires interactive TUI mode", "error");
         return;

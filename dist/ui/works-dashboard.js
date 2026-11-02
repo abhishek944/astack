@@ -1,12 +1,13 @@
 import { copyToClipboard } from "@earendil-works/pi-coding-agent";
 import { matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi, } from "@earendil-works/pi-tui";
-import { delegateLink, focusPane } from "../agents/links.js";
+import { delegateLink, focusTerminal } from "../agents/links.js";
 import { formatWorksMarkdown } from "../markdown.js";
 import { openRepository } from "../open-repository.js";
 import { formatCompletion, taskCompletion, workCompletion } from "../progress.js";
 import { safeMultiline, safeSingleLine } from "../text.js";
 import { formatTime, taskTime, workTime } from "../time.js";
 import { border, delegateHitRegion, frame, gitBorder, metricsColumn, metricsHeader, ownerBadge, recordId, rule, todoIcon } from "./panel.js";
+import { readTaskView } from "./task-view.js";
 const CHROME_LINES = 9;
 export class WorksDashboard {
     tui;
@@ -65,7 +66,9 @@ export class WorksDashboard {
         this.toggleHitRegion = undefined;
         const dialogWidth = Math.max(1, width);
         const innerWidth = Math.max(1, dialogWidth - 2);
-        const works = this.state.listWorks();
+        const { works, error } = readTaskView(this.state);
+        if (error)
+            return [border(innerWidth, "top", this.theme), frame(this.theme.fg("error", "Tasks unavailable · Escape closes"), innerWidth, this.theme), frame(truncateToWidth(error, innerWidth, "…"), innerWidth, this.theme), border(innerWidth, "bottom", this.theme)];
         const todos = works.flatMap((work) => work.tasks);
         const items = this.items(works);
         this.syncSelection(items);
@@ -157,7 +160,7 @@ export class WorksDashboard {
             if (link)
                 void this.openLinkedDelegate(link);
             else {
-                this.message = "Select a delegated task with a Herdr pane link. Navigation requires Herdr.";
+                this.message = "Select a delegated task with a Core terminal link. Navigation requires the Herdr app.";
                 this.messageColor = "warning";
                 this.tui.requestRender();
             }
@@ -240,7 +243,7 @@ export class WorksDashboard {
         this.unsubscribeGit();
         clearInterval(this.refreshTimer);
     }
-    items(works = this.state.listWorks()) {
+    items(works = readTaskView(this.state).works) {
         const items = [];
         for (const work of works) {
             items.push({ key: `work:${work.workId}`, kind: "work", work });
@@ -403,7 +406,7 @@ export class WorksDashboard {
         this.messageColor = "warning";
         this.tui.requestRender();
         try {
-            await focusPane(link.paneId, this.cwd);
+            await focusTerminal(link.terminalId, this.cwd);
             this.message = "Opened delegated agent in Herdr.";
             this.messageColor = "success";
         }
@@ -452,8 +455,8 @@ export class WorksDashboard {
         this.message = "Copying all works and todos as Markdown…";
         this.messageColor = "warning";
         this.tui.requestRender();
-        const works = this.state.listWorks();
         try {
+            const works = this.state.listWorks();
             await copyToClipboard(formatWorksMarkdown(works));
             const todoCount = works.reduce((total, work) => total + work.tasks.length, 0);
             this.message = `Copied ${works.length} work${works.length === 1 ? "" : "s"} and ${todoCount} todo${todoCount === 1 ? "" : "s"} as Markdown.`;

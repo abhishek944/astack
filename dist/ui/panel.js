@@ -1,13 +1,14 @@
 import { stripVTControlCharacters } from "node:util";
 import { copyToClipboard } from "@earendil-works/pi-coding-agent";
 import { sliceByColumn, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { delegateLink, focusPane } from "../agents/links.js";
+import { delegateLink, focusTerminal } from "../agents/links.js";
 import { formatWorksMarkdown } from "../markdown.js";
 import { openRepository, openSession } from "../open-repository.js";
 import { taskOwner } from "../ownership.js";
 import { formatCompletion, taskCompletion, workCompletion } from "../progress.js";
 import { safeSingleLine } from "../text.js";
 import { formatTime, taskTime, workTime } from "../time.js";
+import { readTaskView } from "./task-view.js";
 const EMPTY_COMPONENT = { render: () => [], invalidate: () => { } };
 const PROGRESS_VALUE_WIDTH = 4;
 const TIME_VALUE_WIDTH = 8;
@@ -23,7 +24,7 @@ export class TasksPanelHost {
     panel;
     handle;
     ui;
-    mode = "floating";
+    mode = "off";
     minimized = false;
     cwd = "";
     sessionId = "Session unavailable";
@@ -155,12 +156,17 @@ class TasksPanel {
             this.setVisible(width >= 48);
         if (width < 48)
             return [];
-        const works = this.state.listWorks();
+        const { works, error } = readTaskView(this.state);
+        const todos = works.flatMap((work) => work.tasks);
         const boxWidth = this.placement === "floating" ? width : Math.min(54, Math.max(48, Math.floor(width * 0.44)));
         const innerWidth = boxWidth - 2;
         const leftPad = this.placement === "widget" ? " ".repeat(Math.max(0, width - boxWidth)) : "";
+        if (error) {
+            this.copyHitRegion = this.sessionHitRegion = this.openHitRegion = this.toggleHitRegion = undefined;
+            return [border(innerWidth, "top", this.theme), frame(this.theme.fg("error", "Tasks unavailable"), innerWidth, this.theme), frame(truncateToWidth(error, innerWidth, "…"), innerWidth, this.theme), border(innerWidth, "bottom", this.theme)].map((line) => `${leftPad}${line}`);
+        }
         if (this.minimized) {
-            const header = this.renderHeader(innerWidth, leftPad.length);
+            const header = this.renderHeader(innerWidth, leftPad.length, todos);
             return [
                 gitBorder(innerWidth, this.theme, this.git.getSnapshot()),
                 frame(header, innerWidth, this.theme),
@@ -211,7 +217,7 @@ class TasksPanel {
         const suffix = this.placement === "floating" && hasOverflow
             ? this.tui.mode === "fullscreen" ? ` · ${range}` : ` · ${range} · latest · /works for all`
             : "";
-        const header = this.renderHeader(innerWidth, leftPad.length, suffix);
+        const header = this.renderHeader(innerWidth, leftPad.length, todos, suffix);
         const lines = [
             gitBorder(innerWidth, this.theme, this.git.getSnapshot()),
             frame(header, innerWidth, this.theme),
@@ -277,7 +283,8 @@ class TasksPanel {
         if (visible) {
             this.unsubscribeGit ??= this.git.subscribe(() => this.tui.requestRender());
             this.refreshTimer ??= setInterval(() => {
-                if (!this.minimized && this.state.listTodos().some((todo) => todo.workingSince !== undefined))
+                const view = readTaskView(this.state);
+                if (view.error || (!this.minimized && view.works.some((work) => work.tasks.some((todo) => todo.workingSince !== undefined))))
                     this.tui.requestRender();
             }, 1_000);
             this.refreshTimer.unref?.();
@@ -296,9 +303,9 @@ class TasksPanel {
         this.onMinimizedChange(minimized);
         this.tui.requestRender();
     }
-    renderHeader(width, leftPadWidth, suffix = "") {
+    renderHeader(width, leftPadWidth, todos, suffix = "") {
         const counts = { active: 0, blocked: 0, completed: 0, cancelled: 0 };
-        for (const todo of this.state.listTodos())
+        for (const todo of todos)
             counts[todo.status]++;
         const statuses = ["blocked", "active", "completed", "cancelled"];
         const summary = statuses.filter((status) => counts[status] > 0)
@@ -334,7 +341,7 @@ class TasksPanel {
             return;
         this.openingDelegate = true;
         try {
-            await focusPane(link.paneId, this.cwd);
+            await focusTerminal(link.terminalId, this.cwd);
         }
         catch (error) {
             const reason = error instanceof Error ? safeSingleLine(error.message) : "Unknown error.";
@@ -375,8 +382,8 @@ class TasksPanel {
             return;
         this.copying = true;
         this.tui.requestRender();
-        const works = this.state.listWorks();
         try {
+            const works = this.state.listWorks();
             await copyToClipboard(formatWorksMarkdown(works));
             const todoCount = works.reduce((total, work) => total + work.tasks.length, 0);
             this.notify(`Copied ${works.length} work${works.length === 1 ? "" : "s"} and ${todoCount} todo${todoCount === 1 ? "" : "s"} as Markdown.`, "info");
