@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>local.pi.slack-gateway</string>
+	<key>ProgramArguments</key>
+	<array>
+		<!-- Replace these three placeholders with absolute paths on the host. -->
+		<string>__NODE_BIN__</string>
+		<string>--env-file=__HOME__/.config/pi-slack/slack.env</string>
+		<string>__CHECKOUT__/dist/service.js</string>
+	</array>
+	<!-- Keep WorkingDirectory at HOME, outside the checkout, so the service does not
+	     depend on the checkout directory as its current working directory. macOS may
+	     still require access to protected code or project paths. -->
+	<key>WorkingDirectory</key>
+	<string>__HOME__</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>__HOME__/Library/Logs/pi-slack.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>__HOME__/Library/Logs/pi-slack.err.log</string>
+</dict>
+</plist>
