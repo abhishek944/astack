@@ -1,0 +1,118 @@
+{
+  "name": "@abhishek944/pi-image-gen",
+  "version": "0.9.1",
+  "description": "Image and sprite generation for Pi, plus independent existing-image search via Serper, Brave, SerpApi and Openverse.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "extension",
+    "image-generation",
+    "image-search",
+    "sprite-generation",
+    "apng",
+    "codex",
+    "chatgpt",
+    "nano-banana",
+    "gpt-image",
+    "qwen-image",
+    "muse-image",
+    "meta-ai",
+    "openrouter"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./extension": {
+      "types": "./dist/extension.d.ts",
+      "import": "./dist/extension.js",
+      "default": "./dist/extension.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js",
+      "default": "./dist/core/index.js"
+    },
+    "./search": {
+      "types": "./dist/search/index.d.ts",
+      "import": "./dist/search/index.js",
+      "default": "./dist/search/index.js"
+    },
+    "./durable": {
+      "types": "./dist/durable.d.ts",
+      "import": "./dist/durable.js",
+      "default": "./dist/durable.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "docs/portable-and-durable.md",
+    "skills",
+    "preview.png",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "pi": {
+    "image": "https://raw.githubusercontent.com/abhishek944/pi-image-gen/main/preview.png",
+    "extensions": [
+      "./dist/extension.js"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhishek944/pi-image-gen.git"
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "prepare": "npm run build",
+    "check": "npm run typecheck && npm pack --dry-run --json >/dev/null"
+  },
+  "dependencies": {
+    "@amaster.ai/pi-shared": "^0.1.10",
+    "sharp": "^0.35.5",
+    "upng-js": "^2.1.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-durable": "1.1.0",
+    "@earendil-works/pi-ai": ">=0.80.10",
+    "@earendil-works/pi-coding-agent": ">=0.79.1",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-durable": {
+      "optional": true
+    },
+    "@earendil-works/pi-ai": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "typebox": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-durable": "1.1.0",
+    "@earendil-works/pi-ai": "0.80.10",
+    "@earendil-works/pi-coding-agent": "0.80.10",
+    "typebox": "*",
+    "typescript": "^5.9.3"
+  }
+}

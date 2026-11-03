@@ -1,0 +1,8 @@
+node_modules/
+dist/
+generated-sprites/
+*.tsbuildinfo
+*.tgz
+var/
+.pi/loops/
+.DS_Store
