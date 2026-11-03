@@ -36,9 +36,17 @@ Saying "implement this" does not end the role. One worker can own tightly couple
 
 - Do not silently implement a delegated task in the main session. If no working backend is available, or delegation is blocked or fails, report the concrete blocker, any partial resources and safe options. Ask how to proceed rather than silently performing substantial work locally.
 - Inspect the worker's actual changed files, output and checks before accepting work. A worker's claim, idle status or process exit is not verification. Delegate substantive review and execution checks instead of doing them locally.
-- Do not add First Mate-specific orchestration, worker registries, schedulers, worktrees, timing limits or tool gates. Use existing capabilities.
+- Do not add First Mate-specific orchestration, worker registries, schedulers, worktrees or timing limits. Use existing capabilities. The package already enforces the coordinator tool allowlist described below; do not duplicate it in prompts or invent additional restrictions.
 - Do not bypass permissions, trust, side-conversation boundaries or model routing because work is delegated.
 - In a worker session, ignore coordinator guidance from this skill and execute the assignment under ordinary project and host instructions.
+
+## Coordinator tool availability
+
+When First Mate is effectively on in a primary session, the extension restricts the model to `read`, `grep`, `find`, `ls` and every tool registered by an installed pi-tasks, pi-loop-monitor, pi-decisions or pi-herdr package. Other registered tools are removed from the model-facing set and re-filtered before each request, including tools registered during a multi-turn run, and direct or nested calls to them are rejected at Pi's `tool_call` boundary with a delegation explanation. The allowlist is derived from the packages' actual installed registrations, not from tool annotations, so their orchestration, tracking, decision and monitor tools stay usable unchanged. In particular, `MonitorCreate` keeps its normal arguments and behavior.
+
+Off mode, a `--firstmate-worker` process and verified Core workers keep ordinary tool availability. Turning coordinator mode off restores the active-tool set from before the restriction without activating unrelated tools. The baseline is recorded in existing session state under this session's identity, so `/firstmate off` after resuming a saved session restores the original set even when the restricted declarations were the last ones recorded. A fork does not inherit another session's baseline.
+
+This is Pi tool-call enforcement, not an OS sandbox. It cannot make an allowed tool harmless: an allowed monitor or agent tool can still start or control processes, and project trust, permissions, user authorization and `/ask` or `/btw` boundaries still apply. Do not claim absolute prevention through explicitly allowed tools.
 
 ## Mode and configuration
 
@@ -47,4 +55,4 @@ Saying "implement this" does not end the role. One worker can own tightly couple
 - `--firstmate-worker` always suppresses coordinator mode regardless of default or session override, and skips optional Core detection. Other launchers should pass this flag to child Pi processes that load this extension, especially with a shared default-on configuration.
 - Without that explicit flag, optional pi-herdr/Core detection verifies workers through both `pi.task` and `pi.session` labels. `HC_TERMINAL_ID` alone is not a worker marker. Unknown third-party launchers are not automatically recognized.
 - A failed Core lookup suppresses default-on with a diagnostic. An explicit `/firstmate on` can still enable an unclassified session; only use it when this is the coordinator. Verified or explicitly marked workers stay suppressed.
-- This is behavioral guidance, not a sandbox or enforcement layer. First Mate does not block tools.
+- The coordinator tool allowlist is enforced by the extension, not only by this skill. Off sessions, explicit `--firstmate-worker` processes and verified Core workers have ordinary tool availability.

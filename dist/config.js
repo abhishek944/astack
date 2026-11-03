@@ -6,7 +6,7 @@
  * the section it owns. Unknown sibling keys are ignored for forward compatibility.
  */
 export const FIRST_MATE_SETTINGS_KEY = "pi-firstmate";
-const DEFAULT_OFF = { kind: "valid", enabled: false };
+const DEFAULT_OFF = { kind: "valid", enabled: false, banner: true };
 function describeValue(value) {
     if (value === null)
         return "null";
@@ -24,7 +24,9 @@ function describeValue(value) {
  * Resolve the configured default.
  *
  * A missing section, a missing `enabled`, or an empty section means `false`.
- * A malformed section is reported instead of silently enabling coordinator mode.
+ * A malformed section or `enabled` is reported instead of silently enabling
+ * coordinator mode. A malformed optional `banner` disables only the banner and
+ * keeps the valid `enabled` value; the problem is carried as a diagnostic.
  */
 export function readConfiguredDefault(settings) {
     if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
@@ -40,13 +42,20 @@ export function readConfiguredDefault(settings) {
         };
     }
     const enabled = section.enabled;
-    if (enabled === undefined)
-        return DEFAULT_OFF;
-    if (typeof enabled !== "boolean") {
+    if (enabled !== undefined && typeof enabled !== "boolean") {
         return {
             kind: "invalid",
             message: `expected "${FIRST_MATE_SETTINGS_KEY}.enabled" to be true or false, found ${describeValue(enabled)}`,
         };
     }
-    return { kind: "valid", enabled };
+    const banner = section.banner;
+    if (banner !== undefined && typeof banner !== "boolean") {
+        return {
+            kind: "valid",
+            enabled: enabled ?? false,
+            banner: false,
+            bannerProblem: `expected "${FIRST_MATE_SETTINGS_KEY}.banner" to be true or false, found ${describeValue(banner)}`,
+        };
+    }
+    return { kind: "valid", enabled: enabled ?? false, banner: banner ?? true };
 }

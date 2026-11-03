@@ -1,5 +1,6 @@
 {
   "pi-firstmate": {
-    "enabled": false
+    "enabled": false,
+    "banner": true
   }
 }

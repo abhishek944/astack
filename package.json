@@ -17,6 +17,7 @@
   "files": [
     "src/",
     "dist/",
+    "herdr/",
     "skills/firstmate/",
     "config.example.json",
     "README.md",
