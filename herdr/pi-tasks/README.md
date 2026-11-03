@@ -26,7 +26,7 @@ herdr-app check ~/.config/herdr-app/mods/pi-tasks-pane-header
 
 ## Behavior
 
-- Compact real Work → Task rows, newest Work first with older Works below; task order within each Work stays unchanged. No invented subtasks. Activate a Work name to fold its tasks, or a task name to toggle an unboxed inline description/relevant blocked reason. Owner/link marker lines stay in stored data but are not visible metadata.
+- Compact real Work → Task rows, newest Work first with older Works below; task order within each Work stays unchanged. No invented subtasks. Activate a Work name to fold its tasks, or a task name to toggle an unboxed inline description/relevant blocked reason. The selected task is highlighted across its whole row; title focus uses an underline rather than a separate text-colored fill. Double-clicking counts as one activation instead of immediately toggling the description twice. Owner/link marker lines stay in stored data but are not visible metadata.
 - Leading loader only while the task is genuinely running, `!` for blocked, `✓` for complete, quiet idle/cancelled marks. No session/connection bar, top counts, extra owner/status fact line or Read-only footer.
 - Plain right-aligned progress and measured effort. Work completion averages noncancelled tasks; unknown propagates. Effort includes cancelled time and imported cumulative reports once. Unknown is `—`, known zero `0s`.
 - A measured clock ticks only for a live source actually working on the selected measured task. Saved/offline/paused values freeze; time is not wall-clock age or ETA. Native spinner animation is independent of clock redraws. This Herdr API does not expose an OS reduced-motion preference.

@@ -180,16 +180,17 @@ export default class Tasks extends View {
       : todo.status === "completed" ? "Completed" : todo.status === "cancelled" ? "Cancelled" : "Active; not running";
   }
 
-  button(id, label, accessible, callback, t) {
+  button(id, label, accessible, callback, t, taskName = false) {
     return Button.new(id).min_w(0).rounded(4).cursor_pointer().text_color(t.foreground)
       .accessibility_label(accessible).tooltip(accessible).tab_stop(true)
-      .focus((style) => style.bg(t.selected).text_color(t.accent))
-      .on_click((_event, cx) => { cx.stop_propagation(); callback(cx); }).child(label);
+      // Task selection belongs to the row; underline keeps keyboard focus visible without a second fill.
+      .focus((style) => taskName ? style.underline() : style.bg(t.selected).text_color(t.accent))
+      .on_click((event, cx) => { cx.stop_propagation(); callback(cx, event); }).child(label);
   }
 
-  nameButton(id, label, accessible, callback, t) {
+  nameButton(id, label, accessible, callback, t, taskName = false) {
     // Constrain the label itself so long names ellipsize at the end, not under the status glyph.
-    return this.button(id, div().flex_1().min_w(0).truncate().text_left().child(label), accessible, callback, t)
+    return this.button(id, div().flex_1().min_w(0).truncate().text_left().child(label), accessible, callback, t, taskName)
       .flex().flex_1().min_w(0).items_center().justify_start().overflow_hidden();
   }
 
@@ -247,13 +248,16 @@ export default class Tasks extends View {
     const time = elapsed(todo, this.at(todo));
     const row = h_flex().id("task-" + todo.taskId).h(30).flex_none().min_w(0).px(10).gap(12).items_center().rounded(5)
       .when(this.selected === todo.taskId, (element) => element.bg(t.selected))
-      .hover((style) => style.bg(t.hover))
+      .hover((style) => style.bg(this.selected === todo.taskId ? t.selected : t.hover))
       .child(h_flex().flex_1().min_w(0).pl(this.width < 450 ? 8 : 18).gap(7).items_center()
         .child(div().w(10).h(17).flex_none().border_l(1).border_b(1).border_color(t.input).rounded_bl(4))
         .child(this.stateMark(todo, t))
         .child(this.nameButton("name-" + todo.taskId, todo.taskName,
           todo.taskName + ". " + this.state(todo) + ". " + (this.expanded.has(todo.taskId) ? "Hide description" : "Show description"),
-          (cx) => this.toggleTask(todo, cx), t).text_size(this.width < 450 ? 11 : 12.5).font_medium())
+          (cx, event) => {
+            // A double-click is one activation, not an immediate open followed by close.
+            if (event.click_count === 1) this.toggleTask(todo, cx);
+          }, t, true).text_size(this.width < 450 ? 11 : 12.5).font_medium())
         .child(div().flex_none().text_size(this.width < 450 ? 9 : 11).text_color(t.dim).child(todo.taskId))
         .when(Boolean(link), (element) => element.child(this.button("agent-" + todo.taskId, "Agent ↗",
           "Focus existing linked agent for " + todo.taskName, (cx) => this.openAgent(todo, cx), t)
