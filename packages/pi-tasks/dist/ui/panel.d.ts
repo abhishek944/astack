@@ -1,0 +1,46 @@
+import { type ExtensionUIContext, type Theme } from "@earendil-works/pi-coding-agent";
+import { type DelegateLink } from "../agents/links.js";
+import type { GitSnapshot, GitStatusCache } from "../git-status.js";
+import type { TaskState } from "../state.js";
+import type { TodoStatus } from "../types.js";
+export type TasksPanelMode = "floating" | "widget" | "off";
+export declare function metricsContentWidth(width: number): number;
+export declare class TasksPanelHost {
+    private readonly state;
+    private readonly git;
+    private readonly getOpenCommand;
+    private tui;
+    private panel;
+    private handle;
+    private ui;
+    private mode;
+    private minimized;
+    private cwd;
+    private sessionId;
+    constructor(state: TaskState, git: GitStatusCache, getOpenCommand: () => string[]);
+    attach(ui: ExtensionUIContext, cwd: string, sessionId: string): void;
+    setMode(mode: TasksPanelMode): void;
+    getMode(): TasksPanelMode;
+    setMinimized(minimized: boolean): void;
+    update(): void;
+    hide(): void;
+    private applyMode;
+    private hideCurrent;
+}
+export declare function recordId(id: string, theme: Theme): string;
+export declare function ownerBadge(taskInfo: string, theme: Theme, linked?: boolean): string;
+export type DelegateHitRegion = {
+    start: number;
+    end: number;
+    y: number;
+    link: DelegateLink;
+};
+export declare function delegateHitRegion(link: DelegateLink | undefined, start: number, line: string, y: number, leftPad?: number): DelegateHitRegion | undefined;
+export declare function progressName(name: string, completion: number | null, width: number, prefix?: string): string;
+export declare function metricsColumn(content: string, completion: number | null, elapsed: number | null, running: boolean, width: number, theme: Theme): string;
+export declare function metricsHeader(width: number, theme: Theme): string;
+export declare function todoIcon(status: TodoStatus, theme: Theme): string;
+export declare function frame(content: string, innerWidth: number, theme: Theme): string;
+export declare function rule(innerWidth: number, theme: Theme): string;
+export declare function gitBorder(innerWidth: number, theme: Theme, snapshot: GitSnapshot): string;
+export declare function border(innerWidth: number, edge: "top" | "bottom", theme: Theme): string;
