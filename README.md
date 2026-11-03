@@ -6,18 +6,20 @@ Each directory under `packages/`, `skills/`, and `services/` is an independent u
 
 ## Layout
 
-| Directory | Package / identity | Kind |
+| Directory | Package / identity | npm status (2026-11-03) |
 |---|---|---|
-| `packages/pi-ask` | `@abhishek944/pi-ask` | published Pi package |
-| `packages/pi-classifier` | `@abhishek944/pi-classifier` | published Pi package |
-| `packages/pi-decisions` | `@abhishek944/pi-decisions` | published Pi package |
-| `packages/pi-firstmate` | `@abhishek944/pi-firstmate` | published Pi package |
-| `packages/pi-herdr` | `@abhishek944/pi-herdr` | published Pi package |
-| `packages/pi-image-gen` | `@abhishek944/pi-image-gen` | published Pi package |
-| `packages/pi-loop-monitor` | `@abhishek944/pi-loop-monitor` | published Pi package |
-| `packages/pi-tasks` | `@abhishek944/pi-tasks` | published Pi package |
-| `skills/pi-herdr-skills` | `pi-herdr-skills` (private) | shared skill source + checksum manifest |
-| `services/pi-slack` | `pi-slack` (private) | separately configured Slack service |
+| `packages/pi-ask` | `@abhishek944/pi-ask` | publishable; published on npm |
+| `packages/pi-classifier` | `@abhishek944/pi-classifier` | publishable; published on npm |
+| `packages/pi-decisions` | `@abhishek944/pi-decisions` | publishable; not published on npm |
+| `packages/pi-firstmate` | `@abhishek944/pi-firstmate` | publishable; not published on npm |
+| `packages/pi-herdr` | `@abhishek944/pi-herdr` | publishable; not published on npm |
+| `packages/pi-image-gen` | `@abhishek944/pi-image-gen` | publishable; published on npm |
+| `packages/pi-loop-monitor` | `@abhishek944/pi-loop-monitor` | publishable; published on npm |
+| `packages/pi-tasks` | `@abhishek944/pi-tasks` | publishable; published on npm |
+| `skills/pi-herdr-skills` | `pi-herdr-skills` (private) | not published; shared skill source + checksum manifest |
+| `services/pi-slack` | `pi-slack` (private) | not published; separately configured Slack service |
+
+“Publishable” means the manifest, `exports`, `files`, and pack output are intact; it is not a claim that the current local version has been released. Registry status was checked on 2026-11-03.
 
 `pi-web-access` is a third-party fork and is intentionally not part of Astack. `pi-sandbox` was retired during the migration; see [MIGRATION.md](MIGRATION.md).
 
@@ -43,27 +45,31 @@ Install, upgrade, and publish behavior is unchanged: `package.json` names, versi
 ## Workspace checks
 
 ```bash
-npm run check           # typecheck/build/pack-dry-run every package + service build
-npm run verify          # same, after installing each directory's dependencies
-npm run check:skills    # global skill synchronization check for skills/pi-herdr-skills
+npm run check           # package typecheck/build/pack dry-run (where defined) + service typecheck/build
+npm run verify          # install each directory first, then run npm run check
+npm run check:skills    # run skills/pi-herdr-skills/scripts/check-repo.sh
+node scripts/check.mjs --all   # npm run check plus the skills check
 ```
 
-`npm run check` uses each directory's existing `node_modules`; `npm run verify` performs `npm ci` (or `npm install --no-package-lock` where no lockfile exists) first. Neither creates unit tests or modifies package metadata.
+- `npm run check` never installs or edits package metadata. It requires each directory's `node_modules` to exist and fails with the underlying tool error when dependencies are missing.
+- `npm run verify` runs `npm ci` in directories that have a lockfile and `npm install --no-package-lock` in `pi-firstmate` (the only unit without one), then runs the same checks.
+- `npm run check:skills` compares `skills/*` with `~/.agents/skills/*`; it requires those global installs and does not touch package builds.
+- None of these commands creates or runs unit tests.
 
 ## Install and cutover
 
 Current Pi installations keep working because the original repositories remain in place. Distribution paths are unchanged:
 
-- npm packages: `pi install npm:@abhishek944/<package>`.
-- Local checkouts: `pi install ./astack/packages/<package>`.
+- Published on npm: `pi install npm:@abhishek944/pi-ask`, `pi-classifier`, `pi-image-gen`, `pi-loop-monitor`, `pi-tasks`. The registry version may be older than the local `package.json`; publishing is manual and was not performed during migration.
+- Not published on npm: `pi-decisions`, `pi-firstmate`, and `pi-herdr` install from a local checkout, for example `pi install ./astack/packages/<package>` or the original checkout path.
 - Git sources target a repository URL as a whole; Pi has no subdirectory syntax for `pi install git:`. Do not point a git install at Astack expecting a nested package.
 
 Installed-path cutover is user-owned and was not applied during the migration. To switch local-path installs to Astack, update the corresponding entries in `~/.pi/agent/settings.json`:
 
 ```text
-../../Documents/pi-extensions/pi-tasks      -> ../../Documents/pi-extensions/astack/packages/pi-tasks
-../../Documents/pi-extensions/pi-firstmate  -> ../../Documents/pi-extensions/astack/packages/pi-firstmate
-../../Documents/pi-extensions/pi-decisions  -> ../../Documents/pi-extensions/astack/packages/pi-decisions
+../../Documents/pi-extensions/pi-tasks      -> ../../Documents/astack/packages/pi-tasks
+../../Documents/pi-extensions/pi-firstmate  -> ../../Documents/astack/packages/pi-firstmate
+../../Documents/pi-extensions/pi-decisions  -> ../../Documents/astack/packages/pi-decisions
 ```
 
 Then run `/reload`. The git-installed `pi-herdr` remains tied to `github.com/abhishek944/pi-herdr` until it is republished through npm or reinstalled.

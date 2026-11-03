@@ -19,7 +19,7 @@ Requirements: a modern Pi host supporting nested tool calls, active Work/Todo to
 
 | Tool | Purpose |
 | --- | --- |
-| `AgentCreate` | Launch interactive Pi, verify native readiness and a dedicated visible Task-ID-named tab, register monitoring, link/block its task, and return handles plus an unsent assignment. |
+| `AgentCreate` | Derive and create the canonical delegated-task directory, launch interactive Pi, verify native readiness and a dedicated visible Task-ID-named tab, register monitoring, link/block its task, and return handles plus an unsent assignment. |
 | `AgentList` | List Core terminals, including unrelated terminals. |
 | `AgentStatus` | Inspect one returned Core terminal address. |
 | `AgentOutput` | Read its screen/history (existing default 50 lines, maximum 200). |
@@ -28,19 +28,21 @@ Requirements: a modern Pi host supporting nested tool calls, active Work/Todo to
 | `AgentClose` | Stop its monitor, kill the owned live terminal, remove its record and clear matching task links. |
 | `AgentFocus` | Focus its visible Herdr app tab. |
 
-For an existing `owner: delegate` task and canonical task artifact directory:
+For an existing `owner: delegate` task, `AgentCreate` derives and creates the canonical task directory. Root sessions omit `parentTaskDir`; a delegated worker passes the exact `parentTaskDir` from its assignment:
 
 ```typescript
 AgentCreate({
   workId: "W1", taskId: "T2",
-  taskDir: "var/<full-current-sessionId>/W1/T2",
+  // parentTaskDir: "<exact parentTaskDir from your assignment>", // delegated workers only
   assignment: "Review the approved change without editing files.",
   provider: "<selected-provider>", model: "<selected-model>", thinking: "high",
   onSignal: "Inspect the actual worker output and import its measured timing."
 })
 ```
 
-Creation returns `terminalId`, `tabId`, `monitorId`, `reportPath`, `assignment`, and `assignmentSent: false`. Confirm MonitorList shows the Core subscription ready, then AgentSend the assignment. Keep that monitor for follow-ups. Signals, idle state and process exit are not proof of task completion: read output/files, verify results, import timing and only then close owned resources. Failures report partial handles without retries or automatic cleanup.
+A root caller gets `var/<host-sessionId>/<workId>/<taskId>/`. A delegated caller gets `<parentTaskDir>/<host-sessionId>/<workId>/<taskId>/`. Do not shell-read the session ID or pre-create either directory; the tool returns the resolved `taskDir` after creating it. Direct `hc` CLI launches still prepare their canonical directories manually.
+
+Creation returns `taskDir`, `terminalId`, `tabId`, `monitorId`, `reportPath`, `assignment`, and `assignmentSent: false`. Confirm MonitorList shows the Core subscription ready, then AgentSend the assignment. Keep that monitor for follow-ups. Signals, idle state and process exit are not proof of task completion: read output/files, verify results, import timing and only then close owned resources. Failures report partial handles without retries or automatic cleanup.
 
 Use the bundled `herdr` skill for the complete authorization, model-routing, worker-local tracking and nested artifact contract. Mutation tools require tracked main-conversation work, never `/ask` or `/btw`; list/status/output retain their read-only behavior. No legacy Herdr TUI fallback, HERDR_ENV requirement, worker registry or automatic recovery is added.
 
@@ -51,7 +53,7 @@ Use the bundled `herdr` skill for the complete authorization, model-routing, wor
 - **pi-loop-monitor:** continuous supervision and wake delivery.
 - **Core / Herdr app:** processes / visible tabs and focus.
 
-The synchronous `pi-tasks:delegation-api` event request `{version: 1, respond(api)}` discovers task-owned `prepare(ctx, {workId, taskId, taskDir})`, `attach(ctx, {workId, taskId, terminalId, monitorId, reportPath})`, and `detach(ctx, {terminalId})`. Prepare returns a timing report path; attach records timing/link metadata and blocks the parent; detach preserves AgentClose metadata cleanup. The bridge validates current-session ownership and active tracking tools, rejecting retained APIs after session replacement. There are no cross-install internal imports or new task stores.
+The synchronous `pi-tasks:delegation-api` event request `{version: 1, respond(api)}` discovers task-owned `prepare(ctx, {workId, taskId, taskDir})`, `attach(ctx, {workId, taskId, terminalId, monitorId, reportPath})`, and `detach(ctx, {terminalId})`. AgentCreate derives and validates `taskDir` from the host session and real Work/Task IDs; prepare validates the delegate assignment, creates the directory if absent inside the repository's real `var/`, and writes the timing descriptor there. Prepare returns a timing report path; attach records timing/link metadata and blocks the parent; detach preserves AgentClose metadata cleanup. The bridge validates current-session ownership and active tracking tools, rejecting retained APIs after session replacement. There are no cross-install internal imports or new task stores.
 
 ## Development and licenses
 

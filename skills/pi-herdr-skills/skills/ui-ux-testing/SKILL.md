@@ -21,7 +21,7 @@ Before replying, follow `talk-human`. Follow `no-unit-tests`; UI testing does no
 
 ## Coordination and tools
 
-Use existing Work/Todo records and keep them current when available. Never change tracking during `/ask` or `/btw`. Use monitors for background commands; do not create polling loops for an ordinary audit.
+Use existing Work/Todo records and keep them current when available. Never change tracking during `/ask`. Use monitors for background commands; do not create polling loops for an ordinary audit.
 
 Read `browser-use` for browser operation. Prefer an isolated local browser with already-installed tools; an installed Playwright runtime is acceptable when the browser harness cannot connect. Do not silently switch to a paid remote browser. For native apps, read `computer-use` and use its verified screenshot/accessibility workflow.
 

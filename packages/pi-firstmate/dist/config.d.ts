@@ -11,6 +11,9 @@ export type ConfiguredDefault = {
     enabled: boolean;
     banner: boolean;
     bannerProblem?: string;
+    /** Exact skill names to advertise while coordinator mode is effective; `undefined` advertises every discovered skill. */
+    coordinatorSkills?: string[];
+    coordinatorSkillsProblem?: string;
 } | {
     kind: "invalid";
     message: string;
@@ -22,5 +25,8 @@ export type ConfiguredDefault = {
  * A malformed section or `enabled` is reported instead of silently enabling
  * coordinator mode. A malformed optional `banner` disables only the banner and
  * keeps the valid `enabled` value; the problem is carried as a diagnostic.
+ * A malformed optional `coordinatorSkills` disables only that filter, so an
+ * invalid value advertises every discovered skill instead of hiding all of
+ * them.
  */
 export declare function readConfiguredDefault(settings: unknown): ConfiguredDefault;

@@ -172,7 +172,7 @@ The compact panel and `/works` show reserved Done and Time columns; `▶` beside
 
 ### Delegated timing
 
-AgentCreate creates a unique `delegated-time-<id>.json` descriptor below the existing canonical parent task directory and returns its `reportPath`. Its prepared worker assignment includes export instructions; its monitor callback includes import instructions. Herdr still runs the worker and pi-loop-monitor still reports state changes. The timing file, not the notification or chat response, carries the measured values. Both agents need this version of pi-tasks loaded.
+AgentCreate derives and creates the canonical parent task directory, then creates a unique `delegated-time-<id>.json` descriptor below it and returns its `reportPath`. Its prepared worker assignment includes export instructions; its monitor callback includes import instructions. Herdr still runs the worker and pi-loop-monitor still reports state changes. The timing file, not the notification or chat response, carries the measured values. Both agents need this version of pi-tasks loaded.
 
 Before returning, the worker pauses or completes its assignment tasks and exports their timing:
 
@@ -231,12 +231,12 @@ These tools are owned and registered by the separate [pi-herdr](https://github.c
 
 pi-herdr 0.1.0 requires the compatible local pi-tasks source with the version-1 prepare/attach/detach event-bus bridge. Published pi-tasks 0.15.0 lacks this bridge and owns legacy Agent tools; replace that source, do not load it alongside the updated local package. Reload or restart Pi after installing the coordinated pair. pi-tasks keeps timing, records, delegate links and task UI helpers. pi-herdr rejects duplicate Agent names with migration instructions rather than overriding them.
 
-For an existing active Work/Todo with owner: delegate and an existing canonical taskDir:
+For an existing active Work/Todo with owner: delegate:
 
 ```typescript
 AgentCreate({
   workId: "W1", taskId: "T2",
-  taskDir: "var/<full-current-sessionId>/W1/T2",
+  // parentTaskDir: "<exact parentTaskDir from your assignment>", // delegated workers only
   assignment: "Review the approved change. Do not edit files or run tests.",
   provider: "<chosen-provider>", model: "<chosen-model-id>", thinking: "high",
   onSignal: "Inspect actual worker output and blockers before completing its task.",
@@ -244,9 +244,11 @@ AgentCreate({
 })
 ```
 
+AgentCreate derives the canonical task directory from the host session and real Work/Task IDs and creates it if absent. A root session omits `parentTaskDir` and gets `var/<sessionId>/<workId>/<taskId>/`; a delegated session passes the exact `parentTaskDir` from its assignment and gets `<parentTaskDir>/<sessionId>/<workId>/<taskId>/`. Do not read the session ID or create the directory just for AgentCreate. Direct hc CLI launches still prepare the path manually.
+
 The wrapper verifies the real HC_TERMINAL_ID with hc and locates its app space by terminal mapping, never UI focus. It launches Pi with explicit model flags, an explicit parent, and --no-notify (the existing monitor supplies wakes). A herdr.space label without herdr.tab requests a new visible tab; the wrapper checks that it contains only the worker, renames it to the parent's Task ID, and verifies that mapping. Missing Core/app prerequisites fail clearly; HERDR_ENV is not required. Workers end with their parent by Core's default policy.
 
-The timing descriptor and prepared assignment retain worker-local tracking, canonical nested artifact paths and TaskTimeExport/Import. AgentCreate returns assignmentSent:false. Confirm MonitorList shows `Core signal subscription ready for <terminalId>`, then call `AgentSend({ terminalId, message: assignment })`. Retain that subscription for follow-ups. onSignal means worker state changed; onDone means the subscriber process ended, not task completion. Read output/files and import measured effort before accepting work.
+The timing descriptor and prepared assignment retain worker-local tracking, canonical nested artifact paths and TaskTimeExport/Import. AgentCreate returns the resolved taskDir and assignmentSent:false. Confirm MonitorList shows `Core signal subscription ready for <terminalId>`, then call `AgentSend({ terminalId, message: assignment })`. Retain that subscription for follow-ups. onSignal means worker state changed; onDone means the subscriber process ended, not task completion. Read output/files and import measured effort before accepting work.
 
 Use actual returned terminal addresses (t7 or machine/t7), not app pane IDs or tab names. A startup failure reports partial handles without blind relaunch, retries or automatic cleanup. Close only resources you created after their results are accepted. No registry or recovery runtime is added.
 

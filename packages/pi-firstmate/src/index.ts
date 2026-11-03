@@ -14,9 +14,11 @@ import type {
 	ExtensionAPI,
 	ExtensionCommandContext,
 	ExtensionContext,
+	NormalizedBuildSystemPromptOptions,
 } from "@earendil-works/pi-coding-agent";
 import { type ConfiguredDefault, readConfiguredDefault } from "./config.js";
 import { clearBannerState, ensureHerdrBanner, herdrAppHome, writeBannerState } from "./herdr-banner.js";
+import { applySkillAllowlist } from "./skill-allowlist.js";
 import { COORDINATOR_TOOLS_DESCRIPTION, createToolGate } from "./tool-gate.js";
 import { classifyCoreWorker, type WorkerClassification } from "./worker.js";
 
@@ -111,10 +113,45 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 	let savedActiveTools: string[] | null = null;
 	let savedBaselineKey: string | null = null;
 	let offRequestPrepared = false;
+	let skillWarningKey: string | null = null;
 
 	function refreshConfig(): void {
 		const settings: unknown = pi.getSettings();
+		const previous = config.kind === "valid" ? JSON.stringify(config.coordinatorSkills ?? null) : "invalid";
 		config = readConfiguredDefault(settings);
+		const current = config.kind === "valid" ? JSON.stringify(config.coordinatorSkills ?? null) : "invalid";
+		if (previous !== current) skillWarningKey = null;
+	}
+
+	function coordinatorSkillNames(): string[] | undefined {
+		return config.kind === "valid" ? config.coordinatorSkills : undefined;
+	}
+
+	/**
+	 * Narrow this run's model-facing skill advertisement. Pi rebuilds a fresh
+	 * normalized option list from its resource loader before every run, so the
+	 * filter never carries into an off, worker or default run. Skill discovery,
+	 * project-trust precedence and `/skill:<name>` resolution stay Pi's.
+	 */
+	function applyCoordinatorSkills(
+		options: NormalizedBuildSystemPromptOptions,
+		ctx: ExtensionContext,
+	): void {
+		const names = coordinatorSkillNames();
+		if (names === undefined) return;
+
+		const filtered = applySkillAllowlist(options.skills, names);
+		options.skills = filtered.skills;
+		if (filtered.unknown.length === 0) return;
+
+		const key = JSON.stringify(filtered.unknown);
+		if (key === skillWarningKey) return;
+		skillWarningKey = key;
+		report(
+			ctx,
+			`First Mate "pi-firstmate.coordinatorSkills" names skills that are not discovered: ${filtered.unknown.join(", ")}. They are not advertised; coordinator mode and the other advertised skills are unaffected.`,
+			"warning",
+		);
 	}
 
 	function refreshSessionState(ctx: ExtensionContext | ExtensionCommandContext): void {
@@ -363,7 +400,34 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 		}
 	}
 
-	function statusText(): { text: string; level: "info" | "warning" | "error" } {
+	function skillsText(ctx: ExtensionCommandContext): string {
+		const names = coordinatorSkillNames();
+		if (config.kind === "invalid") return "all discovered skills advertised (settings are invalid)";
+		if (config.kind === "valid" && config.coordinatorSkillsProblem !== undefined) {
+			return `all discovered skills advertised (invalid setting: ${config.coordinatorSkillsProblem})`;
+		}
+		if (!resolveMode().effective) return "all discovered skills advertised (coordinator mode is off)";
+		if (names === undefined) return "all discovered skills advertised (no filter configured)";
+
+		const discovered = ctx.getSystemPromptOptions().skills ?? [];
+		// Pi never advertises a skill with `disable-model-invocation`, so count that
+		// rule too instead of reporting a skill as advertised when it cannot be.
+		const advertisable = discovered.filter((skill) => !skill.disableModelInvocation);
+		const filtered = applySkillAllowlist(advertisable, names);
+		const unknown = applySkillAllowlist(discovered, names).unknown;
+		const count =
+			discovered.length === 0
+				? "no skills are discovered"
+				: advertisable.length === 0
+					? "no discovered skills can be advertised"
+					: filtered.skills.length === 0
+						? `none of ${advertisable.length} discovered skills advertised`
+						: `${filtered.skills.length} of ${advertisable.length} discovered skills advertised`;
+		const unknownText = unknown.length === 0 ? "" : `; not discovered: ${unknown.join(", ")}`;
+		return `${count} by "pi-firstmate.coordinatorSkills"${unknownText}`;
+	}
+
+	function statusText(ctx: ExtensionCommandContext): { text: string; level: "info" | "warning" | "error" } {
 		const mode = resolveMode();
 		const state = mode.suppressed
 			? "off (worker suppression)"
@@ -385,15 +449,17 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 			`Session override: ${override === null ? "none" : override ? "on" : "off"}`,
 			`Worker: ${workerText(mode.worker)}`,
 			`Tools: ${mode.effective ? `restricted to ${COORDINATOR_TOOLS_DESCRIPTION}` : "normal"}`,
+			`Skills: ${skillsText(ctx)}`,
 			`Banner: ${bannerText()}`,
 			`Guidance: ${guidance}`,
 		];
 
 		const bannerProblem = config.kind === "valid" && config.bannerProblem !== undefined;
+		const skillsProblem = config.kind === "valid" && config.coordinatorSkillsProblem !== undefined;
 		const level =
 			config.kind === "invalid"
 				? "error"
-				: bannerProblem || mode.suppressed || mode.uncertain || (mode.effective && !policy)
+				: bannerProblem || skillsProblem || mode.suppressed || mode.uncertain || (mode.effective && !policy)
 					? "warning"
 					: "info";
 		return { text: lines.join("\n"), level };
@@ -420,7 +486,7 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 				await ensureWorkerKnown();
 				syncToolGate(ctx);
 				syncBanner(ctx);
-				const status = statusText();
+				const status = statusText(ctx);
 				report(ctx, status.text, status.level);
 				return;
 			}
@@ -528,6 +594,13 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 				"warning",
 			);
 		}
+		if (config.kind === "valid" && config.coordinatorSkillsProblem !== undefined) {
+			report(
+				ctx,
+				`First Mate skills setting problem: ${config.coordinatorSkillsProblem}. Skill advertisement stays unfiltered; coordinator mode is unaffected.`,
+				"warning",
+			);
+		}
 		if (mode.uncertain && mode.worker.kind === "unknown") {
 			report(
 				ctx,
@@ -551,6 +624,7 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 		const options = event.systemPromptOptions;
 
 		if (mode.effective) {
+			applyCoordinatorSkills(options, ctx);
 			const policy = loadPolicy();
 			if (policy !== undefined) {
 				options.sections[SECTION_KEY] = policy;
@@ -606,6 +680,7 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 		override = null;
 		guidanceEvidence = false;
 		worker = undefined;
+		skillWarningKey = null;
 		try {
 			clearBannerState(herdrAppHome(), ctx.sessionManager.getSessionId());
 		} catch {

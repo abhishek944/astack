@@ -1,10 +1,10 @@
 {
   "snapshot": "2026-09-11",
-  "skills": 23,
+  "skills": 21,
   "files": [
     {
       "path": "skills/agent-review/SKILL.md",
-      "sha256": "e5c7f8cad3ce0909db00b7720d7cc67aa945ca80057be166b7326ea946469fe8",
+      "sha256": "85b8dcbf578c77a369823d357aec939997f39c2b77baa5e327f718541b8e4a8e",
       "executable": false
     },
     {
@@ -19,7 +19,7 @@
     },
     {
       "path": "skills/archify/SKILL.md",
-      "sha256": "f2246ef29fd28041e59e8d13136f7415835fba8806b24883f6144c7f58a4cc27",
+      "sha256": "5a857588ebf95274757b3769affd2c232cb591a370e567f44f8a93bed6b9e5e2",
       "executable": false
     },
     {
@@ -559,17 +559,12 @@
     },
     {
       "path": "skills/browser-use/SKILL.md",
-      "sha256": "45449ad671c4594514d0a3d5f1f06235f3045b7eb9b51b0fa5a921822a3f0015",
+      "sha256": "e82a1f2dc66a5317677a2928efd056edb129f19f9621a9e61f9f4696aa22c8c9",
       "executable": false
     },
     {
       "path": "skills/browser-use/scripts/headless.py",
       "sha256": "6ef223a40c841abf42dd9d44d392479448e214d2ed334b61657c100f114d3371",
-      "executable": false
-    },
-    {
-      "path": "skills/caveman/SKILL.md",
-      "sha256": "3ade4d292624d80e102f3f27dd3651ad0ef9dc0cabb8758a111d9c03b75c5511",
       "executable": false
     },
     {
@@ -584,17 +579,17 @@
     },
     {
       "path": "skills/commit-and-merge/SKILL.md",
-      "sha256": "cccbb2220d141a61738d5b15c0f2898915e528b84bc59b1de47dcc4e2c2d864f",
+      "sha256": "83da886ca1cdd4cad7ea1d3b5becfb0e8c60e1a9ebcb47cd90dcb1767e141b62",
       "executable": false
     },
     {
       "path": "skills/computer-use/SKILL.md",
-      "sha256": "3bcf1e10b50349c5c53f0a72b27e3399fb249762839027148cab685648f74242",
+      "sha256": "e0b3b2d8d38f519faf1958fea6a29e73b09332d453cfb3620f0421014f4814dd",
       "executable": false
     },
     {
       "path": "skills/design-council/SKILL.md",
-      "sha256": "888e341e0831954c604f21e9a179f739a638bdfeaeeac800584926e5d0213f17",
+      "sha256": "150a29e7df8af543d1065649d59b2a673c1c7256f532e024e0224c8d176c65a6",
       "executable": false
     },
     {
@@ -644,17 +639,12 @@
     },
     {
       "path": "skills/implement/SKILL.md",
-      "sha256": "9218932b3dbeb33e0b4c38f6038fedce781ee506895c52b793bb7556f55bce5d",
+      "sha256": "d9c83480b1459b7e8e5ab51a524219dfc9b0a1d4391b9a52bf03b17062de3ea4",
       "executable": false
     },
     {
       "path": "skills/model-routing-policy/SKILL.md",
       "sha256": "cedb15a3458221c5a2186ab60a50aec9ab84575f38294006478bbb1a67498a2a",
-      "executable": false
-    },
-    {
-      "path": "skills/next-feature/SKILL.md",
-      "sha256": "08993f9a8344f067da0f8d1350a47ad130b469b598711767d1aa39ced5460de0",
       "executable": false
     },
     {
@@ -669,12 +659,12 @@
     },
     {
       "path": "skills/read-flows/SKILL.md",
-      "sha256": "4124b7a8bcd703f23aa24d96a3b26c42b77424ce0836e26aee7900754c77966b",
+      "sha256": "4c9a20164ed4d63cf5546e06948d7001477937cb281a3a20570d309732812d80",
       "executable": false
     },
     {
       "path": "skills/research/SKILL.md",
-      "sha256": "407dc57019fdb854f6cd4c076c32747e60355d882bfe99b74b22f2cd826575f5",
+      "sha256": "0dcace56da94682b814818ddeb50367e861edeaaac6f30ab6c193b617644fd30",
       "executable": false
     },
     {
@@ -784,7 +774,7 @@
     },
     {
       "path": "skills/talk-human/SKILL.md",
-      "sha256": "dd86ced467127221b069d04cc2bea98b4c623b4abbe7f049eefd75734d378699",
+      "sha256": "c302db3db14f735a4928b098478984363e264488bb51328641719c3c1a30d0e8",
       "executable": false
     },
     {
@@ -849,7 +839,7 @@
     },
     {
       "path": "skills/ui-ux-testing/SKILL.md",
-      "sha256": "58e237fffd3996758c2396c01df4fba4baa57b28a8619afb06bda59e0a770074",
+      "sha256": "0677cce284c307e15bfe1f4391c306bbb7559963c6e2ff8c3afb13242855454a",
       "executable": false
     },
     {
@@ -859,7 +849,7 @@
     },
     {
       "path": "skills/visual-explainer/SKILL.md",
-      "sha256": "a64c6ddf9bb808550f3b0cdbd52c8857f17778c1a5bc1a37ff7e0d5129dfc566",
+      "sha256": "ec9fcc3cdeb6fb2c3e1a87a949bd8d933a957c1bfd068f727fc719cddba88b70",
       "executable": false
     }
   ]

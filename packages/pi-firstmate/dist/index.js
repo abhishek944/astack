@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { readConfiguredDefault } from "./config.js";
 import { clearBannerState, ensureHerdrBanner, herdrAppHome, writeBannerState } from "./herdr-banner.js";
+import { applySkillAllowlist } from "./skill-allowlist.js";
 import { COORDINATOR_TOOLS_DESCRIPTION, createToolGate } from "./tool-gate.js";
 import { classifyCoreWorker } from "./worker.js";
 const COMMAND_NAME = "firstmate";
@@ -80,9 +81,37 @@ export default function firstMateExtension(pi) {
     let savedActiveTools = null;
     let savedBaselineKey = null;
     let offRequestPrepared = false;
+    let skillWarningKey = null;
     function refreshConfig() {
         const settings = pi.getSettings();
+        const previous = config.kind === "valid" ? JSON.stringify(config.coordinatorSkills ?? null) : "invalid";
         config = readConfiguredDefault(settings);
+        const current = config.kind === "valid" ? JSON.stringify(config.coordinatorSkills ?? null) : "invalid";
+        if (previous !== current)
+            skillWarningKey = null;
+    }
+    function coordinatorSkillNames() {
+        return config.kind === "valid" ? config.coordinatorSkills : undefined;
+    }
+    /**
+     * Narrow this run's model-facing skill advertisement. Pi rebuilds a fresh
+     * normalized option list from its resource loader before every run, so the
+     * filter never carries into an off, worker or default run. Skill discovery,
+     * project-trust precedence and `/skill:<name>` resolution stay Pi's.
+     */
+    function applyCoordinatorSkills(options, ctx) {
+        const names = coordinatorSkillNames();
+        if (names === undefined)
+            return;
+        const filtered = applySkillAllowlist(options.skills, names);
+        options.skills = filtered.skills;
+        if (filtered.unknown.length === 0)
+            return;
+        const key = JSON.stringify(filtered.unknown);
+        if (key === skillWarningKey)
+            return;
+        skillWarningKey = key;
+        report(ctx, `First Mate "pi-firstmate.coordinatorSkills" names skills that are not discovered: ${filtered.unknown.join(", ")}. They are not advertised; coordinator mode and the other advertised skills are unaffected.`, "warning");
     }
     function refreshSessionState(ctx) {
         const sessionId = ctx.sessionManager.getSessionId();
@@ -334,7 +363,34 @@ export default function firstMateExtension(pi) {
                 return `unknown: ${classification.message}`;
         }
     }
-    function statusText() {
+    function skillsText(ctx) {
+        const names = coordinatorSkillNames();
+        if (config.kind === "invalid")
+            return "all discovered skills advertised (settings are invalid)";
+        if (config.kind === "valid" && config.coordinatorSkillsProblem !== undefined) {
+            return `all discovered skills advertised (invalid setting: ${config.coordinatorSkillsProblem})`;
+        }
+        if (!resolveMode().effective)
+            return "all discovered skills advertised (coordinator mode is off)";
+        if (names === undefined)
+            return "all discovered skills advertised (no filter configured)";
+        const discovered = ctx.getSystemPromptOptions().skills ?? [];
+        // Pi never advertises a skill with `disable-model-invocation`, so count that
+        // rule too instead of reporting a skill as advertised when it cannot be.
+        const advertisable = discovered.filter((skill) => !skill.disableModelInvocation);
+        const filtered = applySkillAllowlist(advertisable, names);
+        const unknown = applySkillAllowlist(discovered, names).unknown;
+        const count = discovered.length === 0
+            ? "no skills are discovered"
+            : advertisable.length === 0
+                ? "no discovered skills can be advertised"
+                : filtered.skills.length === 0
+                    ? `none of ${advertisable.length} discovered skills advertised`
+                    : `${filtered.skills.length} of ${advertisable.length} discovered skills advertised`;
+        const unknownText = unknown.length === 0 ? "" : `; not discovered: ${unknown.join(", ")}`;
+        return `${count} by "pi-firstmate.coordinatorSkills"${unknownText}`;
+    }
+    function statusText(ctx) {
         const mode = resolveMode();
         const state = mode.suppressed
             ? "off (worker suppression)"
@@ -355,13 +411,15 @@ export default function firstMateExtension(pi) {
             `Session override: ${override === null ? "none" : override ? "on" : "off"}`,
             `Worker: ${workerText(mode.worker)}`,
             `Tools: ${mode.effective ? `restricted to ${COORDINATOR_TOOLS_DESCRIPTION}` : "normal"}`,
+            `Skills: ${skillsText(ctx)}`,
             `Banner: ${bannerText()}`,
             `Guidance: ${guidance}`,
         ];
         const bannerProblem = config.kind === "valid" && config.bannerProblem !== undefined;
+        const skillsProblem = config.kind === "valid" && config.coordinatorSkillsProblem !== undefined;
         const level = config.kind === "invalid"
             ? "error"
-            : bannerProblem || mode.suppressed || mode.uncertain || (mode.effective && !policy)
+            : bannerProblem || skillsProblem || mode.suppressed || mode.uncertain || (mode.effective && !policy)
                 ? "warning"
                 : "info";
         return { text: lines.join("\n"), level };
@@ -387,7 +445,7 @@ export default function firstMateExtension(pi) {
                 await ensureWorkerKnown();
                 syncToolGate(ctx);
                 syncBanner(ctx);
-                const status = statusText();
+                const status = statusText(ctx);
                 report(ctx, status.text, status.level);
                 return;
             }
@@ -459,6 +517,9 @@ export default function firstMateExtension(pi) {
         if (config.kind === "valid" && config.bannerProblem !== undefined) {
             report(ctx, `First Mate banner setting problem: ${config.bannerProblem}. The banner is off; coordinator mode is unaffected.`, "warning");
         }
+        if (config.kind === "valid" && config.coordinatorSkillsProblem !== undefined) {
+            report(ctx, `First Mate skills setting problem: ${config.coordinatorSkillsProblem}. Skill advertisement stays unfiltered; coordinator mode is unaffected.`, "warning");
+        }
         if (mode.uncertain && mode.worker.kind === "unknown") {
             report(ctx, `First Mate could not verify whether this Core session is a task worker (${mode.worker.message}). Coordinator guidance from the configured default is not applied; use /firstmate on if this is a coordinator session.`, "warning");
         }
@@ -472,6 +533,7 @@ export default function firstMateExtension(pi) {
         offRequestPrepared = !mode.effective && savedActiveTools !== null;
         const options = event.systemPromptOptions;
         if (mode.effective) {
+            applyCoordinatorSkills(options, ctx);
             const policy = loadPolicy();
             if (policy !== undefined) {
                 options.sections[SECTION_KEY] = policy;
@@ -526,6 +588,7 @@ export default function firstMateExtension(pi) {
         override = null;
         guidanceEvidence = false;
         worker = undefined;
+        skillWarningKey = null;
         try {
             clearBannerState(herdrAppHome(), ctx.sessionManager.getSessionId());
         }

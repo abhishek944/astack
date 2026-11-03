@@ -23,7 +23,7 @@ First Mate does not install an orchestration backend. Install and authorize pi-h
 
 | Command | Effect |
 | --- | --- |
-| `/firstmate` or `/firstmate status` | Show effective mode, default, override, worker classification, tool availability and guidance availability. |
+| `/firstmate` or `/firstmate status` | Show effective mode, default, override, worker classification, tool availability, skill advertisement and guidance availability. |
 | `/firstmate on` | Enable coordinator guidance for this session. |
 | `/firstmate off` | Disable it and supersede earlier coordinator guidance. |
 | `/firstmate default` | Clear the session override and follow settings. |
@@ -45,7 +45,26 @@ Merge this section into `~/.pi/agent/settings.json` (or your custom Pi agent dir
 
 The default is off when omitted. Set `enabled` to `true` for default-on primary sessions. A trusted project's `.pi/settings.json` may override it through Pi's normal settings merge. See [config.example.json](config.example.json).
 
-Only booleans are accepted. A malformed section or `enabled` reports a diagnostic and treats the configured default as off; an explicit session override still applies. A malformed `banner` disables only the banner and reports it; a valid `enabled` keeps working. Other settings keys are untouched.
+Only booleans are accepted for `enabled` and `banner`. A malformed section or `enabled` reports a diagnostic and treats the configured default as off; an explicit session override still applies. A malformed `banner` disables only the banner and reports it; a valid `enabled` keeps working. A malformed `coordinatorSkills` disables only that filter and reports it. Other settings keys are untouched.
+
+### Coordinator skill advertisement
+
+`coordinatorSkills` is an optional array of exact skill names. While First Mate is effectively on in a primary coordinator session, Pi advertises only the discovered skills with those names (`[]` advertises none); omitting the key keeps every discovered skill advertised. For example:
+
+```json
+{
+  "pi-firstmate": {
+    "enabled": true,
+    "coordinatorSkills": ["implement", "model-routing-policy", "herdr"]
+  }
+}
+```
+
+Names are matched exactly against the skills Pi already discovered. User, package, explicit and trusted-project locations keep their normal precedence and collision rules, so the list cannot add, load, reorder or trust a skill; a configured name that is not currently discovered is ignored. `/firstmate status` reports the advertised count and names any configured skill the session did not discover, and the first effective run with a new unknown-name set adds one warning.
+
+The filter changes only that run's model-facing `<skills>` advertisement. It does not delete or disable skills, change permissions or tool restrictions, or erase instructions already in the conversation. Off sessions, `--firstmate-worker` processes and verified Core workers advertise every discovered skill. Settings are read when the session starts, when you run `/firstmate`, and after `/reload`; a changed filter applies from the next run.
+
+Pi resolves `/skill:name` from its complete discovered list, so an explicit `/skill:name` still loads a skill that is filtered out of the advertisement; filtering only removes automatic model routing to it. `enableSkillCommands` controls whether skill commands appear in interactive command discovery, but manually entered `/skill:name` commands still work. The bundled First Mate policy is injected separately as the `first_mate` prompt section, so filtering never removes coordinator guidance. A malformed value (a non-array, a non-string entry, or an empty name) disables only this filter with a diagnostic instead of hiding every skill.
 
 ## Herdr banner
 
@@ -95,7 +114,7 @@ Unknown third-party launcher workers cannot be reliably recognized automatically
 
 ## Boundaries
 
-First Mate is coordinator guidance plus the tool-call allowlist above. It is not a security sandbox or a guarantee that a model complies, and it does not grant permissions. Project trust, user authorization, specialized workflows and `/ask` or `/btw` restrictions remain intact. Workers follow their assignment and ordinary instructions, not coordinator delegation guidance.
+First Mate is coordinator guidance plus the tool-call allowlist and the optional skill-advertisement filter above. It is not a security sandbox or a guarantee that a model complies, and it does not grant permissions. Project trust, user authorization, specialized workflows and `/ask` or `/btw` restrictions remain intact. Workers follow their assignment and ordinary instructions, not coordinator delegation guidance. Filtered skills remain installed and available to explicit `/skill:name` commands; the filter is not a permission, trust or sandbox boundary.
 
 The extension injects its bundled skill as a structured `first_mate` section before each user or custom-message run, including monitor wakes. Turning it off removes that section and, when earlier guidance was observed, adds a superseding guideline. An unreadable policy reports a diagnostic instead of pretending guidance was installed.
 

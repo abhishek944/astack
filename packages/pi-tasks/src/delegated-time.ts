@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { type ExtensionAPI, type ExtensionContext, withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -32,6 +32,35 @@ function inside(root: string, path: string): boolean {
 async function reportDirectory(cwd: string, path: string): Promise<string> {
   const root = resolve(await realpath(cwd), "var");
   const directory = await realpath(path);
+  if (!inside(root, directory)) throw new Error("Timing reports must be below the repository's var/ directory.");
+  return directory;
+}
+
+/** Find the nearest existing ancestor without following a final symlink. */
+async function existingAncestor(path: string): Promise<string> {
+  let current = path;
+  while (true) {
+    try {
+      await lstat(current);
+      return current;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      const parent = dirname(current);
+      if (parent === current) return current;
+      current = parent;
+    }
+  }
+}
+
+/** Create a missing delegated-task directory only below the repository's real var/ tree. */
+async function ensureReportDirectory(cwd: string, requested: string): Promise<string> {
+  const repository = await realpath(cwd);
+  const root = resolve(repository, "var");
+  const lexicalAncestor = await existingAncestor(requested);
+  const prospective = resolve(await realpath(lexicalAncestor), relative(lexicalAncestor, requested));
+  if (!inside(root, prospective)) throw new Error("Timing reports and task artifacts must be created below the repository's var/ directory.");
+  await mkdir(requested, { recursive: true });
+  const directory = await realpath(requested);
   if (!inside(root, directory)) throw new Error("Timing reports must be below the repository's var/ directory.");
   return directory;
 }
@@ -77,7 +106,7 @@ async function readReport(path: string): Promise<TimingReport> {
 export async function createTimingReport(ctx: ExtensionContext, taskDir: string, workId: string, taskId: string): Promise<string> {
   const sessionId = ctx.sessionManager.getSessionId();
   if (!SESSION_ID.test(sessionId)) throw new Error("Invalid parent session ID for timing handoff.");
-  const directory = await reportDirectory(ctx.cwd, resolve(ctx.cwd, taskDir));
+  const directory = await ensureReportDirectory(ctx.cwd, resolve(ctx.cwd, taskDir));
   const path = resolve(directory, `delegated-time-${randomUUID()}.json`);
   const report: TimingReport = { version: 1, parentSessionId: sessionId, parentWorkId: workId, parentTaskId: taskId, workerSessionId: null, tasks: [] };
   await withFileMutationQueue(path, () => writeFile(path, `${JSON.stringify(report, null, 2)}\n`, { flag: "wx", mode: 0o600 }));

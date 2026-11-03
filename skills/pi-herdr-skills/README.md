@@ -46,6 +46,8 @@ rm -rf -- "$HOME/.agents/skills/herdr-orchestrator"
 
 If upgrading from `discuss` or `plainspoken-responses`, the installer does not remove their retired global directories. After inspecting and backing up any local changes, remove `~/.agents/skills/discuss/` and `~/.agents/skills/plainspoken-responses/` so Pi loads only `research` and `talk-human`. Reload Pi afterward.
 
+The same applies to the retired `caveman` and `next-feature` skills. The installer cannot discover those removed source directories, so inspect and back up any local changes, then remove `~/.agents/skills/caveman/` and `~/.agents/skills/next-feature/`.
+
 `--force` creates a backup before replacing any locally changed skill. To uninstall matching copies:
 
 ```bash
@@ -69,14 +71,12 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | `design-council` | Compares architecture, API, workflow, and product-design options without editing. |
 | `research` | Investigates and debugs a repository without applying a fix. |
 | `security-audit` | Cloudflare's source-first security guidance and evidence-led audit workflow, with independent validation and structured reports. |
-| `next-feature` | Autonomously recommends what to build next from real user problems, web evidence, product fit, and code-grounded sizing. |
 | `grill-me` | Challenges a plan in DAG levels with parallel browser branch owners and recorded follow-ups. |
 | `model-routing-policy` | Defines shared subagent model, thinking, and Fast defaults in one editable file. |
 | `implement` | Coordinates every tracked Work with session/Work/Task artifact paths, self-versus-delegate decisions, checks, and proportionate review while preserving specialized scope. |
 | `no-arbitrary-limits` | Prevents unrequested capacity caps and implementation-time questions about optional limits; reports optional controls after completion. |
 | `no-unit-tests` | Prevents unit-test creation or execution unless the user explicitly requests it. |
-| `talk-human` | Combines clear, friendly replies with Caveman's lite brevity. |
-| `caveman` | Optional standalone concise response styles; bundled skill-only under Apache-2.0. |
+| `talk-human` | Writes clear, friendly, concise replies with plain language and exact technical detail. |
 | `read-flows` | Finds and reads repository flow documentation before relevant changes. |
 | `retro` | Reviews a coding session for ways to improve the agent's working environment; invoke explicitly with `/skill:retro`. |
 | `ui-ux-grill-me` | Captures an interface and resolves independent UX branches in parallel browser interviews. |
@@ -91,7 +91,7 @@ Some skills depend on other skills in this repository. Install the complete set 
 
 The `herdr` skill and eight `Agent*` tools are now provided together by [pi-herdr](https://github.com/abhishek944/pi-herdr), not by this skill installer or pi-tasks. Install pi-herdr with the compatible pi-tasks source described in its README and pi-loop-monitor. Published pi-tasks 0.15.0 still registers the old Agent tools, so do not load it alongside pi-herdr. Before migrating, inspect and back up `~/.agents/skills/herdr/`; after verifying pi-herdr loads its bundled skill, remove the old global copy to avoid duplicate skill names. The installer does not automatically remove retired directories. Other managed skills remain here.
 
-`implement`, the package-provided `herdr` skill, pi-tasks, pi-herdr, and pi-loop-monitor share a coordination contract: pi-tasks owns records/progress and timing, `implement` owns task ownership decisions and artifact paths, pi-herdr owns Agent tools/lifecycle, and pi-loop-monitor owns monitoring. Root task artifacts use repository-relative `var/<sessionId>/<workId>/<taskId>/`; delegated tasks append their own session/Work/Task IDs below the exact parent task directory. Obtain the full session ID from `PI_SESSION_ID` through the agent's own shell tool, require real tracking IDs before execution, and record paths and `self`/`delegate` reasons in `taskInfo`. This is instruction-only, not automatic enforcement or migration. All managed skills and their helpers use this same ownership contract. Specialized permissions, file formats and cleanup rules remain intact; feature names, interview slugs and lane labels are descriptive metadata, not alternative artifact roots. Existing artifacts are not moved implicitly.
+`implement`, the package-provided `herdr` skill, pi-tasks, pi-herdr, and pi-loop-monitor share a coordination contract: pi-tasks owns records/progress and timing, `implement` owns task ownership decisions and artifact paths, pi-herdr owns Agent tools/lifecycle, and pi-loop-monitor owns monitoring. Root task artifacts use repository-relative `var/<sessionId>/<workId>/<taskId>/`; delegated tasks append their own session/Work/Task IDs below the exact parent task directory. AgentCreate derives and creates the delegated task directory from the host session and real Work/Task IDs: root owners omit `parentTaskDir`, while delegated owners pass the exact value from their assignment. Tool callers do not shell-read the session ID or pre-create that directory; direct Herdr Core CLI launches still prepare paths manually. Require real tracking IDs before execution, and record paths and `self`/`delegate` reasons in `taskInfo`. This is instruction-only, not automatic enforcement or migration. All managed skills and their helpers use this same ownership contract. Specialized permissions, file formats and cleanup rules remain intact; feature names, interview slugs and lane labels are descriptive metadata, not alternative artifact roots. Existing artifacts are not moved implicitly.
 
 Edit `skills/model-routing-policy/SKILL.md` to change subagent model, thinking, and Fast defaults. `implement`, `agent-review`, `herdr`, `grill-me`, and `ui-ux-grill-me` read that shared policy before launching agents. Explicit user choices override its defaults; the parent agent's model is unchanged. Reinstall after editing so the global copy stays current.
 
@@ -127,7 +127,7 @@ The work-owning skills share one concise coordination rule when the correspondin
 - **Monitor** runs one long-lived background command through `MonitorCreate`, `MonitorList`, `MonitorUpdate`, and `MonitorStop` from `pi-loop-monitor`.
 - **Loop** schedules a future, recurring, event-driven, or idle continuation through `LoopCreate`, `LoopList`, `LoopUpdate`, and `LoopDelete`.
 
-Works and todos stay current as normal work progresses. Monitors are used only for background commands, and loops only when a later or repeated wake is needed. None of these records are changed during `/ask` or `/btw`.
+Works and todos stay current as normal work progresses. Monitors are used only for background commands, and loops only when a later or repeated wake is needed. None of these records are changed during `/ask`.
 
 When a skill needs retained notes, screenshots, reports or HTML, it reuses the current owner's canonical task directory from `implement`: `var/<sessionId>/<workId>/<taskId>/` for a root task, or `<exactParentTaskDir>/<childSessionId>/<childWorkId>/<childTaskId>/` for delegated work, recursively. Standalone work establishes real tracking first. Generators receive an explicit `--dir <taskDir>` rather than deriving an output root from feature names or interview slugs. The parent retains aggregate DAGs/contracts and links each worker's original evidence at its actual returned path. Optional subfolders such as `screenshots/`, `questions/` and `diagrams/` stay inside their owner's task directory. Historical feature folders remain untouched; there is no implicit migration. Communication-only skills do not create artifacts merely for uniformity. Tool-managed disposable profiles and package caches are not retained task evidence.
 
@@ -187,7 +187,6 @@ The following package versions were installed globally when this repository was 
 | Package | Snapshot version | What it adds | Source |
 | --- | ---: | --- | --- |
 | `pi-web-access` | `0.25.0` | Web search, URL fetching, repositories, PDFs, and video tools | [GitHub](https://github.com/nicobailon/pi-web-access) |
-| `pi-btw` | `0.4.1` | Parallel `/btw` side conversations | [GitHub](https://github.com/dbachelder/pi-btw) |
 | `@narumitw/pi-usage` | `0.52.3` | Account-usage display | [GitHub](https://github.com/narumiruna/pi-extensions/tree/main/packages/pi-usage) |
 | `@abhishek944/pi-image-gen` | `0.1.1` | Image generation tools and an image-generation skill | [GitHub](https://github.com/abhishek944/pi-image-gen) |
 | `@narumitw/pi-goal` | `0.54.3` | Autonomous single-goal workflow | [GitHub](https://github.com/narumiruna/pi-extensions/tree/main/packages/pi-goal) |
@@ -198,7 +197,6 @@ Install the same package versions:
 
 ```bash
 pi install npm:pi-web-access@0.25.0
-pi install npm:pi-btw@0.4.1
 pi install npm:@narumitw/pi-usage@0.52.3
 pi install npm:@abhishek944/pi-image-gen@0.1.1
 pi install npm:@narumitw/pi-goal@0.54.3

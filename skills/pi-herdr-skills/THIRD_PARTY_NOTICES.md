@@ -29,12 +29,13 @@ This repository is a curated skills snapshot. The repository's original packagin
 - Copyright: Copyright (c) 2024 Gregor Zunic
 - Required text: [`third_party/licenses/browser-use-MIT.txt`](third_party/licenses/browser-use-MIT.txt)
 
-## Caveman
+## Caveman-derived brevity guidance
 
-- Covered files: `skills/caveman/` (skill only; no CLI, proxy, hooks, or telemetry)
+- Covered files: `skills/talk-human/SKILL.md` (adapted guidance only; no CLI, proxy, hooks, or telemetry)
 - Upstream: [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman) at `f5d729488caa8f6a5b6c8086fe2cccd3e8a63f91`
-- License: Apache License 2.0 (skill redistributed without local modifications)
+- License: Apache License 2.0
 - Copyright: Copyright 2026 Julius Brussee
+- Adaptations: condensed the upstream brevity and clarity rules into a self-contained `talk-human` style. Removed mode levels, persistence commands, and terse grammar; retained filler removal, exact technical details, warning and irreversible-action clarity, and persisted-prose boundaries.
 - Required text: [`third_party/licenses/caveman-Apache-2.0.txt`](third_party/licenses/caveman-Apache-2.0.txt); earlier MIT contributions are retained under [`third_party/licenses/caveman-MIT.txt`](third_party/licenses/caveman-MIT.txt).
 
 ## Herdr skill migration

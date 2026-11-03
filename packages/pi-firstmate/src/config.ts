@@ -9,7 +9,15 @@
 export const FIRST_MATE_SETTINGS_KEY = "pi-firstmate";
 
 export type ConfiguredDefault =
-	| { kind: "valid"; enabled: boolean; banner: boolean; bannerProblem?: string }
+	| {
+			kind: "valid";
+			enabled: boolean;
+			banner: boolean;
+			bannerProblem?: string;
+			/** Exact skill names to advertise while coordinator mode is effective; `undefined` advertises every discovered skill. */
+			coordinatorSkills?: string[];
+			coordinatorSkillsProblem?: string;
+		}
 	| { kind: "invalid"; message: string };
 
 const DEFAULT_OFF: ConfiguredDefault = { kind: "valid", enabled: false, banner: true };
@@ -30,6 +38,9 @@ function describeValue(value: unknown): string {
  * A malformed section or `enabled` is reported instead of silently enabling
  * coordinator mode. A malformed optional `banner` disables only the banner and
  * keeps the valid `enabled` value; the problem is carried as a diagnostic.
+ * A malformed optional `coordinatorSkills` disables only that filter, so an
+ * invalid value advertises every discovered skill instead of hiding all of
+ * them.
  */
 export function readConfiguredDefault(settings: unknown): ConfiguredDefault {
 	if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
@@ -54,14 +65,54 @@ export function readConfiguredDefault(settings: unknown): ConfiguredDefault {
 	}
 
 	const banner = (section as Record<string, unknown>).banner;
-	if (banner !== undefined && typeof banner !== "boolean") {
+	const bannerProblem =
+		banner !== undefined && typeof banner !== "boolean"
+			? `expected "${FIRST_MATE_SETTINGS_KEY}.banner" to be true or false, found ${describeValue(banner)}`
+			: undefined;
+
+	const skills = readCoordinatorSkills((section as Record<string, unknown>).coordinatorSkills);
+
+	return {
+		kind: "valid",
+		enabled: enabled ?? false,
+		banner: banner === undefined ? true : typeof banner === "boolean" ? banner : false,
+		...(bannerProblem === undefined ? {} : { bannerProblem }),
+		...(skills.names === undefined ? {} : { coordinatorSkills: skills.names }),
+		...(skills.problem === undefined ? {} : { coordinatorSkillsProblem: skills.problem }),
+	};
+}
+
+interface CoordinatorSkillsSetting {
+	names?: string[];
+	problem?: string;
+}
+
+/**
+ * Read the optional exact-name allowlist. An invalid value disables only this
+ * filter: coordinator mode keeps advertising every discovered skill rather than
+ * silently hiding all of them. Duplicate names are collapsed in order.
+ */
+function readCoordinatorSkills(value: unknown): CoordinatorSkillsSetting {
+	if (value === undefined) return {};
+	if (!Array.isArray(value)) {
 		return {
-			kind: "valid",
-			enabled: enabled ?? false,
-			banner: false,
-			bannerProblem: `expected "${FIRST_MATE_SETTINGS_KEY}.banner" to be true or false, found ${describeValue(banner)}`,
+			problem: `expected "${FIRST_MATE_SETTINGS_KEY}.coordinatorSkills" to be an array of exact skill names, found ${describeValue(value)}`,
 		};
 	}
 
-	return { kind: "valid", enabled: enabled ?? false, banner: banner ?? true };
+	const names: string[] = [];
+	for (const item of value) {
+		if (typeof item !== "string") {
+			return {
+				problem: `expected every "${FIRST_MATE_SETTINGS_KEY}.coordinatorSkills" entry to be a skill name string, found ${describeValue(item)}`,
+			};
+		}
+		if (item.trim() === "") {
+			return {
+				problem: `expected every "${FIRST_MATE_SETTINGS_KEY}.coordinatorSkills" entry to be a nonempty skill name, found an empty name`,
+			};
+		}
+		if (!names.includes(item)) names.push(item);
+	}
+	return { names };
 }

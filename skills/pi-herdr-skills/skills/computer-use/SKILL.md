@@ -105,7 +105,7 @@ End only a named session you created, stop only your own recording, and release 
 
 ## Session coordination
 
-For normal work, keep the relevant work and todos current without duplicating them. Use monitors only for background commands and loops only for future or repeated wakes. Never update work, todos, monitors, or loops during `/ask` or `/btw`. Implementation keeps its normal verification rules; computer use does not authorize an unsolicited interactive end-to-end test.
+For normal work, keep the relevant work and todos current without duplicating them. Use monitors only for background commands and loops only for future or repeated wakes. Never update work, todos, monitors, or loops during `/ask`. Implementation keeps its normal verification rules; computer use does not authorize an unsolicited interactive end-to-end test.
 
 ## Sources and user-owned smoke check
 

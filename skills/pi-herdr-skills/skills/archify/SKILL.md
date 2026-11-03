@@ -17,7 +17,7 @@ Before replying to the user, follow the global `talk-human` skill.
 
 ## Session coordination
 
-When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to keep the relevant session work and todos current. Reuse the caller's work and todo when diagramming is part of that task. Use `MonitorCreate` for background commands and `LoopCreate` only for a future or repeated wake. Never change works, todos, loops, or monitors during `/ask` or `/btw`.
+When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to keep the relevant session work and todos current. Reuse the caller's work and todo when diagramming is part of that task. Use `MonitorCreate` for background commands and `LoopCreate` only for a future or repeated wake. Never change works, todos, loops, or monitors during `/ask`.
 
 ## Integration boundary
 

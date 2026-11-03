@@ -50,7 +50,7 @@ Run `git status` to review them.
 ## Excluded repositories
 
 - `pi-web-access` — verified fork of `nicobailon/pi-web-access`; third-party, not imported.
-- `pi-sandbox` — first-party repository, retired on 2026-11-03 under explicit user authorization. Local HEAD matched `origin/main` at `24a34e798df4833d6c3ac661a2ed15ab2b1eb398`, the worktree was clean, and `gh repo view` confirmed owner `abhishek944`, `isFork: false`. The remote `abhishek944/pi-sandbox` and the local checkout were deleted after a verified backup at `../var/migration-backups/pi-sandbox-20261103T152831Z/`:
+- `pi-sandbox` — first-party repository, retired on 2026-11-03 under explicit user authorization. Local HEAD matched `origin/main` at `24a34e798df4833d6c3ac661a2ed15ab2b1eb398`, the worktree was clean, and `gh repo view` confirmed owner `abhishek944`, `isFork: false`. The remote `abhishek944/pi-sandbox` and the local checkout were deleted after a verified backup at `../pi-extensions/var/migration-backups/pi-sandbox-20261103T152831Z/`:
   - `pi-sandbox.git.bundle` — complete history, `sha256 38779cf7cb25d5f4d92425f834b56c271d04bd8e801cf2d7d965b72a9be0f37f`
   - `pi-sandbox-worktree.tar.gz` — working tree including `.git` and `dist`, `sha256 4a93d38c3d99cc0fc3ad1faf2006a887ef521c429dd1d106fc747b374ff1621c`
   - `git bundle verify` reported a complete history; a clone from the bundle matched the source worktree and tag `v0.1.1`.

@@ -1,8 +1,9 @@
-import { isAbsolute } from "node:path";
+import { dirname, isAbsolute } from "node:path";
 import { Type } from "typebox";
 import { delegationAPI, requireMainWork } from "./delegation.js";
 import { focusTerminal } from "./focus.js";
 import { app, cliText, hc, object, TERMINAL_ID, terminalTab } from "./herdr.js";
+import { deriveTaskDir } from "./task-dir.js";
 import { renderTaskCall, renderTaskResult, taskResult } from "./tool-result.js";
 const TerminalId = Type.String({ pattern: TERMINAL_ID.source, description: "Actual Core terminal address returned by hc, such as t7 or machine/t7. Not an app pane ID or name." });
 const Target = Type.Object({ terminalId: TerminalId }, { additionalProperties: false });
@@ -45,11 +46,11 @@ function result(name, data) {
 export function registerAgentTools(pi) {
     pi.registerTool({
         name: "AgentCreate", label: "AgentCreate",
-        description: "Start interactive Pi through hc in its own visible task-named Herdr app tab, verify native Pi readiness, and register MonitorCreate. Requires a real Core parent (HC_TERMINAL_ID), its open app space, and an existing canonical taskDir inside repository var/. Returns reportPath, terminalId/tabId/monitorId and a prepared assignment with timing-export instructions; links the delegate badge and blocks the parent task. Sends NO assignment: confirm MonitorList shows the Core subscription ready, then AgentSend. onSignal reports worker changes; onDone means the monitor ended, not task completion. No legacy TUI fallback, registry or recovery manager.",
-        promptGuidelines: ["Prefer these agent tools over CLI for supported operations; use hc for missing process capabilities and herdr-app for display only. Do not use the legacy herdr TUI CLI or require HERDR_ENV.", "Choose explicit provider/model/thinking/Fast through model-routing-policy. Create only authorized agents, never in /ask or /btw. Preserve a dedicated visible task-named tab per agent.", "After AgentCreate, confirm MonitorList shows the Core subscription ready before AgentSend. Do not add a duplicate monitor. Read actual output/files before completing tasks."],
+        description: "Start interactive Pi through hc in its own visible task-named Herdr app tab, verify native Pi readiness, and register MonitorCreate. Derives and creates the canonical delegated-task directory from the host session and real Work/Task IDs: root callers omit parentTaskDir; delegated callers pass the exact parentTaskDir from their assignment. Requires a real Core parent (HC_TERMINAL_ID) and its open app space. Returns taskDir/reportPath, terminalId/tabId/monitorId and a prepared assignment with timing-export instructions; links the delegate badge and blocks the parent task. Sends NO assignment: confirm MonitorList shows the Core subscription ready, then AgentSend. onSignal reports worker changes; onDone means the monitor ended, not task completion. No legacy TUI fallback, registry or recovery manager.",
+        promptGuidelines: ["Prefer these agent tools over CLI for supported operations; use hc for missing process capabilities and herdr-app for display only. Do not use the legacy herdr TUI CLI or require HERDR_ENV.", "Choose explicit provider/model/thinking/Fast through model-routing-policy. Create only authorized agents, never in /ask or /btw. Preserve a dedicated visible task-named tab per agent.", "Do not read PI_SESSION_ID or pre-create directories for AgentCreate; it derives and creates the delegated task directory. Pass parentTaskDir only from a delegated assignment.", "After AgentCreate, confirm MonitorList shows the Core subscription ready before AgentSend. Do not add a duplicate monitor. Read actual output/files before completing tasks."],
         parameters: Type.Object({
             workId: Type.String({ pattern: "^W[1-9][0-9]*$" }), taskId: Type.String({ pattern: "^T[1-9][0-9]*$" }),
-            taskDir: Type.String({ minLength: 1, description: "Existing canonical parent task artifact directory from implement, inside repository var/. A unique timing descriptor is written here and passed to the worker; no directory is created by this wrapper." }),
+            parentTaskDir: Type.Optional(Type.String({ minLength: 1, description: "Exact parentTaskDir from your assignment when you are a delegated worker; AgentCreate appends this host's sessionId/workId/taskId below it. Omit in a root session to use repository var/<sessionId>/<workId>/<taskId>. Do not read the session ID or create the directory yourself." })),
             assignment: Type.String({ minLength: 1, maxLength: 32_000 }), provider: Type.String({ minLength: 1 }), model: Type.String({ minLength: 1 }),
             thinking: Type.String({ minLength: 1, description: "Explicit thinking level supported by the chosen model." }),
             fast: Type.Optional(Type.Boolean({ description: "Forward --fast only when requested and supported." })),
@@ -61,8 +62,10 @@ export function registerAgentTools(pi) {
             requireMainWork(pi);
             monitorHost(ctx);
             const tasks = delegationAPI(pi);
-            const { reportPath } = await tasks.prepare(ctx, params);
-            const handles = { reportPath };
+            const taskDir = deriveTaskDir({ cwd: ctx.cwd, sessionId: ctx.sessionManager.getSessionId(), workId: params.workId, taskId: params.taskId, parentTaskDir: params.parentTaskDir });
+            const { reportPath } = await tasks.prepare(ctx, { workId: params.workId, taskId: params.taskId, taskDir });
+            const resolvedTaskDir = dirname(reportPath);
+            const handles = { reportPath, taskDir: resolvedTaskDir };
             try {
                 const parentId = process.env.HC_TERMINAL_ID;
                 if (!parentId || !TERMINAL_ID.test(parentId))
@@ -109,8 +112,8 @@ export function registerAgentTools(pi) {
                     throw new Error("Update pi-loop-monitor: MonitorCreate must return details.monitorId.");
                 handles.monitorId = watched.monitorId;
                 tasks.attach(ctx, { workId: params.workId, taskId: params.taskId, terminalId, monitorId: watched.monitorId, reportPath });
-                const assignment = `Parent session ${ctx.sessionManager.getSessionId()}, work ${params.workId}, task ${params.taskId}. Exact parentTaskDir: ${params.taskDir}. Read global implement and applicable skills. Obtain your own PI_SESSION_ID through your shell, establish your own Work and active Todo using WorkList/TodoList and create/update tools before executing, keep them current, and return your IDs, nested task artifact path, changed files, checks and blockers. Parent IDs are context, not shared records. This handoff grants no additional permissions. Timing reportPath: ${JSON.stringify(reportPath)}. Before returning results, pause or complete every assignment task, import any nested delegates with TaskTimeImport, then call TaskTimeExport with this exact reportPath and all assignment-local taskIds (including cancelled tasks, excluding unrelated work). Never calculate or type durations yourself. After follow-ups, export the cumulative set again to the same reportPath. If export is unavailable or fails, report that limitation; do not hand-write the timing file.\n\n${params.assignment}`;
-                return result("AgentCreate", { ...handles, taskDir: params.taskDir, assignment, assignmentSent: false,
+                const assignment = `Parent session ${ctx.sessionManager.getSessionId()}, work ${params.workId}, task ${params.taskId}. Exact parentTaskDir: ${resolvedTaskDir}. Read global implement and applicable skills. Obtain your own PI_SESSION_ID through your shell, establish your own Work and active Todo using WorkList/TodoList and create/update tools before executing, keep them current, and return your IDs, nested task artifact path, changed files, checks and blockers. Parent IDs are context, not shared records. This handoff grants no additional permissions. Timing reportPath: ${JSON.stringify(reportPath)}. Before returning results, pause or complete every assignment task, import any nested delegates with TaskTimeImport, then call TaskTimeExport with this exact reportPath and all assignment-local taskIds (including cancelled tasks, excluding unrelated work). Never calculate or type durations yourself. After follow-ups, export the cumulative set again to the same reportPath. If export is unavailable or fails, report that limitation; do not hand-write the timing file.\n\n${params.assignment}`;
+                return result("AgentCreate", { ...handles, taskDir: resolvedTaskDir, assignment, assignmentSent: false,
                     next: "Confirm MonitorList shows subscription ready, then AgentSend this assignment to the returned terminalId. After worker output is available, call TaskTimeImport for this task before closing its agent; verify completion separately." });
             }
             catch (error) {
