@@ -1,0 +1,15 @@
+{
+  "name": "astack",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Astack monorepo: first-party Pi packages, shared skills, and services.",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "verify": "node scripts/check.mjs --install",
+    "check:skills": "node scripts/check.mjs --skills"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
