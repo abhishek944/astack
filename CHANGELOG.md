@@ -1,12 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.15.1 - 2026-11-03
 
 - Unify display controls under `/works`: bare opens the overlay, `compact-on|compact-off` controls the compact Pi display, and `herdr-on|herdr-off` controls only the current session/terminal's native mod pane. Remove `/works-panel`; keep auxiliary actions under `/works`. Hiding views never stops tracking.
+- Move `AgentCreate`, `AgentList`, `AgentStatus`, `AgentOutput`, `AgentSend`, `AgentInterrupt`, `AgentClose` and `AgentFocus` to the separate pi-herdr package and serve its version-1 `pi-tasks:delegation-api` bridge for task-owned preparation, attachment and detachment. pi-tasks keeps records, timing, delegate links and display helpers.
 
 - Store desktop tasks in one authoritative JSON document per Pi session ID; conversation tree navigation no longer restores or rolls back tasks. Read from disk for each operation, write atomically with private permissions, migrate legacy records once, and start new fork identities empty.
 - Add `pi-tasks.panel.enabled` and `panel.mode` defaults plus `/works compact-on` and `compact-off` runtime overrides without disabling tracking.
 - Ship a native read-only Herdr Tasks mod reading the same session document. `/works herdr-on` validates the session snapshot, installs missing bundled mod files without overwriting customizations, and opens beside the originating local terminal. Missing runtime bindings report restart/resume guidance instead of opening a broken pane.
+- Underline the focused task title in the Herdr Tasks mod and treat a double-click as one activation instead of two.
 
 ## 0.15.0 - 2026-10-24
 
