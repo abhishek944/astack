@@ -1,0 +1,27 @@
+{
+	"name": "pi-slack",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Background Slack to Pi gateway service for per-thread sessions",
+	"keywords": ["slack", "socket-mode", "gateway"],
+	"bin": {
+		"pi-slack": "./dist/service.js"
+	},
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"start": "node dist/service.js"
+	},
+	"dependencies": {
+		"@earendil-works/pi-coding-agent": "1.4.0",
+		"@slack/bolt": "^5.1.0"
+	},
+	"devDependencies": {
+		"@types/node": "^22.18.0",
+		"typescript": "^5.9.3"
+	},
+	"engines": {
+		"node": ">=22"
+	}
+}

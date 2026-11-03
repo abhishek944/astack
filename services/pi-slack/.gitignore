@@ -1,0 +1,36 @@
+# Dependencies and generated build output
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+
+# Local verification output, runtime state, logs and scratch data
+.verify/
+var/
+rawlogs/
+logs/
+*.log
+*.pid
+
+# Private service configuration, tokens and state.
+# deploy/slack.env.example is the only env file that belongs in the repository.
+.env
+.env.*
+*.env
+!deploy/slack.env.example
+config.json
+state.json
+auth.json
+models-store.json
+.npmrc
+*.pem
+*.key
+*.p12
+
+# Backups and editor/OS files
+*.bak
+*.bak.*
+*.orig
+*.rej
+*~
+.DS_Store

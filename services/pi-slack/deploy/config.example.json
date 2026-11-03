@@ -1,0 +1,5 @@
+{
+	"enabledChannels": [],
+	"allowedUsers": ["U0123456789"],
+	"projectCwd": "/absolute/path/to/project"
+}

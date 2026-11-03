@@ -1,0 +1,19 @@
+[Unit]
+Description=pi-slack Slack to Pi gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The default layout clones this repository to ~/pi-slack (that is, %h/pi-slack).
+# Adjust WorkingDirectory and ExecStart if the checkout lives elsewhere.
+# Replace /usr/bin/node with the absolute Node 22 binary when Node is installed
+# elsewhere, for example an NVM path under %h/.nvm/versions/node/.../bin/node.
+# Keep EnvironmentFile outside the checkout and mode 0600; it holds Slack tokens.
+WorkingDirectory=%h/pi-slack
+EnvironmentFile=%h/.config/pi-slack/slack.env
+ExecStart=/usr/bin/node %h/pi-slack/dist/service.js
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
