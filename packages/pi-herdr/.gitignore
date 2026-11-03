@@ -1,0 +1,7 @@
+node_modules/
+var/
+.pi/
+.env
+.env.*
+*.tgz
+.DS_Store
