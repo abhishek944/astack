@@ -30,7 +30,7 @@ git read-tree --prefix=<prefix>/ -u refs/remotes/src-<repo>/main
 git commit -m "chore: import <repo> history from abhishek944/<repo>@<sha>"
 ```
 
-Original commits, authors, dates, and tag objects remain reachable. Release tags are namespaced per source (`pi-ask/v0.4.4`) to avoid collisions. The remotes `src-<repo>` now point at the corresponding GitHub URLs so history can be fetched again; no remote was pushed.
+Original commits, authors, dates, and tag objects remain reachable. Release tags are namespaced per source (`pi-ask/v0.4.4`) to avoid collisions. The remotes `src-<repo>` point at the corresponding GitHub URLs so history can be fetched again, but their push URLs are set to `no_push` to prevent accidentally pushing monorepo history to a package repository. Nothing was pushed.
 
 ## Working tree
 
@@ -50,4 +50,7 @@ Run `git status` to review them.
 ## Excluded repositories
 
 - `pi-web-access` — verified fork of `nicobailon/pi-web-access`; third-party, not imported.
-- `pi-sandbox` — first-party repository, retired during this migration under explicit user authorization. A full Git bundle and worktree archive were recorded before deletion; see the migration summary artifacts.
+- `pi-sandbox` — first-party repository, retired on 2026-11-03 under explicit user authorization. Local HEAD matched `origin/main` at `24a34e798df4833d6c3ac661a2ed15ab2b1eb398`, the worktree was clean, and `gh repo view` confirmed owner `abhishek944`, `isFork: false`. The remote `abhishek944/pi-sandbox` and the local checkout were deleted after a verified backup at `../var/migration-backups/pi-sandbox-20261103T152831Z/`:
+  - `pi-sandbox.git.bundle` — complete history, `sha256 38779cf7cb25d5f4d92425f834b56c271d04bd8e801cf2d7d965b72a9be0f37f`
+  - `pi-sandbox-worktree.tar.gz` — working tree including `.git` and `dist`, `sha256 4a93d38c3d99cc0fc3ad1faf2006a887ef521c429dd1d106fc747b374ff1621c`
+  - `git bundle verify` reported a complete history; a clone from the bundle matched the source worktree and tag `v0.1.1`.
