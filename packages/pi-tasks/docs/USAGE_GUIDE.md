@@ -75,7 +75,7 @@ Record the canonical artifact directory and parent session/Work/Task IDs in `tas
 
 Before each task, start `taskInfo` with `owner: self` or `owner: delegate` and a short reason. Preserve this declaration when updating the details. Delegate only when scope and acceptance criteria are clear, ownership can be isolated, required inputs and verified prerequisites are ready, and useful parallelism or expertise outweighs startup, context transfer, monitoring, and integration costs. The owning skill must permit delegation and required tracking and monitoring must be available. Small straightforward changes, tightly coupled edits, shared-interface design, and expensive-to-explain work normally stay with one owner. Risk alone is not a reason for parallel coding; independent review may still help. Do not use arbitrary file-count, agent-count, or depth thresholds. Reassess if scope changes; each allowed delegating child applies the same rule, and parents retain responsibility for monitoring, integration, verification, and cleanup.
 
-Give each Core subagent its own visible Herdr app tab named exactly with the parent's delegated Todo ID, such as T34, without brackets or descriptions. Rename the owned tab when assigning a different parent Todo. The tab label is not the worker's session/Task identity. Use real returned terminalId/tabId handles because labels repeat across parent sessions.
+Workers are Core-only by default; no Herdr app, space, tab or adoption label is needed. When the user or the active harness explicitly requires a visible worker, pass `present: true` to AgentCreate, and that Core subagent gets its own Herdr app tab named exactly with the parent's delegated Todo ID, such as T34, without brackets or descriptions. Rename the owned tab when assigning a different parent Todo. The tab label is not the worker's session/Task identity. Use real returned terminalId/tabId handles because labels repeat across parent sessions; `tabId` exists only for a presented worker.
 
 These are instructions using existing details fields, not a new schema, shared cross-session task tree, automatic directory creator, or enforcement hook.
 
@@ -220,14 +220,14 @@ These tools are owned and registered by the separate [pi-herdr](https://github.c
 
 | Tool | Purpose |
 | --- | --- |
-| `AgentCreate` | Verify the Core parent, start interactive Pi through hc, verify its dedicated visible task-named app tab and native idle status, register monitoring, and return terminalId/tabId/monitorId/reportPath plus a prepared assignment. No assignment is sent. |
+| `AgentCreate` | Verify the Core parent, start interactive Pi through hc, verify native idle status, register monitoring, and return terminalId/monitorId/reportPath plus a prepared assignment. `present: true` additionally adopts and verifies a dedicated visible task-named app tab and returns tabId. No assignment is sent. |
 | `AgentList` | `hc ls --json`, including unrelated live terminals. |
 | `AgentStatus` | `hc get <terminalId> --json`. |
 | `AgentOutput` | `hc read <terminalId> --lines <n>`, screen plus 50 history lines by default, up to 200. |
 | `AgentSend` | `hc send <terminalId> <message>`, without --wait or --force. |
 | `AgentInterrupt` | `hc keys <terminalId> esc`. |
-| `AgentClose` | Stop the supplied monitor, kill the owned terminal if live, then remove its finished Core record. The app removes its ended pane/tab. |
-| `AgentFocus` | `herdr-app do agent.focus --terminal <terminalId>`; also used by delegate links. |
+| `AgentClose` | Stop the supplied monitor, kill the owned terminal if live, then remove its finished Core record. If the worker was presented, the app removes its ended pane/tab. |
+| `AgentFocus` | `herdr-app do agent.focus --terminal <terminalId>`; also used by delegate links. Reports `focused: false` when no app is available. |
 
 pi-herdr 0.1.0 requires the compatible local pi-tasks source with the version-1 prepare/attach/detach event-bus bridge. Published pi-tasks 0.15.0 lacks this bridge and owns legacy Agent tools; replace that source, do not load it alongside the updated local package. Reload or restart Pi after installing the coordinated pair. pi-tasks keeps timing, records, delegate links and task UI helpers. pi-herdr rejects duplicate Agent names with migration instructions rather than overriding them.
 
@@ -237,6 +237,7 @@ For an existing active Work/Todo with owner: delegate:
 AgentCreate({
   workId: "W1", taskId: "T2",
   // parentTaskDir: "<exact parentTaskDir from your assignment>", // delegated workers only
+  // present: true, // optional: adopt the worker into its own visible task-named app tab
   assignment: "Review the approved change. Do not edit files or run tests.",
   provider: "<chosen-provider>", model: "<chosen-model-id>", thinking: "high",
   onSignal: "Inspect actual worker output and blockers before completing its task.",
@@ -246,7 +247,7 @@ AgentCreate({
 
 AgentCreate derives the canonical task directory from the host session and real Work/Task IDs and creates it if absent. A root session omits `parentTaskDir` and gets `var/<sessionId>/<workId>/<taskId>/`; a delegated session passes the exact `parentTaskDir` from its assignment and gets `<parentTaskDir>/<sessionId>/<workId>/<taskId>/`. Do not read the session ID or create the directory just for AgentCreate. Direct hc CLI launches still prepare the path manually.
 
-The wrapper verifies the real HC_TERMINAL_ID with hc and locates its app space by terminal mapping, never UI focus. It launches Pi with explicit model flags, an explicit parent, and --no-notify (the existing monitor supplies wakes). A herdr.space label without herdr.tab requests a new visible tab; the wrapper checks that it contains only the worker, renames it to the parent's Task ID, and verifies that mapping. Missing Core/app prerequisites fail clearly; HERDR_ENV is not required. Workers end with their parent by Core's default policy.
+The wrapper verifies the real HC_TERMINAL_ID with hc. It launches Pi with explicit model flags, an explicit parent, and --no-notify (the existing monitor supplies wakes). Core-only creation needs no app. With `present: true` it first locates the parent's app space by terminal mapping, never UI focus, and fails before launching when that space is missing; it then adds a herdr.space label without herdr.tab to request a new visible tab, checks that it contains only the worker, renames it to the parent's Task ID, and verifies that mapping. Missing Core prerequisites, or an unavailable app space when presentation was requested, fail clearly; HERDR_ENV is not required. Workers end with their parent by Core's default policy.
 
 The timing descriptor and prepared assignment retain worker-local tracking, canonical nested artifact paths and TaskTimeExport/Import. AgentCreate returns the resolved taskDir and assignmentSent:false. Confirm MonitorList shows `Core signal subscription ready for <terminalId>`, then call `AgentSend({ terminalId, message: assignment })`. Retain that subscription for follow-ups. onSignal means worker state changed; onDone means the subscriber process ended, not task completion. Read output/files and import measured effort before accepting work.
 

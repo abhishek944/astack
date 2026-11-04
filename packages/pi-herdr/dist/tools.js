@@ -2,7 +2,7 @@ import { dirname, isAbsolute } from "node:path";
 import { Type } from "typebox";
 import { delegationAPI, requireMainWork } from "./delegation.js";
 import { focusTerminal } from "./focus.js";
-import { app, cliText, hc, object, TERMINAL_ID, terminalTab } from "./herdr.js";
+import { app, cliText, hc, nameWorkerTab, object, TERMINAL_ID, terminalTab } from "./herdr.js";
 import { deriveTaskDir } from "./task-dir.js";
 import { renderTaskCall, renderTaskResult, taskResult } from "./tool-result.js";
 const TerminalId = Type.String({ pattern: TERMINAL_ID.source, description: "Actual Core terminal address returned by hc, such as t7 or machine/t7. Not an app pane ID or name." });
@@ -46,14 +46,15 @@ function result(name, data) {
 export function registerAgentTools(pi) {
     pi.registerTool({
         name: "AgentCreate", label: "AgentCreate",
-        description: "Start interactive Pi through hc in its own visible task-named Herdr app tab, verify native Pi readiness, and register MonitorCreate. Derives and creates the canonical delegated-task directory from the host session and real Work/Task IDs: root callers omit parentTaskDir; delegated callers pass the exact parentTaskDir from their assignment. Requires a real Core parent (HC_TERMINAL_ID) and its open app space. Returns taskDir/reportPath, terminalId/tabId/monitorId and a prepared assignment with timing-export instructions; links the delegate badge and blocks the parent task. Sends NO assignment: confirm MonitorList shows the Core subscription ready, then AgentSend. onSignal reports worker changes; onDone means the monitor ended, not task completion. No legacy TUI fallback, registry or recovery manager.",
-        promptGuidelines: ["Prefer these agent tools over CLI for supported operations; use hc for missing process capabilities and herdr-app for display only. Do not use the legacy herdr TUI CLI or require HERDR_ENV.", "Choose explicit provider/model/thinking/Fast through model-routing-policy. Create only authorized agents, never in /ask or /btw. Preserve a dedicated visible task-named tab per agent.", "Do not read PI_SESSION_ID or pre-create directories for AgentCreate; it derives and creates the delegated task directory. Pass parentTaskDir only from a delegated assignment.", "After AgentCreate, confirm MonitorList shows the Core subscription ready before AgentSend. Do not add a duplicate monitor. Read actual output/files before completing tasks."],
+        description: "Start interactive Pi through hc, verify native Pi readiness, and register MonitorCreate. Core-only by default: no Herdr app, space, tab or adoption label is needed. Derives and creates the canonical delegated-task directory from the host session and real Work/Task IDs: root callers omit parentTaskDir; delegated callers pass the exact parentTaskDir from their assignment. Requires a real Core parent (HC_TERMINAL_ID) and its liveness. Set present:true to also adopt the worker into its own dedicated visible task-named Herdr app tab; that app precheck fails before any worker is launched. Returns taskDir/reportPath, terminalId/monitorId, tabId only when presented, and a prepared assignment with timing-export instructions; links the delegate badge and blocks the parent task. Sends NO assignment: confirm MonitorList shows the Core subscription ready, then AgentSend. onSignal reports worker changes; onDone means the monitor ended, not task completion. No legacy TUI fallback, registry or recovery manager.",
+        promptGuidelines: ["Prefer these agent tools over CLI for supported operations; use hc for missing process capabilities and herdr-app only for requested presentation or focus. Do not use the legacy herdr TUI CLI or require HERDR_ENV.", "Choose explicit provider/model/thinking/Fast through model-routing-policy. Create only authorized agents, never in /ask or /btw. Workers are Core-only unless the user or the active harness asks for app-presented workers; then pass present:true and preserve that task-named tab.", "Do not read PI_SESSION_ID or pre-create directories for AgentCreate; it derives and creates the delegated task directory. Pass parentTaskDir only from a delegated assignment.", "After AgentCreate, confirm MonitorList shows the Core subscription ready before AgentSend. Do not add a duplicate monitor. Read actual output/files before completing tasks."],
         parameters: Type.Object({
             workId: Type.String({ pattern: "^W[1-9][0-9]*$" }), taskId: Type.String({ pattern: "^T[1-9][0-9]*$" }),
             parentTaskDir: Type.Optional(Type.String({ minLength: 1, description: "Exact parentTaskDir from your assignment when you are a delegated worker; AgentCreate appends this host's sessionId/workId/taskId below it. Omit in a root session to use repository var/<sessionId>/<workId>/<taskId>. Do not read the session ID or create the directory yourself." })),
             assignment: Type.String({ minLength: 1, maxLength: 32_000 }), provider: Type.String({ minLength: 1 }), model: Type.String({ minLength: 1 }),
             thinking: Type.String({ minLength: 1, description: "Explicit thinking level supported by the chosen model." }),
             fast: Type.Optional(Type.Boolean({ description: "Forward --fast only when requested and supported." })),
+            present: Type.Optional(Type.Boolean({ description: "Adopt the new Core terminal into its own dedicated visible Herdr app tab named with taskId. Default false: Core-only, with no herdr-app call. Requires a running app that already shows the parent terminal in a space; that check happens before any worker is launched." })),
             onSignal: Type.String({ minLength: 1, maxLength: 10_000, description: "Instructions waking the parent on worker state changes. The monitor stays subscribed for follow-ups." }),
             onDone: Type.Optional(Type.String({ minLength: 1, maxLength: 10_000, description: "Instructions if the monitor process ends, not when the worker finishes. Omit for MonitorCreate's default recovery instruction." })),
         }, { additionalProperties: false }),
@@ -73,18 +74,20 @@ export function registerAgentTools(pi) {
                 const parent = await hc(["get", parentId], ctx.cwd, signal);
                 if (parent.state !== "live")
                     throw new Error("The Core parent terminal is not live.");
-                const parentTab = terminalTab(await app(["ls"], ctx.cwd, signal), parentId);
-                if (!parentTab)
-                    throw new Error("Open the parent's Core terminal in a Herdr app space; a dedicated visible worker tab is required.");
+                // Presentation is optional: the default Core path never talks to herdr-app, and the
+                // precheck fails here so a missing app cannot leave a launched worker unaccounted for.
+                const parentTab = params.present === true ? terminalTab(await app(["ls"], ctx.cwd, signal), parentId) : undefined;
+                if (params.present === true && !parentTab)
+                    throw new Error("Present was requested, but the parent Core terminal is not shown in a Herdr app space. Open the parent in the app, or omit present for a Core-only worker.");
                 const piEntry = process.argv[1];
                 if (!piEntry || !isAbsolute(piEntry))
                     throw new Error("Cannot resolve this Pi host's absolute CLI entry point for Core startup.");
                 // Core has its own PATH (which may not include NVM). Reuse this Pi host\'s Node and CLI.
+                const args = ["run", "--bg", "--no-notify", "--parent", parentId, "--cwd", ctx.cwd];
                 // A space label without a tab label asks the app to adopt this Core terminal into a NEW tab.
-                const args = ["run", "--bg", "--no-notify", "--parent", parentId,
-                    "--cwd", ctx.cwd, "--label", `herdr.space=${parentTab.spaceId}`,
-                    "--label", `pi.task=${params.taskId}`, "--label", `pi.session=${ctx.sessionManager.getSessionId()}`,
-                    "--", process.execPath, piEntry, "--provider", params.provider, "--model", params.model, "--thinking", params.thinking];
+                if (parentTab)
+                    args.push("--label", `herdr.space=${parentTab.spaceId}`);
+                args.push("--label", `pi.task=${params.taskId}`, "--label", `pi.session=${ctx.sessionManager.getSessionId()}`, "--", process.execPath, piEntry, "--provider", params.provider, "--model", params.model, "--thinking", params.thinking);
                 if (params.fast)
                     args.push("--fast");
                 const created = await hc(args, ctx.cwd, signal, 45_000);
@@ -98,14 +101,8 @@ export function registerAgentTools(pi) {
                 const status = object(ready.status);
                 if (ready.state !== "live" || status?.app !== "pi" || status.state !== "idle")
                     throw new Error("Pi is not ready for input. Inspect AgentOutput for startup, trust, or login prompts before sending work.");
-                const tab = terminalTab(await app(["ls"], ctx.cwd, signal), terminalId);
-                if (!tab || tab.spaceId !== parentTab.spaceId || tab.tabId === parentTab.tabId || tab.terminalCount !== 1)
-                    throw new Error("The new Core terminal has not appeared in its own dedicated visible app tab. Inspect the returned terminal; do not relaunch blindly.");
-                handles.tabId = tab.tabId;
-                await app(["do", "tab.rename", JSON.stringify({ id: tab.tabId, name: params.taskId })], ctx.cwd, signal);
-                const verified = terminalTab(await app(["ls"], ctx.cwd, signal), terminalId);
-                if (verified?.tabId !== tab.tabId || verified.name !== params.taskId || verified.terminalCount !== 1)
-                    throw new Error("The dedicated task-named worker tab could not be verified.");
+                if (parentTab)
+                    handles.tabId = await nameWorkerTab({ terminalId, spaceId: parentTab.spaceId, parentTabId: parentTab.tabId, taskId: params.taskId, cwd: ctx.cwd, signal });
                 const watched = await monitor(ctx, "MonitorCreate", { hcTerminalId: terminalId, description: `Agent ${params.taskId} (${terminalId})`, timeout: 0,
                     onSignal: `${params.onSignal}\nWhen worker output is available, call TaskTimeImport for taskId ${params.taskId} to import measured effort from its timing report. Timing import does not verify or complete the task.`, ...(params.onDone === undefined ? {} : { onDone: params.onDone }) }, signal);
                 if (typeof watched.monitorId !== "string")
@@ -113,7 +110,7 @@ export function registerAgentTools(pi) {
                 handles.monitorId = watched.monitorId;
                 tasks.attach(ctx, { workId: params.workId, taskId: params.taskId, terminalId, monitorId: watched.monitorId, reportPath });
                 const assignment = `Parent session ${ctx.sessionManager.getSessionId()}, work ${params.workId}, task ${params.taskId}. Exact parentTaskDir: ${resolvedTaskDir}. Read global implement and applicable skills. Obtain your own PI_SESSION_ID through your shell, establish your own Work and active Todo using WorkList/TodoList and create/update tools before executing, keep them current, and return your IDs, nested task artifact path, changed files, checks and blockers. Parent IDs are context, not shared records. This handoff grants no additional permissions. Timing reportPath: ${JSON.stringify(reportPath)}. Before returning results, pause or complete every assignment task, import any nested delegates with TaskTimeImport, then call TaskTimeExport with this exact reportPath and all assignment-local taskIds (including cancelled tasks, excluding unrelated work). Never calculate or type durations yourself. After follow-ups, export the cumulative set again to the same reportPath. If export is unavailable or fails, report that limitation; do not hand-write the timing file.\n\n${params.assignment}`;
-                return result("AgentCreate", { ...handles, taskDir: resolvedTaskDir, assignment, assignmentSent: false,
+                return result("AgentCreate", { ...handles, taskDir: resolvedTaskDir, presented: parentTab !== undefined, assignment, assignmentSent: false,
                     next: "Confirm MonitorList shows subscription ready, then AgentSend this assignment to the returned terminalId. After worker output is available, call TaskTimeImport for this task before closing its agent; verify completion separately." });
             }
             catch (error) {
@@ -147,13 +144,13 @@ export function registerAgentTools(pi) {
         renderCall: renderTaskCall("AgentSend"), renderResult: renderTaskResult,
     });
     pi.registerTool({
-        name: "AgentInterrupt", label: "AgentInterrupt", description: "Send Escape through hc to interrupt Pi's current turn. Retains the terminal, visible tab and existing monitoring.",
+        name: "AgentInterrupt", label: "AgentInterrupt", description: "Send Escape through hc to interrupt Pi's current turn. Retains the terminal and existing monitoring; any presented tab stays as it is.",
         parameters: Target, ...output, ...mutation,
         async execute(_id, params, signal, _update, ctx) { requireMainWork(pi); return result("AgentInterrupt", await hc(["keys", params.terminalId, "esc"], ctx.cwd, signal)); },
         renderCall: renderTaskCall("AgentInterrupt"), renderResult: renderTaskResult,
     });
     pi.registerTool({
-        name: "AgentClose", label: "AgentClose", description: "Stop the supplied monitor, end the owned Core terminal if live, then remove its finished record. The app removes its ended pane/tab. Only use IDs for resources you created and no longer need. No ownership registry, automatic recovery or task completion.",
+        name: "AgentClose", label: "AgentClose", description: "Stop the supplied monitor, end the owned Core terminal if live, then remove its finished record. If the worker was presented in the Herdr app, the app removes its ended pane/tab. Only use IDs for resources you created and no longer need. No ownership registry, automatic recovery or task completion.",
         parameters: Type.Object({ terminalId: TerminalId, monitorId: Type.String({ minLength: 1 }) }, { additionalProperties: false }), ...output, ...nested, ...mutation,
         async execute(_id, params, signal, _update, ctx) {
             requireMainWork(pi);
@@ -169,9 +166,9 @@ export function registerAgentTools(pi) {
         renderCall: renderTaskCall("AgentClose"), renderResult: renderTaskResult,
     });
     pi.registerTool({
-        name: "AgentFocus", label: "AgentFocus", description: "Show the Core agent's visible tab through herdr-app using its terminalId. Also powers underlined delegate badge links.",
+        name: "AgentFocus", label: "AgentFocus", description: "Bring an app-presented Core agent's visible tab forward through herdr-app. Also powers underlined delegate badge links. Requires a running Herdr app: when none is available the result reports focused:false and the terminal keeps running.",
         parameters: Target, ...output, ...mutation,
-        async execute(_id, params, signal, _update, ctx) { requireMainWork(pi); await focusTerminal(params.terminalId, ctx.cwd, signal); return result("AgentFocus", { terminalId: params.terminalId }); },
+        async execute(_id, params, signal, _update, ctx) { requireMainWork(pi); return result("AgentFocus", { terminalId: params.terminalId, ...(await focusTerminal(params.terminalId, ctx.cwd, signal)) }); },
         renderCall: renderTaskCall("AgentFocus"), renderResult: renderTaskResult,
     });
 }

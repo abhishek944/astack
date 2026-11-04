@@ -68,7 +68,7 @@ Pi resolves `/skill:name` from its complete discovered list, so an explicit `/sk
 
 ## Herdr banner
 
-In a primary Herdr Core session, `banner` (default `true`) adds a warm amber strip above that session's tab panes while First Mate is effectively on. The strip is a native layout block, not a pane header: pane content, headers and buttons, terminals, themes, other tabs and worker sessions are unchanged. `/firstmate off` collapses it to zero height; switching to a tab or space without a First Mate session also hides it.
+In a primary Herdr Core session, `banner` (default `true`) adds a warm amber strip above that session's tab panes while First Mate is effectively on. The strip is a native layout block, not a pane header: pane content, headers and buttons, terminals, themes, other tabs and worker sessions are unchanged. It also carries a reminder to read the installed First Mate skill. `/firstmate off` collapses it to zero height; switching to a tab or space without a First Mate session also hides it.
 
 On session start in a verified primary Core session, the extension:
 
@@ -82,6 +82,8 @@ The state stays local: no network call, daemon, polling loop or new IPC service.
 
 While on, substantial investigation, project edits, builds, migrations, reviews and permitted checks go to workers. A quick check that grows should become delegated work. Saying "implement this" keeps coordinator mode on; use `/firstmate off` to leave it.
 
+The bundled skill makes reading the installed First Mate skill mandatory whenever the mode is on. The extension reinforces that at activation with a notification, an always-present prompt guideline and a compact `First Mate · read skill` status line while coordinator mode is effective.
+
 Use the available backend's actual instructions, tools, permissions, monitoring and result lifecycle. With pi-herdr, follow its bundled `herdr` skill and Agent tools. With another installed backend, follow that backend's own instructions. Host/project tracking, artifact and model-routing rules still apply when installed or required; this package adds no mandatory global workflow skills.
 
 If delegation is unavailable or fails, the coordinator should report the concrete blocker and safe options instead of silently executing substantial work itself. First Mate adds no orchestrator, adapter registry, task store, model selection or automatic model fallback; its tool-call gate is limited to the coordinator allowlist below.
@@ -92,7 +94,11 @@ While coordinator mode is effective, the model can use only `read`, `grep`, `fin
 
 Off mode, an explicit `--firstmate-worker` process and verified Core workers keep ordinary tools. `/firstmate off` and `/firstmate default` restore the active-tool set that existed before the restriction, without enabling unrelated inactive tools. The baseline is stored in existing session state under this session's identity, so turning the mode off after resuming a saved session restores the original set even when the restricted declarations were the last ones recorded. A fork does not inherit another session's baseline.
 
+When pi-research (`/ask`) owns its read-only guard, First Mate keeps that restriction intact. It answers the existing `pi-ask:guard:probe` event while deciding whether to restore its saved tools, and it re-runs the full gate synchronously on the existing `pi-ask:guard:released` event. A coordinator therefore records the restored tool list as its baseline before narrowing again, and an off-mode restore waits until the read-only mode ends instead of widening it. This cooperation uses only the pi-ask guard events; extensions that do not participate in that protocol cannot be inferred.
+
 This is Pi tool-call enforcement, not an OS sandbox. Allowed tools can still start or control processes, and permissions, trust, user authorization and `/ask` or `/btw` limits still apply. Do not describe it as absolute prevention through every allowed command or monitor.
+
+Shell, codemode and project-edit tools are intentionally unavailable to a coordinator; this is not a missing permission or a broken installation. A blocked call reports the restriction and points to checking the installed delegation backend, not to enabling the tool.
 
 ### Other worker launchers
 

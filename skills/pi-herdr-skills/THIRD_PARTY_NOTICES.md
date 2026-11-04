@@ -2,24 +2,21 @@
 
 This repository is a curated skills snapshot. The repository's original packaging and documentation use the root [MIT License](LICENSE). Redistributed material retains the following upstream terms.
 
-## Archify
+## Package-owned skills
 
-- Covered files: `skills/archify/`
-- Upstream: [tt-a1i/archify](https://github.com/tt-a1i/archify), v3.0.1 at `2ab3cae7ac2c2a55d7386ca789d03c4fcd31816c`
-- License: MIT for Archify code and content
-- Copyright: Copyright (c) 2026 tt-a1i (Archify); Copyright (c) 2025 Cocoon AI
-- Required text: [`skills/archify/LICENSE`](skills/archify/LICENSE)
-- Complete release runtime retained without modifications; skill instructions adapted for this repository. See [`PROVENANCE.md`](skills/archify/PROVENANCE.md) for the archive checksum and local adaptations.
-- Bundled brand marks retain their own copyright, license, and trademark terms; see [`skills/archify/THIRD_PARTY_NOTICES.md`](skills/archify/THIRD_PARTY_NOTICES.md). JetBrains Mono uses the [bundled SIL Open Font License](skills/archify/assets/JetBrainsMono-OFL.txt).
+These skills moved to skill-only Astack packages with unchanged payloads. Their upstream terms, required license texts and provenance now ship with the owning package; attribution is retained here for continuity.
 
-## awesome-logging-standards
+| Skill | New owner | Upstream | License |
+| --- | --- | --- | --- |
+| `archify` | `packages/pi-visuals` | [tt-a1i/archify](https://github.com/tt-a1i/archify) v3.0.1 at `2ab3cae7ac2c2a55d7386ca789d03c4fcd31816c` | MIT (Archify, Cocoon AI); brand marks and JetBrains Mono have separate bundled terms |
+| `visual-explainer` | `packages/pi-visuals` | [nicobailon/visual-explainer](https://github.com/nicobailon/visual-explainer) | MIT, Copyright (c) 2025 Nico Bailon |
+| `awesome-logging-standards` | `packages/pi-review` | [khasky/awesome-agent-skills](https://github.com/khasky/awesome-agent-skills) at `58ea4e8915de64907d04cc909a1b8c6e5cf0fcb7` | MIT, Copyright (c) 2026 Khasky |
+| `codebase-design` | `packages/pi-review` | [mattpocock/skills](https://github.com/mattpocock/skills) at `d80fa0f4ebe0c5714af0adf8670336065233ecc6` | MIT, Copyright (c) 2026 Matt Pocock |
+| `security-audit` | `packages/pi-review` | [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8` | MIT, Copyright (c) 2025-2026 Cloudflare, Inc. |
 
-- Covered files: `skills/awesome-logging-standards/`
-- Upstream: [khasky/awesome-agent-skills](https://github.com/khasky/awesome-agent-skills/tree/58ea4e8915de64907d04cc909a1b8c6e5cf0fcb7/skills/awesome-logging-standards) at `58ea4e8915de64907d04cc909a1b8c6e5cf0fcb7`
-- License: MIT
-- Copyright: Copyright (c) 2026 Khasky
-- Required text: [`skills/awesome-logging-standards/LICENSE`](skills/awesome-logging-standards/LICENSE)
-- Adaptations: Pi workflow integration, redaction instead of sensitive-data sampling, authorized local verification, framework-aware request completion, and TypeScript/Effect error and context guidance. See [`PROVENANCE.md`](skills/awesome-logging-standards/PROVENANCE.md).
+The `agent-review`, `no-unit-tests`, `no-arbitrary-limits` and `ui-ux-testing` skills moved to `packages/pi-review` as original content under that package's MIT license.
+
+`here-now` is retired. Its upstream MIT declaration and pinned provenance were recorded while it was bundled here; the payload, provenance files and global install have been removed, and the independent here.now backend in `pi-decisions` is unaffected.
 
 ## browser-use
 
@@ -42,15 +39,6 @@ This repository is a curated skills snapshot. The repository's original packagin
 
 The Herdr-derived skill is now distributed by [pi-herdr](https://github.com/abhishek944/pi-herdr), not this repository. That package retains the Apache-2.0 license text and original-import provenance alongside its locally adapted skill.
 
-## codebase-design
-
-- Covered files: `skills/codebase-design/`
-- Upstream: [mattpocock/skills](https://github.com/mattpocock/skills/tree/d80fa0f4ebe0c5714af0adf8670336065233ecc6/skills/engineering/codebase-design) at `d80fa0f4ebe0c5714af0adf8670336065233ecc6`
-- License: MIT
-- Copyright: Copyright (c) 2026 Matt Pocock
-- Required text: [`skills/codebase-design/LICENSE`](skills/codebase-design/LICENSE)
-- Adaptations: condensed the skill and its deepening/design-it-twice references into one design reference; retained repository/library terminology, made independent agents proportionate, preserved unit-test permissions and workflow ownership, and added version-aware TypeScript/Effect contracts. Integration remains in the existing design, implementation, and review workflows.
-
 ## retro
 
 - Covered files: `skills/retro/SKILL.md`
@@ -59,23 +47,6 @@ The Herdr-derived skill is now distributed by [pi-herdr](https://github.com/abhi
 - Copyright: Copyright (c) 2026 Matt Pocock
 - Required text: [`third_party/licenses/retro-MIT.txt`](third_party/licenses/retro-MIT.txt)
 - Adaptations: replaced references to the unavailable `Skill` tool and `writing-for-agents` skill with Pi's global `talk-human` skill and local concise-skill guidance; omitted OpenAI-only `agents/openai.yaml` UI metadata. The rest of the upstream skill is retained.
-
-## security-audit
-
-- Covered files: `skills/security-audit/`
-- Upstream: [cloudflare/security-audit-skill](https://github.com/cloudflare/security-audit-skill) at `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`
-- License: MIT
-- Copyright: Copyright (c) 2025-2026 Cloudflare, Inc.
-- Required text: [`skills/security-audit/LICENSE`](skills/security-audit/LICENSE)
-- Adaptations: Pi coordination, delegation, unit-test permissions, and explicit full-audit path compatibility guidance. Upstream unit tests are omitted; companion documents, schema, and validators are unchanged. See [`PROVENANCE.md`](skills/security-audit/PROVENANCE.md).
-
-## visual-explainer
-
-- Covered files: `skills/visual-explainer/`
-- Upstream: [nicobailon/visual-explainer](https://github.com/nicobailon/visual-explainer)
-- License: MIT
-- Copyright: Copyright (c) 2025 Nico Bailon
-- Required text: [`third_party/licenses/visual-explainer-MIT.txt`](third_party/licenses/visual-explainer-MIT.txt)
 
 ## Linked but not redistributed
 

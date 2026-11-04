@@ -5,6 +5,8 @@
   "description": "Astack monorepo: first-party Pi packages, shared skills, and services.",
   "type": "module",
   "scripts": {
+    "setup": "bash scripts/setup.sh",
+    "setup:check": "bash scripts/setup.sh --check",
     "check": "node scripts/check.mjs",
     "verify": "node scripts/check.mjs --install",
     "check:skills": "node scripts/check.mjs --skills"

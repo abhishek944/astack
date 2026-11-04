@@ -26,7 +26,7 @@ Call `LoopUpdate` exactly once after every dynamic wake. Use `continue` while an
 
 ## Read-only loops
 
-Set `readOnly: true` on `LoopCreate` for observation work that must not change the project. Read-only wakes require `@abhishek944/pi-ask` 0.2.0 or newer to be installed and loaded. Pi Ask's shared guard keeps only approved read and listing tools active, blocks every other tool call immediately before execution, and restores the previous tools after the complete agent run settles.
+Set `readOnly: true` on `LoopCreate` for observation work that must not change the project. Read-only wakes require `@abhishek944/pi-research` 0.1.0 or newer to be installed and loaded. The pi-research shared guard keeps only approved read and listing tools active, blocks every other tool call immediately before execution, and restores the previous tools after the complete agent run settles.
 
 A dynamic read-only wake may call `LoopUpdate` only with its own loop ID. It cannot update another loop. Image generation, shell commands, file changes, monitor mutation, and unknown extension tools are unavailable. This is a Pi tool guard, not an operating-system sandbox.
 

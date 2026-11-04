@@ -262,7 +262,7 @@ export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle
       guardOwnerId = acquisition.ownerId;
       guardAcquisitionToken = acquisition.acquisitionToken;
       if (!guardOwnerId || !guardAcquisitionToken) {
-        const reason = acquisition.reason ?? "pi-ask guard unavailable";
+        const reason = acquisition.reason ?? "pi-research guard unavailable";
         if (reason === "busy") return "retry";
         debug?.(`read-only loop #${primary.loopId} was not delivered: ${reason}`);
         onReadOnlyGuardUnavailable?.(primary, reason);

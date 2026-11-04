@@ -96,7 +96,7 @@ export function createToolGate(pi) {
             return hidden;
         },
         reason(toolName) {
-            return `First Mate coordinator mode blocks ${JSON.stringify(toolName)}. Only ${COORDINATOR_TOOLS_DESCRIPTION} are available in this coordinator session, including for nested tool calls. Delegate the work to a worker through the orchestration tools, or run /firstmate off before doing it locally.`;
+            return `First Mate coordinator mode blocks ${JSON.stringify(toolName)}. Only ${COORDINATOR_TOOLS_DESCRIPTION} are available in this coordinator session, including for nested tool calls. This is an intentional coordinator restriction, not a missing permission: do not ask to enable the tool. Check that an installed delegation backend is ready and delegate the work through its orchestration tools, or run /firstmate off before doing it locally.`;
         },
     };
 }

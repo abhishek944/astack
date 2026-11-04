@@ -231,7 +231,7 @@ export function registerLoopTools(options: LoopToolsOptions): void {
       const { trigger: triggerInput, prompt, recurring, triggerType, debounceMs, readOnly, maxFires } = params;
 
       if (readOnly && !isReadOnlyGuardAvailable()) {
-        const message = "Read-only loops require the pi-ask extension (guard protocol version 1) to be installed and loaded.";
+        const message = "Read-only loops require the pi-research extension (guard protocol version 1) to be installed and loaded.";
         return Promise.resolve(textResult(message, {
           kind: "loop",
           action: "create",

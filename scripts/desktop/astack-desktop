@@ -1,0 +1,575 @@
+#!/usr/bin/env bash
+# astack-desktop — one private virtual desktop session for the local Cua Driver.
+#
+#   astack-desktop session                  run the whole session in the foreground
+#   astack-desktop status                   key=value readiness report (read-only)
+#   astack-desktop env                      print the session environment for eval/source
+#   astack-desktop run -- <command...>      run a command inside the session environment
+#   astack-desktop record --output FILE [--duration SECONDS | --frames N]
+#   astack-desktop unit install|uninstall|status
+#
+# Linux only, ordinary user only. The session is display + window manager + session D-Bus
+# + AT-SPI, owned by this one process group:
+#
+#   Xvfb (private xauth cookie, -nolisten tcp, no global access control)
+#     -> session D-Bus at a fixed path
+#       -> accessibility environment
+#         -> startxfce4 (xfwm4 and the XFCE session services)
+#
+# If Xvfb, the bus or the XFCE session exits, the group is torn down and the supervisor
+# (the systemd user unit) restarts the whole desktop instead of leaving a half-alive one.
+#
+# Nothing is exposed: no VNC, no RDP, no TCP listener, no public port. Artifacts are written
+# only to the paths a caller passes, normally var/<sessionId>/<workId>/<taskId>/.
+set -euo pipefail
+
+PROGRAM=astack-desktop
+SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd "$SELF_DIR/../.." && pwd)
+
+STATE_DIR=${ASTACK_DESKTOP_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/astack-desktop}
+ENV_FILE=$STATE_DIR/desktop.env
+XAUTHORITY_FILE=$STATE_DIR/xauthority
+LOG_FILE=$STATE_DIR/session.log
+DISPLAY_NAME=:${ASTACK_DESKTOP_DISPLAY:-1}
+DISPLAY_NUM=${DISPLAY_NAME#:}
+GEOMETRY=${ASTACK_DESKTOP_GEOMETRY:-1280x800}
+SCREEN_W=${GEOMETRY%%x*}
+SCREEN_H=${GEOMETRY##*x}
+
+# The session bus lives in its own runtime subdirectory. `$XDG_RUNTIME_DIR/bus` is often the
+# systemd user manager bus; binding there would collide with it.
+RUNTIME_BASE=${XDG_RUNTIME_DIR:-$STATE_DIR/run}
+RUNTIME_DIR=$RUNTIME_BASE/astack-desktop
+BUS_ADDRESS="unix:path=$RUNTIME_DIR/bus"
+
+UNIT_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
+UNIT_FILE=$UNIT_DIR/astack-desktop.service
+UNIT_TEMPLATE=$SELF_DIR/astack-desktop.service.in
+UNIT_MARKER='# Managed by Astack: scripts/desktop/astack-desktop'
+
+XVFB_PID=
+BUS_PID=
+XFCE_PID=
+ENV_PUBLISHED=0
+SESSION_ENV_LOADED=0
+
+usage() {
+  cat <<'EOF'
+Usage: astack-desktop <command> [options]
+
+Commands:
+  session                 Run the desktop session in the foreground (systemd ExecStart).
+  status                  Report display, window manager, session bus, AT-SPI and ffmpeg.
+                          Read-only: it never starts the session.
+  env                     Print the running session's environment (export lines).
+  run -- <command...>     Run a command with the running session's environment.
+  record --output FILE [--duration SECONDS]
+                          Capture the main display. FILE ending in .png writes one frame;
+                          any other name writes H.264 video (default 5 seconds).
+         [--frames N]     Override the frame count (1 means a single still).
+  unit install            Write the systemd user unit for this checkout.
+  unit uninstall          Remove it, only if Astack wrote it.
+  unit status             Report the unit path and whether Astack owns it.
+
+Environment:
+  ASTACK_DESKTOP_DISPLAY   X display number (default 1)
+  ASTACK_DESKTOP_GEOMETRY  Screen geometry (default 1280x800)
+  ASTACK_DESKTOP_STATE_DIR State directory (default $XDG_STATE_HOME/astack-desktop)
+
+Start it with the systemd user unit:
+  astack-desktop unit install
+  systemctl --user daemon-reload
+  systemctl --user enable --now astack-desktop
+Then start Pi inside the session so the Cua Driver MCP inherits its display and buses:
+  astack-desktop run -- pi
+EOF
+}
+
+log() {
+  printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"
+}
+
+die() {
+  printf '%s: %s\n' "$PROGRAM" "$*" >&2
+  exit 1
+}
+
+have() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+prepare_state_dirs() {
+  umask 077
+  mkdir -p "$STATE_DIR"
+  chmod 700 "$STATE_DIR" 2>/dev/null || true
+  mkdir -p "$RUNTIME_DIR"
+  chmod 700 "$RUNTIME_DIR" 2>/dev/null || true
+}
+
+cookie_value() {
+  if have mcookie; then
+    mcookie
+  elif have od; then
+    od -An -N16 -tx1 /dev/urandom | tr -d ' \n'
+  else
+    printf '%s' "$$$(date +%s)"
+  fi
+}
+
+x_socket_path() {
+  printf '/tmp/.X11-unix/X%s' "$DISPLAY_NUM"
+}
+
+probe_x() {
+  # probe_x <xauthority-or-empty>
+  local auth=${1:-}
+  if [ -n "$auth" ]; then
+    DISPLAY=$DISPLAY_NAME XAUTHORITY=$auth xdpyinfo >/dev/null 2>&1
+  else
+    DISPLAY=$DISPLAY_NAME XAUTHORITY= xdpyinfo >/dev/null 2>&1
+  fi
+}
+
+display_in_use() {
+  probe_x "$XAUTHORITY_FILE" && return 0
+  probe_x "" && return 0
+  return 1
+}
+
+env_file_value() {
+  # env_file_value KEY: read one generated `export KEY=value` line without executing the file.
+  sed -n "s/^export $1=//p" "$ENV_FILE" 2>/dev/null | head -n 1
+}
+
+load_session_env() {
+  # Out-of-session callers (a RunCommand/runuser shell without XDG_RUNTIME_DIR, a later shell)
+  # must probe the display, bus and authority the running session actually used. Values are
+  # validated against their generated shape; anything unexpected keeps the computed defaults.
+  [ -f "$ENV_FILE" ] || return 0
+  local display bus auth geometry
+  display=$(env_file_value DISPLAY)
+  bus=$(env_file_value DBUS_SESSION_BUS_ADDRESS)
+  auth=$(env_file_value XAUTHORITY)
+  geometry=$(env_file_value ASTACK_DESKTOP_GEOMETRY)
+  case "$display" in
+    :[0-9]*) DISPLAY_NAME=$display ;;
+    *) return 0 ;;
+  esac
+  case "$bus" in
+    unix:path=/*) BUS_ADDRESS=$bus ;;
+    *) return 0 ;;
+  esac
+  case "$auth" in
+    /*) XAUTHORITY_FILE=$auth ;;
+    *) return 0 ;;
+  esac
+  if [ -n "$geometry" ]; then
+    GEOMETRY=$geometry
+    SCREEN_W=${GEOMETRY%%x*}
+    SCREEN_H=${GEOMETRY##*x}
+  fi
+  DISPLAY_NUM=${DISPLAY_NAME#:}
+  SESSION_ENV_LOADED=1
+  return 0
+}
+
+write_env_file() {
+  local tmp
+  tmp="$ENV_FILE.tmp.$$"
+  {
+    printf '# Generated by %s. Session display %s, %s.\n' "$PROGRAM" "$DISPLAY_NAME" "$GEOMETRY"
+    printf 'export DISPLAY=%s\n' "$DISPLAY_NAME"
+    printf 'export DBUS_SESSION_BUS_ADDRESS=%s\n' "$BUS_ADDRESS"
+    printf 'export XAUTHORITY=%s\n' "$XAUTHORITY_FILE"
+    printf 'export XDG_RUNTIME_DIR=%s\n' "$RUNTIME_BASE"
+    printf 'export XDG_SESSION_TYPE=x11\n'
+    printf 'export GTK_MODULES=gail:atk-bridge\n'
+    printf 'export GNOME_ACCESSIBILITY=1\n'
+    printf 'export QT_ACCESSIBILITY=1\n'
+    printf 'export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1\n'
+    printf 'export MOZ_ENABLE_ACCESSIBILITY=1\n'
+    printf 'export ACCESSIBILITY_ENABLED=1\n'
+    printf 'export ASTACK_DESKTOP_DISPLAY=%s\n' "${DISPLAY_NAME#:}"
+    printf 'export ASTACK_DESKTOP_GEOMETRY=%s\n' "$GEOMETRY"
+  } >"$tmp"
+  chmod 600 "$tmp"
+  mv "$tmp" "$ENV_FILE"
+  ENV_PUBLISHED=1
+}
+
+cleanup() {
+  local rc=$? pid
+  trap - EXIT INT TERM
+  log "stopping session on $DISPLAY_NAME"
+  for pid in "$XFCE_PID" "$BUS_PID" "$XVFB_PID"; do
+    [ -n "$pid" ] || continue
+    kill "$pid" 2>/dev/null || true
+  done
+  sleep 0.5
+  for pid in "$XFCE_PID" "$BUS_PID" "$XVFB_PID"; do
+    [ -n "$pid" ] || continue
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+  done
+  if [ "$ENV_PUBLISHED" -eq 1 ]; then
+    rm -f "$ENV_FILE"
+  fi
+  exit "$rc"
+}
+
+enable_accessibility() {
+  # The AT-SPI bus launcher is activated on demand by the session bus. Retry briefly while the
+  # XFCE session and the accessibility bridge settle; failure is not fatal.
+  local waited=0
+  while [ "$waited" -lt 40 ]; do
+    DISPLAY=$DISPLAY_NAME \
+    DBUS_SESSION_BUS_ADDRESS=$BUS_ADDRESS \
+    XAUTHORITY=$XAUTHORITY_FILE \
+      dbus-send --session --type=method_call --dest=org.a11y.Bus /org/a11y/bus \
+        org.freedesktop.DBus.Properties.Set string:org.a11y.Status string:IsEnabled \
+        variant:boolean:true >/dev/null 2>&1 || true
+    if [ "$(DBUS_SESSION_BUS_ADDRESS=$BUS_ADDRESS accessibility_state)" = enabled ]; then
+      return 0
+    fi
+    waited=$((waited + 1))
+    sleep 0.1
+  done
+  log "AT-SPI did not report IsEnabled=true yet; apps may still attach on demand"
+  return 0
+}
+
+start_session() {
+  have Xvfb || die "Xvfb is not installed; run: bash scripts/setup.sh --desktop"
+  have dbus-daemon || die "dbus-daemon is not installed; run: bash scripts/setup.sh --desktop"
+  have startxfce4 || die "startxfce4 is not installed; run: bash scripts/setup.sh --desktop"
+  have xdpyinfo || die "xdpyinfo is not installed; run: bash scripts/setup.sh --desktop"
+  if [ "${BASH_VERSINFO[0]}" -lt 4 ] || \
+     { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 3 ]; }; then
+    die "bash 4.3 or newer is required for wait -n (Ubuntu 22.04 ships 5.x)"
+  fi
+
+  prepare_state_dirs
+
+  # Refuse a colliding session before any cleanup trap exists, and never delete a resource this
+  # invocation does not own. A failed authenticated probe is not staleness proof, so an existing
+  # socket is left for its owner or for an explicit operator decision.
+  if [ -e "$(x_socket_path)" ]; then
+    die "an X server socket already exists at $(x_socket_path); stop that server or set ASTACK_DESKTOP_DISPLAY"
+  fi
+  if display_in_use; then
+    die "display $DISPLAY_NAME is already served by another process; stop it or set ASTACK_DESKTOP_DISPLAY"
+  fi
+  if [ -e "$RUNTIME_DIR/bus" ]; then
+    die "a session bus socket already exists at $RUNTIME_DIR/bus; stop the owning session first"
+  fi
+
+  # From here on this invocation owns what it starts, so cleanup may release it.
+  trap cleanup EXIT INT TERM
+
+  rm -f "$XAUTHORITY_FILE"
+  : >"$XAUTHORITY_FILE"
+  chmod 600 "$XAUTHORITY_FILE"
+  xauth -f "$XAUTHORITY_FILE" add "$DISPLAY_NAME" . "$(cookie_value)" >/dev/null 2>&1 \
+    || die "could not write the private X authority file at $XAUTHORITY_FILE"
+
+  : >"$LOG_FILE"
+  chmod 600 "$LOG_FILE"
+
+  log "starting Xvfb on $DISPLAY_NAME ($GEOMETRY, private xauth, no TCP listener)"
+  Xvfb "$DISPLAY_NAME" -screen 0 "${SCREEN_W}x${SCREEN_H}x24" -dpi 96 \
+    -auth "$XAUTHORITY_FILE" -nolisten tcp \
+    +extension RANDR +extension GLX -noreset >>"$LOG_FILE" 2>&1 &
+  XVFB_PID=$!
+
+  until DISPLAY=$DISPLAY_NAME XAUTHORITY=$XAUTHORITY_FILE xdpyinfo >/dev/null 2>&1; do
+    kill -0 "$XVFB_PID" 2>/dev/null || die "Xvfb exited during startup; see $LOG_FILE"
+    sleep 0.1
+  done
+
+  log "starting the session bus at $BUS_ADDRESS"
+  dbus-daemon --session --address="$BUS_ADDRESS" --nofork --nopidfile --syslog-only \
+    >>"$LOG_FILE" 2>&1 &
+  BUS_PID=$!
+  until session_bus_reachable; do
+    kill -0 "$BUS_PID" 2>/dev/null || die "dbus-daemon exited during startup; see $LOG_FILE"
+    sleep 0.1
+  done
+
+  export DISPLAY=$DISPLAY_NAME
+  export DBUS_SESSION_BUS_ADDRESS=$BUS_ADDRESS
+  export XAUTHORITY=$XAUTHORITY_FILE
+  export XDG_SESSION_TYPE=x11
+  export GTK_MODULES=gail:atk-bridge
+  export GNOME_ACCESSIBILITY=1
+  export QT_ACCESSIBILITY=1
+  export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
+  export MOZ_ENABLE_ACCESSIBILITY=1
+  export ACCESSIBILITY_ENABLED=1
+  unset NO_AT_BRIDGE SESSION_MANAGER || true
+
+  write_env_file
+  log "session environment written to $ENV_FILE"
+
+  log "starting the XFCE session"
+  startxfce4 >>"$LOG_FILE" 2>&1 &
+  XFCE_PID=$!
+
+  log "waiting for the accessibility bus"
+  enable_accessibility
+
+  log "session ready; any core process exiting tears down the group"
+  set +e
+  wait -n
+  local rc=$?
+  set -e
+  log "a core process exited (status $rc); stopping the session"
+  exit "$rc"
+}
+
+session_bus_reachable() {
+  DBUS_SESSION_BUS_ADDRESS=$BUS_ADDRESS dbus-send --session --print-reply \
+    --dest=org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus.ListNames \
+    >/dev/null 2>&1
+}
+
+window_manager_name() {
+  local check id name
+  check=$(DISPLAY=$DISPLAY_NAME XAUTHORITY=$XAUTHORITY_FILE xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null || true)
+  id=$(printf '%s\n' "$check" | sed -n 's/.*# \(0x[0-9a-fA-F]*\).*/\1/p')
+  [ -n "$id" ] || return 0
+  name=$(DISPLAY=$DISPLAY_NAME XAUTHORITY=$XAUTHORITY_FILE xprop -id "$id" _NET_WM_NAME 2>/dev/null || true)
+  printf '%s\n' "$name" | sed -n 's/.*"\(.*\)".*/\1/p'
+}
+
+accessibility_state() {
+  local reply
+  reply=$(DBUS_SESSION_BUS_ADDRESS=$BUS_ADDRESS dbus-send --session --print-reply \
+    --dest=org.a11y.Bus /org/a11y/bus org.freedesktop.DBus.Properties.Get \
+    string:org.a11y.Status string:IsEnabled 2>/dev/null || true)
+  if printf '%s' "$reply" | grep -qi 'boolean true'; then
+    printf 'enabled'
+  elif [ -n "$reply" ]; then
+    printf 'disabled'
+  else
+    printf 'unreachable'
+  fi
+}
+
+ffmpeg_state() {
+  have ffmpeg || { printf 'missing'; return 0; }
+  local banner
+  # Command substitution keeps a driver-level abort from printing a shell job message.
+  banner=$(ffmpeg -hide_banner -version 2>/dev/null) || { printf 'broken'; return 0; }
+  printf '%s\n' "$banner" | sed -n '1s/^ffmpeg version \([^ ]*\).*/\1/p'
+}
+
+x11grab_present() {
+  have ffmpeg || return 1
+  ffmpeg -hide_banner -devices 2>/dev/null | grep -q 'x11grab'
+}
+
+status_report() {
+  load_session_env || true
+  local x_socket=missing x_server=unreachable wm= session_bus=unreachable
+  local a11y=unreachable ffmpeg=missing grab=absent state=stopped
+  [ -S "$(x_socket_path)" ] && x_socket=present
+  if probe_x "$XAUTHORITY_FILE"; then
+    x_server=reachable
+    wm=$(window_manager_name)
+  fi
+  [ -n "$wm" ] || wm=none
+  session_bus_reachable && session_bus=reachable
+  if [ "$session_bus" = reachable ]; then
+    a11y=$(accessibility_state)
+  fi
+  ffmpeg=$(ffmpeg_state)
+  [ -n "$ffmpeg" ] || ffmpeg=missing
+  if x11grab_present; then grab=present; else grab=absent; fi
+
+  if [ "$x_server" = reachable ] && [ "$wm" != none ] && [ "$session_bus" = reachable ] \
+     && [ "$a11y" = enabled ]; then
+    state=running
+  elif [ "$x_server" = reachable ] || [ "$session_bus" = reachable ]; then
+    state=degraded
+  fi
+
+  printf 'state=%s\n' "$state"
+  printf 'display=%s\n' "$DISPLAY_NAME"
+  printf 'geometry=%s\n' "$GEOMETRY"
+  printf 'x_socket=%s\n' "$x_socket"
+  printf 'x_server=%s\n' "$x_server"
+  printf 'wm=%s\n' "$wm"
+  printf 'session_bus=%s\n' "$session_bus"
+  printf 'a11y_bus=%s\n' "$a11y"
+  printf 'ffmpeg=%s\n' "$ffmpeg"
+  printf 'x11grab=%s\n' "$grab"
+  if [ -f "$ENV_FILE" ]; then
+    printf 'env_file=%s\n' "$ENV_FILE"
+  else
+    printf 'env_file=missing\n'
+  fi
+  if [ "$SESSION_ENV_LOADED" -eq 1 ]; then
+    printf 'env_source=saved\n'
+  else
+    printf 'env_source=computed\n'
+  fi
+  printf 'session_log=%s\n' "$LOG_FILE"
+
+  [ "$state" = running ]
+}
+
+print_env() {
+  [ -f "$ENV_FILE" ] || die "no session environment at $ENV_FILE; start the session first"
+  cat "$ENV_FILE"
+}
+
+run_in_session() {
+  [ $# -gt 0 ] || die "run needs a command, for example: astack-desktop run -- pi"
+  [ -f "$ENV_FILE" ] || die "no session environment at $ENV_FILE; start the session first"
+  # shellcheck disable=SC1090
+  set -a
+  . "$ENV_FILE"
+  set +a
+  exec "$@"
+}
+
+record_display() {
+  local output="" duration=5 frames="" arg banner
+  while [ $# -gt 0 ]; do
+    arg=$1
+    case "$arg" in
+      --output|-o)
+        [ $# -ge 2 ] || die "--output needs a file path"
+        output=$2; shift ;;
+      --duration)
+        [ $# -ge 2 ] || die "--duration needs seconds"
+        duration=$2; shift ;;
+      --frames)
+        [ $# -ge 2 ] || die "--frames needs a count"
+        frames=$2; shift ;;
+      *) die "unknown record option: $arg" ;;
+    esac
+    shift
+  done
+  [ -n "$output" ] || die "record needs --output FILE"
+  have ffmpeg || die "ffmpeg is not installed; run: bash scripts/setup.sh --desktop"
+  banner=$(ffmpeg -hide_banner -version 2>/dev/null) || die "ffmpeg is installed but not runnable"
+  [ -f "$ENV_FILE" ] || die "no session environment at $ENV_FILE; start the session first"
+  load_session_env || true
+  x11grab_present || die "this ffmpeg has no x11grab input device"
+  probe_x "$XAUTHORITY_FILE" || die "display $DISPLAY_NAME is not reachable; is the session running?"
+
+  mkdir -p "$(dirname "$output")"
+  if [ -z "$frames" ]; then
+    case "$output" in
+      *.png) frames=1 ;;
+      *) frames="" ;;
+    esac
+  fi
+
+  if [ "$frames" = 1 ]; then
+    DISPLAY=$DISPLAY_NAME XAUTHORITY=$XAUTHORITY_FILE \
+      ffmpeg -hide_banner -loglevel error -f x11grab -video_size "$GEOMETRY" \
+        -i "$DISPLAY_NAME" -frames:v 1 -y "$output"
+  else
+    local limit_args=""
+    if [ -n "$frames" ]; then
+      limit_args="-frames:v $frames"
+    else
+      limit_args="-t $duration"
+    fi
+    # Intentional word splitting: limit_args is a small fixed flag string, never user text.
+    # shellcheck disable=SC2086
+    DISPLAY=$DISPLAY_NAME XAUTHORITY=$XAUTHORITY_FILE \
+      ffmpeg -hide_banner -loglevel error -f x11grab -framerate 30 \
+        -video_size "$GEOMETRY" -i "$DISPLAY_NAME" $limit_args \
+        -c:v libx264 -pix_fmt yuv420p -preset veryfast -crf 23 \
+        -movflags +faststart -y "$output"
+  fi
+  printf 'wrote=%s\n' "$output"
+  printf 'display=%s\n' "$DISPLAY_NAME"
+}
+
+unit_install() {
+  [ -f "$UNIT_TEMPLATE" ] || die "unit template missing: $UNIT_TEMPLATE"
+  local helper tmp existing_ours=0
+  helper=$SELF_DIR/astack-desktop
+  mkdir -p "$UNIT_DIR"
+  if [ -f "$UNIT_FILE" ]; then
+    if grep -Fq "$UNIT_MARKER" "$UNIT_FILE"; then
+      existing_ours=1
+    else
+      printf 'unit=conflict\npath=%s\n' "$UNIT_FILE"
+      printf 'detail=existing unit was not written by Astack; left unchanged\n' >&2
+      return 3
+    fi
+  fi
+  tmp="$UNIT_FILE.tmp.$$"
+  sed -e "s|@ASTACK_DESKTOP@|$helper|g" "$UNIT_TEMPLATE" >"$tmp"
+  chmod 644 "$tmp"
+  if [ -f "$UNIT_FILE" ] && cmp -s "$tmp" "$UNIT_FILE"; then
+    rm -f "$tmp"
+    printf 'unit=ready\npath=%s\n' "$UNIT_FILE"
+    return 0
+  fi
+  mv "$tmp" "$UNIT_FILE"
+  if [ "$existing_ours" -eq 1 ]; then
+    printf 'unit=updated\npath=%s\n' "$UNIT_FILE"
+  else
+    printf 'unit=installed\npath=%s\n' "$UNIT_FILE"
+  fi
+}
+
+unit_uninstall() {
+  if [ ! -f "$UNIT_FILE" ]; then
+    printf 'unit=absent\npath=%s\n' "$UNIT_FILE"
+    return 0
+  fi
+  if ! grep -Fq "$UNIT_MARKER" "$UNIT_FILE"; then
+    printf 'unit=conflict\npath=%s\n' "$UNIT_FILE"
+    printf 'detail=refusing to remove a unit Astack did not write\n' >&2
+    return 3
+  fi
+  rm -f "$UNIT_FILE"
+  printf 'unit=removed\npath=%s\n' "$UNIT_FILE"
+}
+
+unit_status() {
+  if [ ! -f "$UNIT_FILE" ]; then
+    printf 'unit=absent\npath=%s\n' "$UNIT_FILE"
+    return 0
+  fi
+  if grep -Fq "$UNIT_MARKER" "$UNIT_FILE"; then
+    printf 'unit=installed\npath=%s\n' "$UNIT_FILE"
+  else
+    printf 'unit=foreign\npath=%s\n' "$UNIT_FILE"
+  fi
+}
+
+[ $# -gt 0 ] || { usage >&2; exit 2; }
+command=$1
+shift
+case "$command" in
+  session) start_session ;;
+  status) status_report ;;
+  env) print_env ;;
+  run)
+    [ "${1:-}" = "--" ] && shift
+    run_in_session "$@"
+    ;;
+  record) record_display "$@" ;;
+  unit)
+    [ $# -gt 0 ] || die "unit needs install, uninstall or status"
+    sub=$1; shift
+    case "$sub" in
+      install) unit_install ;;
+      uninstall) unit_uninstall ;;
+      status) unit_status ;;
+      *) die "unknown unit subcommand: $sub" ;;
+    esac
+    ;;
+  -h|--help|help) usage ;;
+  *) printf '%s: unknown command: %s\n\n' "$PROGRAM" "$command" >&2; usage >&2; exit 2 ;;
+esac

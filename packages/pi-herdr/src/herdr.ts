@@ -35,6 +35,19 @@ async function cliJson(command: "hc" | "herdr-app", args: string[], cwd: string,
   return response;
 }
 
+/**
+ * Verify and name the app tab that adopted a presented worker. Optional presentation only:
+ * a Core-only worker never calls this, and the caller owns a failure here.
+ */
+export async function nameWorkerTab(input: { terminalId: string; spaceId: string; parentTabId: string; taskId: string; cwd: string; signal?: AbortSignal }): Promise<string> {
+  const tab = terminalTab(await app(["ls"], input.cwd, input.signal), input.terminalId);
+  if (!tab || tab.spaceId !== input.spaceId || tab.tabId === input.parentTabId || tab.terminalCount !== 1) throw new Error("The presented Core terminal has not appeared in its own dedicated app tab. Inspect the returned terminal; do not relaunch blindly.");
+  await app(["do", "tab.rename", JSON.stringify({ id: tab.tabId, name: input.taskId })], input.cwd, input.signal);
+  const verified = terminalTab(await app(["ls"], input.cwd, input.signal), input.terminalId);
+  if (verified?.tabId !== tab.tabId || verified.name !== input.taskId || verified.terminalCount !== 1) throw new Error("The presented task-named worker tab could not be verified.");
+  return tab.tabId;
+}
+
 export function terminalTab(inventory: Record<string, unknown>, terminalId: string): { spaceId: string; tabId: string; name: string; terminalCount: number } | undefined {
   for (const rawSpace of Array.isArray(inventory.spaces) ? inventory.spaces : []) {
     const space = object(rawSpace);

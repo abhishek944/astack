@@ -6,7 +6,7 @@ This project was adapted from [trvon/pi-loop](https://github.com/trvon/pi-loop) 
 
 ## Installation
 
-Read-only wakes require the Pi Ask guard. Install `@abhishek944/pi-ask@0.2.0` or newer first. To use this checkout before its npm release, run `npm run build` and `pi install /absolute/path/to/pi-loop-monitor` (personal scope), then run `/reload` in Pi. Once published to npm, install the scoped package instead:
+Read-only wakes require the pi-research guard. Install `@abhishek944/pi-research@0.1.0` or newer first. To use this checkout before its npm release, run `npm run build` and `pi install /absolute/path/to/pi-loop-monitor` (personal scope), then run `/reload` in Pi. Once published to npm, install the scoped package instead:
 
 ```sh
 pi install npm:@abhishek944/pi-loop-monitor
@@ -66,7 +66,7 @@ For Core workers, hcTerminalId plus onSignal keeps one monitor subscribed across
 
 Recurring loops expire after seven days. Event and hybrid subscriptions from an earlier session are retired during recovery. Dynamic loops must call `LoopUpdate` once per wake.
 
-Read-only loops use the shared guard provided by [`@abhishek944/pi-ask`](https://github.com/abhishek944/pi-ask) 0.2.0 or newer. Pi Ask must be installed and loaded. The guard removes mutating and unknown tools for the complete agent run, checks every tool call again before execution, and restores the previous tools after Pi fully settles. Dynamic read-only loops may call `LoopUpdate` only for the loop that fired. If the guard is missing, a new read-only loop is rejected and a recovered loop is paused rather than running without enforcement. A temporarily busy guard leaves the wake queued until the current restricted run settles.
+Read-only loops use the shared guard provided by [`@abhishek944/pi-research`](https://github.com/abhishek944/astack/tree/main/packages/pi-research) 0.1.0 or newer. That package must be installed and loaded; the guard keeps the `pi-ask:guard:*` protocol names so existing callers stay compatible. The guard removes mutating and unknown tools for the complete agent run, checks every tool call again before execution, and restores the previous tools after Pi fully settles. Dynamic read-only loops may call `LoopUpdate` only for the loop that fired. If the guard is missing, a new read-only loop is rejected and a recovered loop is paused rather than running without enforcement. A temporarily busy guard leaves the wake queued until the current restricted run settles.
 
 Loop state is always scoped to one Pi session and persisted under `~/.pi/loops/` as `loops-<session-id>.json`. Loops are never shared between sessions.
 

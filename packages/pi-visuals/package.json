@@ -1,0 +1,42 @@
+{
+  "name": "@abhishek944/pi-visuals",
+  "version": "0.1.0",
+  "description": "Skill-only Pi package for architecture, workflow and diagram authoring plus self-contained visual explanations.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-skills",
+    "archify",
+    "visual-explainer",
+    "diagrams",
+    "visualization"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "skills/",
+    "third_party/",
+    "THIRD_PARTY_NOTICES.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abhishek944/astack.git",
+    "directory": "packages/pi-visuals"
+  },
+  "scripts": {
+    "check": "npm pack --dry-run"
+  }
+}

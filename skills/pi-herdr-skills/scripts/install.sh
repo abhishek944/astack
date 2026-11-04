@@ -8,17 +8,20 @@ destination="$HOME/.agents/skills"
 mode=install
 force=0
 dry_run=0
+skip_conflicts=0
 
 usage() {
   cat <<'EOF'
-Usage: scripts/install.sh [--force] [--dry-run] [--uninstall]
+Usage: scripts/install.sh [--force|--skip-conflicts] [--dry-run] [--uninstall]
 
 Installs skills into ~/.agents/skills. No permission extension is required or installed.
 
-  --dry-run    Show what would change.
-  --force      Back up and replace conflicting managed files.
-  --uninstall  Remove matching installed skills. Modified files require
-               --force and are backed up before removal.
+  --dry-run         Show what would change.
+  --force           Back up and replace conflicting managed files.
+  --skip-conflicts  Leave differing managed skills untouched and install only
+                    missing/non-conflicting managed skills.
+  --uninstall       Remove matching installed skills. Modified files require
+                    --force and are backed up before removal.
 
 Set PI_CODING_AGENT_DIR to use a non-default directory for skill backups.
 EOF
@@ -27,12 +30,19 @@ EOF
 for arg in "$@"; do
   case "$arg" in
     --force) force=1 ;;
+    --skip-conflicts) skip_conflicts=1 ;;
     --dry-run) dry_run=1 ;;
     --uninstall) mode=uninstall ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
 done
+
+if [[ $force -eq 1 && $skip_conflicts -eq 1 ]]; then
+  echo "--force and --skip-conflicts are mutually exclusive." >&2
+  usage >&2
+  exit 2
+fi
 
 [[ -d "$source_root" ]] || { echo "Missing skills directory: $source_root" >&2; exit 1; }
 
@@ -85,19 +95,24 @@ for name in "${skill_names[@]}"; do
   fi
 done
 
-if [[ ${#conflicts[@]} -gt 0 ]]; then
-  if [[ $force -eq 0 ]]; then
-    printf 'Refusing to overwrite modified or different managed files:\n' >&2
-    if [[ ${#conflicts[@]} -gt 0 ]]; then
-      printf '  skill: %s\n' "${conflicts[@]}" >&2
-    fi
-    printf 'Review the differences, then rerun with --force to create a backup first.\n' >&2
-    exit 1
-  fi
+if [[ ${#conflicts[@]} -gt 0 && $force -eq 0 && $skip_conflicts -eq 0 ]]; then
+  printf 'Refusing to overwrite modified or different managed files:\n' >&2
+  printf '  skill: %s\n' "${conflicts[@]}" >&2
+  printf 'Review the differences, then rerun with --force to create a backup first,\n' >&2
+  printf 'or use --skip-conflicts to install missing/non-conflicting skills only.\n' >&2
+  exit 1
 fi
 
+is_conflict() {
+  local name=$1 conflict
+  for conflict in ${conflicts[@]+"${conflicts[@]}"}; do
+    [[ $conflict == "$name" ]] && return 0
+  done
+  return 1
+}
+
 backup_root=""
-if [[ ${#conflicts[@]} -gt 0 ]]; then
+if [[ ${#conflicts[@]} -gt 0 && $force -eq 1 ]]; then
   backup_parent="$agent_dir/skills-backups"
   if [[ $dry_run -eq 1 ]]; then
     backup_root="$backup_parent/pi-herdr-skills-<unique>"
@@ -118,6 +133,14 @@ if [[ $mode == uninstall ]]; then
   for name in "${skill_names[@]}"; do
     target="$destination/$name"
     [[ -e "$target" || -L "$target" ]] || continue
+    if [[ $skip_conflicts -eq 1 ]] && is_conflict "$name"; then
+      if [[ $dry_run -eq 1 ]]; then
+        echo "Would skip conflict: $name"
+      else
+        echo "Skipped conflict: $name"
+      fi
+      continue
+    fi
     if [[ $dry_run -eq 1 ]]; then
       echo "Would remove: $target"
     else
@@ -125,6 +148,9 @@ if [[ $mode == uninstall ]]; then
       echo "Removed: $target"
     fi
   done
+  if [[ ${#conflicts[@]} -gt 0 && $skip_conflicts -eq 1 ]]; then
+    printf 'Preserved %d conflicting managed skill(s).\n' "${#conflicts[@]}"
+  fi
   exit 0
 fi
 
@@ -134,6 +160,14 @@ fi
 for name in "${skill_names[@]}"; do
   source_skill="$source_root/$name"
   target="$destination/$name"
+  if [[ $skip_conflicts -eq 1 ]] && is_conflict "$name"; then
+    if [[ $dry_run -eq 1 ]]; then
+      echo "Would skip conflict: $name"
+    else
+      echo "Skipped conflict: $name"
+    fi
+    continue
+  fi
   if [[ -d "$target" ]] && trees_equal "$source_skill" "$target"; then
     echo "Already current: $name"
     continue
@@ -150,4 +184,11 @@ for name in "${skill_names[@]}"; do
   echo "Installed: $name"
 done
 
+if [[ ${#conflicts[@]} -gt 0 && $skip_conflicts -eq 1 ]]; then
+  if [[ $dry_run -eq 1 ]]; then
+    printf 'Would preserve %d conflicting managed skill(s) and install the remaining managed skills.\n' "${#conflicts[@]}"
+  else
+    printf 'Preserved %d conflicting managed skill(s); installed the remaining managed skills.\n' "${#conflicts[@]}"
+  fi
+fi
 echo "Done. Restart Pi or run /reload in an existing Pi session."

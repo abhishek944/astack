@@ -27,7 +27,7 @@
  * Concrete native exclusions (not placeholders):
  * - Event and hybrid triggers need the desktop Pi event bus; they are rejected
  *   at creation with the supported cron/interval/idle alternatives. There is no
- *   `readOnly` parameter: read-only wakes depend on the desktop pi-ask guard
+ *   `readOnly` parameter: read-only wakes depend on the desktop pi-research guard
  *   protocol and Herdr events, which have no native equivalent.
  * - `MonitorCreate` has no `hcTerminalId`/`onSignal` parameters; Core terminal
  *   subscriptions are desktop-only and are rejected. `onDone` is a durable

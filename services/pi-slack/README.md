@@ -43,6 +43,12 @@ npm ci --ignore-scripts
 npm run build
 ```
 
+If this service lives in the Astack checkout, `bash scripts/setup.sh` at the repository root builds these dependencies without starting the listener or writing tokens.
+
+### Delegation boundary (unsupported)
+
+This gateway is a chat service, not a Herdr Core parent. `AgentCreate` uses `process.argv[1]` as the spawned Pi entrypoint; the gateway is launched as `node .../dist/service.js`, so a Core-wrapped gateway would relaunch the gateway under Node with Pi flags, not interactive Pi. Installing Herdr Core/app, inheriting `HC_TERMINAL_ID`, or adding a desktop does not change that. There is no supported Slack → First Mate → `AgentCreate` path with the current implementation; a delegated parent must be a genuine Core-hosted Pi process. Do not add this package to Pi's `packages` setting.
+
 `npm ci` fetches the pinned Pi SDK and Bolt into this package's `node_modules`; no lifecycle scripts
 are needed. The compiled entry is `dist/service.js`. `dist/` and `node_modules/` stay untracked; rebuild
 after cloning or updating. `package.json` is still `private: true`, so an accidental `npm publish` is

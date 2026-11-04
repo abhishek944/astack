@@ -1,0 +1,19 @@
+[Unit]
+Description=Astack private Xvfb + XFCE desktop for the local Cua Driver
+# Managed by Astack: scripts/desktop/astack-desktop
+# Installed by `bash scripts/setup.sh --desktop`. Remove with:
+#   systemctl --user disable --now astack-desktop && scripts/desktop/astack-desktop unit uninstall
+
+[Service]
+Type=simple
+ExecStart="@ASTACK_DESKTOP@" session
+# The desktop must build its own display, bus and authority file. Never inherit a real
+# desktop session's values from the user manager.
+UnsetEnvironment=DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS
+Restart=on-failure
+RestartSec=2
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

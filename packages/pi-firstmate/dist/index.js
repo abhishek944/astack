@@ -19,11 +19,14 @@ const ENTRY_TYPE = "pi-firstmate.mode";
 const TOOL_ENTRY_TYPE = "pi-firstmate.tools";
 const SECTION_KEY = "first_mate";
 const STATUS_KEY = "firstmate";
+const ASK_GUARD_RELEASED_EVENT = "pi-ask:guard:released";
+const ASK_GUARD_PROBE_EVENT = "pi-ask:guard:probe";
 const POLICY_DISPLAY_PATH = "skills/firstmate/SKILL.md";
 const POLICY_URL = new URL("../skills/firstmate/SKILL.md", import.meta.url);
 const BANNER_ASSETS = new URL("../herdr/firstmate-banner/", import.meta.url);
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
-const ON_GUIDELINE = "First Mate coordinator mode is active for this session. Follow the <first_mate> section: keep conversation, decisions, quick inspection and coordination local, and delegate project execution to workers through an available, authorized orchestration backend following its actual instructions. If delegation is unavailable, report the blocker instead of silently doing substantial work locally.";
+const SKILL_REMINDER = "Read the installed First Mate skill before acting.";
+const ON_GUIDELINE = `First Mate coordinator mode is active for this session. ${SKILL_REMINDER} Follow the <first_mate> section: keep conversation, decisions, quick inspection and coordination local, and delegate project execution to workers through an available, authorized orchestration backend following its actual instructions. If delegation is unavailable, report the blocker instead of silently doing substantial work locally.`;
 const OFF_GUIDELINE = "First Mate coordinator mode is off. Supersede any earlier First Mate coordinator guidance in this session and resume ordinary project and host instructions for project work.";
 const USAGE = "Usage: /firstmate on | off | default | status. With no argument, shows status.";
 function stripFrontmatter(markdown) {
@@ -82,6 +85,8 @@ export default function firstMateExtension(pi) {
     let savedBaselineKey = null;
     let offRequestPrepared = false;
     let skillWarningKey = null;
+    // Cached for the synchronous Ask release hook, which receives no context.
+    let sessionCtx;
     function refreshConfig() {
         const settings = pi.getSettings();
         const previous = config.kind === "valid" ? JSON.stringify(config.coordinatorSkills ?? null) : "invalid";
@@ -220,6 +225,16 @@ export default function firstMateExtension(pi) {
         savedActiveTools = null;
         saveToolBaseline(ctx, null);
     }
+    /**
+     * Ask (pi-research) answers this probe on Pi's shared event bus. While it
+     * reports an active read-only guard, restoring First Mate's saved tools would
+     * widen a restriction another extension is enforcing.
+     */
+    function askGuardActive() {
+        const request = {};
+        pi.events.emit(ASK_GUARD_PROBE_EVENT, request);
+        return request.available === true && request.protocolVersion === 1 && request.active === true;
+    }
     function syncToolGate(ctx) {
         if (resolveMode().effective) {
             offRequestPrepared = false;
@@ -233,6 +248,11 @@ export default function firstMateExtension(pi) {
             return;
         }
         if (savedActiveTools === null)
+            return;
+        // Another extension's read-only guard is enforcing its own tool set.
+        // Restoring here would widen it; the released hook below runs this gate
+        // again after that guard restores its captured list.
+        if (askGuardActive())
             return;
         const active = pi.getActiveTools();
         const activeSet = new Set(active);
@@ -257,7 +277,7 @@ export default function firstMateExtension(pi) {
         override = enabled;
     }
     function syncIndicator(ctx) {
-        ctx.ui.setStatus(STATUS_KEY, resolveMode().effective ? "First Mate" : undefined);
+        ctx.ui.setStatus(STATUS_KEY, resolveMode().effective ? "First Mate · read skill" : undefined);
     }
     /**
      * Publish the effective mode that the optional Herdr banner reads, and make
@@ -473,7 +493,7 @@ export default function firstMateExtension(pi) {
                     report(ctx, `First Mate is on for this session, but its policy could not be read from ${POLICY_DISPLAY_PATH}: ${policyError}. No coordinator guidance is injected.`, "error");
                 }
                 else {
-                    report(ctx, "First Mate is on for this session. Conversation, decisions and quick inspection stay local; project execution goes to workers.", "info");
+                    report(ctx, `First Mate is on for this session. ${SKILL_REMINDER} Conversation, decisions and quick inspection stay local; project execution goes to workers.`, "info");
                 }
                 return;
             }
@@ -502,6 +522,7 @@ export default function firstMateExtension(pi) {
         },
     });
     pi.on("session_start", async (_event, ctx) => {
+        sessionCtx = ctx;
         refreshConfig();
         refreshSessionState(ctx);
         worker = await classifyWorker();
@@ -525,6 +546,9 @@ export default function firstMateExtension(pi) {
         }
         if (mode.effective && !loadPolicy()) {
             report(ctx, `First Mate is on, but its policy could not be read from ${POLICY_DISPLAY_PATH}: ${policyError}. No coordinator guidance will be injected.`, "error");
+        }
+        else if (mode.effective) {
+            report(ctx, `First Mate is on for this session. ${SKILL_REMINDER} Conversation, decisions and quick inspection stay local; project execution goes to workers.`, "info");
         }
     });
     pi.on("before_agent_start", (event, ctx) => {
@@ -585,6 +609,7 @@ export default function firstMateExtension(pi) {
             savedBaselineKey = null;
         }
         offRequestPrepared = false;
+        sessionCtx = undefined;
         override = null;
         guidanceEvidence = false;
         worker = undefined;
@@ -597,5 +622,14 @@ export default function firstMateExtension(pi) {
         }
         banner = undefined;
         ctx.ui.setStatus(STATUS_KEY, undefined);
+    });
+    // Ask publishes this event synchronously after restoring the tool list it
+    // captured before its read-only mode. Running the full gate (not only the
+    // hide step) lets coordinator mode record that restored list as its baseline
+    // before narrowing again, and lets a deferred off-mode restore finish.
+    pi.events.on(ASK_GUARD_RELEASED_EVENT, () => {
+        if (!sessionCtx)
+            return;
+        syncToolGate(sessionCtx);
     });
 }

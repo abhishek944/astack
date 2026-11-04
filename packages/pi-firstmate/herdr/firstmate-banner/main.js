@@ -145,7 +145,7 @@ export default class FirstMateBanner extends View {
       .bg(AMBER)
       .border_b(1)
       .border_color(AMBER_BORDER)
-      .accessibility_label("First Mate coordinator mode is on for this session")
+      .accessibility_label("First Mate coordinator mode is on for this session; read the installed First Mate skill")
       .child(
         h_flex()
           .h(18)
@@ -156,6 +156,6 @@ export default class FirstMateBanner extends View {
           .bg(INK)
           .child(div().text_size(10.5).font_semibold().text_color(AMBER_CHIP_TEXT).child("FIRST MATE")),
       )
-      .child(div().flex_none().text_size(12.5).font_semibold().text_color(INK).child("Coordinator mode"));
+      .child(div().flex_none().text_size(12.5).font_semibold().text_color(INK).child("Coordinator mode · read the First Mate skill"));
   }
 }

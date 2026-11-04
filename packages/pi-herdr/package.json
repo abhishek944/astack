@@ -1,7 +1,7 @@
 {
   "name": "@abhishek944/pi-herdr",
   "version": "0.1.0",
-  "description": "Herdr Core agent lifecycle tools and coordination skill for Pi.",
+  "description": "Herdr Core agent lifecycle tools, the bundled coordination skill, and the editable subagent model routing policy for Pi.",
   "license": "MIT AND Apache-2.0",
   "type": "module",
   "engines": {
@@ -17,6 +17,7 @@
   "files": [
     "dist/",
     "skills/herdr/",
+    "skills/model-routing-policy/",
     "third_party/licenses/herdr-Apache-2.0.txt",
     "THIRD_PARTY_NOTICES.md",
     "README.md",

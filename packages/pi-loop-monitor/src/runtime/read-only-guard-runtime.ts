@@ -94,7 +94,7 @@ export function acquireReadOnlyWakeGuard(pi: ExtensionAPI, notification: LoopFir
     && request.response.ownerId === ownerId
     && request.response.acquisitionToken
   ) return { ownerId, acquisitionToken: request.response.acquisitionToken };
-  return { reason: request.response?.reason ?? "pi-ask guard unavailable" };
+  return { reason: request.response?.reason ?? "pi-research guard unavailable" };
 }
 
 export function releaseReadOnlyWakeGuard(pi: ExtensionAPI, ownerId: string, acquisitionToken: string): boolean {

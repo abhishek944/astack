@@ -7,7 +7,7 @@ license: MIT
 
 # Computer use
 
-Use Pi's own model and tool loop with the configured Cua Driver MCP. Do not invoke Codex, another agent, or a Python daemon to perform the task. Prefer an existing reliable API, file operation, or CLI over GUI automation; use `browser-use` for browser-only work when it is the better existing route. Never switch backends to evade an actual refusal; an observed technical delivery failure or no-op is not an authorization denial.
+Use Pi's own model and tool loop with the configured Cua Driver MCP. Do not launch an external Codex CLI, another desktop-agent product, or a Python desktop daemon. Delegating to a Pi subagent that drives the same native Cua Driver through `implement`/`herdr` is allowed and is still Pi's own loop; a different Pi model for that subagent is not an external backend. Keep exactly one active desktop controller: the parent pauses its own input before handoff and states the exact app, window, account, scope, and allowed actions; the child opens its own connection, takes fresh snapshots, verifies each outcome, and returns ownership before the parent resumes. Prefer an existing reliable API, file operation, or CLI over GUI automation; use `browser-use` for browser-only work when it is the better existing route. Never switch backends to evade an actual refusal; an observed technical delivery failure or no-op is not an authorization denial.
 
 Before replying, follow `talk-human`. Follow `no-unit-tests` for implementation or maintenance work.
 
@@ -63,6 +63,25 @@ Keep one MCP connection for the task. Use its implicit session, or create a name
 7. Keep dependent actions sequential. Batch only when no intermediate observation is needed and the live tool contract supports it. When text contains Return/Tab or other control characters, inspect the current input tool's behavior so typing cannot accidentally submit or change focus.
 
 Read live tool descriptions before each unfamiliar tool family. Personal/signed-in browser profiles, unrelated file transfers, recordings, clipboard access, privileged diagnostics and extension installation remain separate scope. Owned temporary test profiles and routine task-scoped observations are already covered by the authorization section.
+
+## Linux virtual desktop (VM)
+
+A headless Linux host needs a real desktop session, not just an X server: display, window manager and driver. Astack provides one opt-in composition (`bash scripts/setup.sh --desktop`): Xvfb with a private per-user Xauthority cookie and `-nolisten tcp`, a session D-Bus at a fixed path, AT-SPI, full XFCE, and ffmpeg, supervised by the `astack-desktop` systemd **user** unit. Nothing listens on a network port; never add VNC, RDP, `-ac`, or a public listener to make this work.
+
+- **Start Pi inside the session** so the MCP child inherits the display and buses: `scripts/desktop/astack-desktop run -- pi`. Started anywhere else, `cua-driver` has no `DISPLAY`, `list_apps` is empty, and `get_window_state` has no accessibility bus. This wrapper is the whole connection path; do not add a second driver daemon or server.
+- **Check readiness before blaming a tool**: `astack-desktop status` must report `state=running` with a window manager and both `session_bus` and `a11y_bus` reachable. Then, on the same Pi MCP connection, `list_apps` must be non-empty and a window snapshot must return a tree; that is the connection proof. `cua-driver doctor` is a separate environment diagnostic, not proof the direct MCP runtime is reachable. `cua-driver status` and `cua-driver call` talk to a daemon endpoint that the direct MCP runtime does not provide, so they are not acceptance for this setup and no daemon should be added to make them work.
+- **No macOS permissions apply.** Linux uses AT-SPI for semantic actions and X11/XWayland input; toolkits that reject synthetic events return an explicit refusal, which is a platform limit, not a missing grant and not a reason to switch routes.
+- **One UI owner per display.** Keep `browser-use` headless; never point a headed browser, a second agent, or a viewer at the same display without coordinating. The virtual desktop is private and empty until something is launched.
+- **Screenshots and video are display-scoped.** `get_desktop_state` with `screenshot_out_file` writes a PNG; `start_recording` with `record_video: true` writes `<output_dir>/recording.mp4` (H.264, 30 fps) through ffmpeg `x11grab`. For a capture outside an MCP session, `astack-desktop record --output FILE.mp4 --duration N` uses the same mechanism. Write artifacts under `var/<sessionId>/<workId>/<taskId>/`; there is no storage service.
+- **Local driver only.** Do not install Cua Cloud, the Cua SDK or a CuaOS image to make a VM work, and do not treat a generic container as a supported substitute for the vendor's composition.
+
+### Capture troubleshooting (Linux/XFCE/Xvfb)
+
+A configured screensaver can blank the virtual display after its idle timeout. That yields black full-display screenshots and video even though window-scoped capture still shows content and background AT-SPI actions still work; background actions need not reset the X idle counter, so a long run can reach the timeout mid-task. On XFCE the supported wake is `xfce4-screensaver-command --deactivate` (or `-d`); `xset s reset` afterward is optional, and reset alone did not dismiss the saver in verified testing. Wake only your own unlocked virtual desktop and stop if an authentication prompt appears. Do not persistently disable blanking, kill every screen saver, or bypass a real security lock or consent prompt.
+
+For a long recording, you may temporarily run the supported `xfce4-screensaver-command --inhibit -n <task-name> -r <reason>` as your own blocking process; confirm the exact flags from local help or docs, track the exact owned PID, and release the inhibitor on finish, error, or cancellation. Recording is display-scoped: prefer window-targeted capture when it satisfies the requested scope and privacy needs, and use full-display capture when the task requires the whole display; do not invent a per-window Driver `record_video` flag. The `scripts/desktop/astack-desktop run -- ...` wrapper exists only inside an Astack checkout, so do not assume that helper is installed everywhere.
+
+Blank captures are not always the screensaver. Verify the actual PNG or a decoded video frame rather than trusting only tool success or `ffprobe` metadata, and consider other causes such as an empty workspace or a captured surface that is legitimately black. Full-display capture includes child windows on this setup: do not explain black capture as Xvfb omitting children, as an unsupported capture path, or as a fixed platform-wide blanking interval.
 
 ## Forward screenshots through codemode
 

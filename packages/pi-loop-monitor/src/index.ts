@@ -91,7 +91,7 @@ export default function (pi: ExtensionAPI) {
       widget.update();
     }
     latestCtx?.ui.notify(
-      `Read-only loop #${entry.id} was paused because pi-ask could not enforce its tool restrictions.`,
+      `Read-only loop #${entry.id} was paused because pi-research could not enforce its tool restrictions.`,
       "error",
     );
   }
@@ -138,7 +138,7 @@ export default function (pi: ExtensionAPI) {
     const current = store.get(entry.id);
     if (current?.status !== "active") { triggerSystem.remove(entry.id); return; }
     if (current.readOnly && !isReadOnlyWakeGuardAvailable(pi)) {
-      pauseForReadOnlyGuard(current, "pi-ask guard unavailable");
+      pauseForReadOnlyGuard(current, "pi-research guard unavailable");
       return;
     }
     if (atMaxFires(current)) { triggerSystem.remove(current.id); store.delete(current.id); widget.update(); return; }

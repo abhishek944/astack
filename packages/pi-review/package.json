@@ -1,0 +1,42 @@
+{
+  "name": "@abhishek944/pi-review",
+  "version": "0.1.0",
+  "description": "Skill-only Pi package for change review, module design, security auditing, UI/UX auditing, logging standards and scope policies.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-skills",
+    "review",
+    "code-review",
+    "security-audit",
+    "design",
+    "policy"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "skills/",
+    "THIRD_PARTY_NOTICES.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abhishek944/astack.git",
+    "directory": "packages/pi-review"
+  },
+  "scripts": {
+    "check": "npm pack --dry-run"
+  }
+}
