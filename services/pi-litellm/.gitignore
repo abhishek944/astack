@@ -1,0 +1,7 @@
+# Local credentials generated for this machine. Never commit.
+.env
+.env.*
+!.env.example
+
+# Local Compose output and scratch logs
+*.log

@@ -1,0 +1,29 @@
+# LiteLLM gateway configuration for the local stack.
+# Field names verified against LiteLLM 1.108.4 (ghcr.io/berriai/litellm:v1.108.4).
+#
+# The model catalog starts EMPTY on purpose. The gateway, Admin UI, Postgres, virtual
+# keys and spend tracking all work without any upstream provider credential, and no
+# placeholder model is invented here. Add real models in the Admin UI, or extend
+# model_list below, once you actually have a provider key.
+
+model_list: []
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  # Let models added in the Admin UI persist in Postgres instead of living only in this file.
+  store_model_in_db: true
+
+  # Bootstrap-only env login (UI_USERNAME / UI_PASSWORD, or the master key) stays
+  # enabled until a database-backed proxy admin exists. After you create one,
+  # disable it here and restart. v1.108.4 warns that enabling it early locks
+  # everyone out of the UI; the master key still works over the API to recover.
+  #   disable_env_credential_login: true
+
+litellm_settings:
+  # Keep request/response content out of the database. Spend logs then carry
+  # metadata only (model, tokens, cost, latency, key, user, status, timestamps).
+  turn_off_message_logging: true
+  # Optional privacy tightening, left unset so nothing is silently dropped:
+  #   spend_logs_metadata_fields: { include: [...] }   # or { exclude: [...] }
+  #   disable_spend_logs: true                          # removes per-request rows entirely

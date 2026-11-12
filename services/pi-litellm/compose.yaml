@@ -1,0 +1,72 @@
+# Local two-container LiteLLM gateway: the proxy (serving its Admin UI) plus Postgres.
+#
+# Start through Doppler; see README.md for the explicit secret allowlist.
+# Always pass --env-file /dev/null so the legacy .env is never loaded.
+#
+# Local and reversible by design: the proxy is published on loopback only, Postgres has
+# no host port, there are no fixed container names, and state lives in one named volume.
+#
+# Secrets come only from Doppler project effect-boilerplate, config dev.
+# The legacy private .env was removed and is not a supported configuration source.
+
+name: pi-litellm
+
+services:
+  litellm:
+    # Pinned release. Verified against the registry: ghcr.io/berriai/litellm:v1.108.4
+    # resolves to index digest sha256:17921779153960f086e2660994cc398fc76ed65c531765177803b9ae0a25d97a
+    # and runs LiteLLM 1.108.4. The older main-v<version> tag scheme does not exist for this release.
+    image: ghcr.io/berriai/litellm:v1.108.4
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    ports:
+      # Loopback only: reachable from this machine, never from the LAN.
+      - "127.0.0.1:${LITELLM_PORT:-4000}:4000"
+    environment:
+      # Admin credential for the proxy API. Stays server-side; Pi uses virtual keys.
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in Doppler dev}
+      # Encrypts credentials stored in Postgres. Must not change once data exists.
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?set LITELLM_SALT_KEY in Doppler dev}
+      # Bootstrap login for the Admin UI. Replace with database-backed admins.
+      UI_USERNAME: ${LITELLM_UI_USERNAME:?set LITELLM_UI_USERNAME in Doppler dev}
+      UI_PASSWORD: ${LITELLM_UI_PASSWORD:?set LITELLM_UI_PASSWORD in Doppler dev}
+      # Provider key stays in the proxy environment; models store only its reference.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY in Doppler dev}
+      # Existing password is hex and needs no URL escaping; do not rotate it here.
+      DATABASE_URL: postgresql://litellm:${LITELLM_POSTGRES_PASSWORD:?set LITELLM_POSTGRES_PASSWORD in Doppler dev}@db:5432/litellm
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    healthcheck:
+      # Public readiness probe; it also reports whether Postgres is reachable.
+      # The image ships Python but no curl/wget, so the probe uses urllib.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/readiness', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
+  db:
+    image: postgres:16.9-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${LITELLM_POSTGRES_PASSWORD:?set LITELLM_POSTGRES_PASSWORD in Doppler dev}
+      POSTGRES_DB: litellm
+    # No ports: the database is reachable only by the proxy on this Compose network.
+    volumes:
+      - litellm-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  litellm-db-data:
