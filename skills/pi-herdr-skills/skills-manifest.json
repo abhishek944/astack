@@ -1,7 +1,12 @@
 {
-  "snapshot": "2026-11-04",
-  "skills": 6,
+  "snapshot": "2026-11-14",
+  "skills": 8,
   "files": [
+    {
+      "path": "skills/aside-browser/SKILL.md",
+      "sha256": "3c45c66041363387d00b3e44a455b598b7ce3ec5e61661fedb0ef0fb6d811191",
+      "executable": false
+    },
     {
       "path": "skills/browser-use/SKILL.md",
       "sha256": "e82a1f2dc66a5317677a2928efd056edb129f19f9621a9e61f9f4696aa22c8c9",
@@ -14,7 +19,7 @@
     },
     {
       "path": "skills/commit-and-merge/SKILL.md",
-      "sha256": "83da886ca1cdd4cad7ea1d3b5becfb0e8c60e1a9ebcb47cd90dcb1767e141b62",
+      "sha256": "98b6b135b21e67f6813cf3fb1bee6c4053f53a10c21104ebebb6011a091783ec",
       "executable": false
     },
     {
@@ -24,7 +29,7 @@
     },
     {
       "path": "skills/implement/SKILL.md",
-      "sha256": "27bf3815f204f9daaf1420dec070d68adeb146f02e95ed3d8afe35c487349b37",
+      "sha256": "19d16cf6bf9c69884efb00df3d9a63001e7d45167d094e4daccfce96e9556c95",
       "executable": false
     },
     {
@@ -35,6 +40,26 @@
     {
       "path": "skills/talk-human/SKILL.md",
       "sha256": "c302db3db14f735a4928b098478984363e264488bb51328641719c3c1a30d0e8",
+      "executable": false
+    },
+    {
+      "path": "skills/typescript-best-practices/SKILL.md",
+      "sha256": "66f4bce57d11627807a14d732c958ce6b73e18859c9ce361a3751c804aa322b1",
+      "executable": false
+    },
+    {
+      "path": "skills/typescript-best-practices/references/patterns.md",
+      "sha256": "562d4a7de7e94fdd3aed705f7d7eb5f381329eda2c548d9aac3177e6008b42ef",
+      "executable": false
+    },
+    {
+      "path": "skills/typescript-best-practices/references/principle-boundary-discipline.md",
+      "sha256": "62ac2862c2caa22dd14531f51c9c6bb445ceb198ca98a687e25b4d47c1f10a28",
+      "executable": false
+    },
+    {
+      "path": "skills/typescript-best-practices/references/principle-type-system-discipline.md",
+      "sha256": "173067a940bc6f87e424b492bc1e1c9da62df92387bf7253d1db32cba16dfbb8",
       "executable": false
     }
   ]

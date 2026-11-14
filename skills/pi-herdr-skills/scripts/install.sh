@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source_root="$repo_root/skills"
 agent_dir=${PI_CODING_AGENT_DIR:-"$HOME/.pi/agent"}
 destination="$HOME/.agents/skills"
@@ -9,10 +10,12 @@ mode=install
 force=0
 dry_run=0
 skip_conflicts=0
+without=()
+browser_selection=""
 
 usage() {
   cat <<'EOF'
-Usage: scripts/install.sh [--force|--skip-conflicts] [--dry-run] [--uninstall]
+Usage: scripts/install.sh [--force|--skip-conflicts] [--without NAME] [--browser BACKEND] [--dry-run] [--uninstall]
 
 Installs skills into ~/.agents/skills. No permission extension is required or installed.
 
@@ -20,6 +23,13 @@ Installs skills into ~/.agents/skills. No permission extension is required or in
   --force           Back up and replace conflicting managed files.
   --skip-conflicts  Leave differing managed skills untouched and install only
                     missing/non-conflicting managed skills.
+  --without NAME    NAME is not in this host's selected managed set: never install
+                    it, never report it as a conflict, and never remove it. Repeatable.
+  --browser BACKEND Managed browser skill to select: browser-use (default), aside or
+                    none. The default resolves from $ASTACK_BROWSER, then the
+                    ASTACK_BROWSER line in $ASTACK_HOME/env.sh, then browser-use.
+                    Exactly one browser skill is selected; the other is never
+                    installed, never reported as a conflict, and never removed.
   --uninstall       Remove matching installed skills. Modified files require
                     --force and are backed up before removal.
 
@@ -27,15 +37,34 @@ Set PI_CODING_AGENT_DIR to use a non-default directory for skill backups.
 EOF
 }
 
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --force) force=1 ;;
     --skip-conflicts) skip_conflicts=1 ;;
     --dry-run) dry_run=1 ;;
+    --without)
+      [[ $# -ge 2 && -n $2 && $2 != --* ]] || { echo "--without needs a skill name." >&2; exit 2; }
+      without+=("$2")
+      shift
+      ;;
+    --without=*)
+      [[ -n ${1#--without=} ]] || { echo "--without needs a skill name." >&2; exit 2; }
+      without+=("${1#--without=}")
+      ;;
+    --browser)
+      [[ $# -ge 2 && -n $2 && $2 != --* ]] || { echo "--browser needs a backend." >&2; exit 2; }
+      browser_selection=$2
+      shift
+      ;;
+    --browser=*)
+      [[ -n ${1#--browser=} ]] || { echo "--browser needs a backend." >&2; exit 2; }
+      browser_selection=${1#--browser=}
+      ;;
     --uninstall) mode=uninstall ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
+  shift
 done
 
 if [[ $force -eq 1 && $skip_conflicts -eq 1 ]]; then
@@ -44,40 +73,41 @@ if [[ $force -eq 1 && $skip_conflicts -eq 1 ]]; then
   exit 2
 fi
 
+# Resolve the selection the same way setup and check-repo do: explicit flag,
+# then $ASTACK_BROWSER, then the recorded env.sh, then the browser-use default.
+if [[ -z $browser_selection ]]; then
+  browser_selection=${ASTACK_BROWSER:-}
+fi
+if [[ -z $browser_selection ]]; then
+  env_file="${ASTACK_HOME:-$HOME/.local/share/astack}/env.sh"
+  if [[ -r $env_file ]]; then
+    browser_selection=$(sed -n 's/^export ASTACK_BROWSER="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$env_file" | head -n 1)
+  fi
+fi
+browser_selection=${browser_selection:-browser-use}
+
+# The browser pair is one selection, never two broad defaults. The default is
+# browser-use on a host with no recorded selection; --browser aside swaps the
+# pair, and --browser none selects neither. --without still excludes any named
+# managed skill on top.
+case "$browser_selection" in
+  browser-use) without+=(aside-browser) ;;
+  aside) without+=(browser-use) ;;
+  none) without+=(browser-use aside-browser) ;;
+  *)
+    echo "Unknown --browser value: $browser_selection (expected browser-use, aside or none)." >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
 [[ -d "$source_root" ]] || { echo "Missing skills directory: $source_root" >&2; exit 1; }
+[[ -f "$script_dir/trees-equal.py" ]] || { echo "Missing helper: $script_dir/trees-equal.py" >&2; exit 1; }
 
+# Shared with the Astack setup browser step so "content-identical" is one rule:
+# path set, file types, executable bits, regular-file SHA-256 and symlink targets.
 trees_equal() {
-  python3 - "$1" "$2" <<'PY'
-from pathlib import Path
-import hashlib
-import os
-import stat
-import sys
-
-left, right = map(Path, sys.argv[1:])
-if not left.is_dir() or not right.is_dir():
-    raise SystemExit(1)
-
-def entries(root):
-    return {path.relative_to(root): path for path in root.rglob("*")}
-
-a, b = entries(left), entries(right)
-if a.keys() != b.keys():
-    raise SystemExit(1)
-for rel, first in a.items():
-    second = b[rel]
-    first_stat, second_stat = first.lstat(), second.lstat()
-    if stat.S_IFMT(first_stat.st_mode) != stat.S_IFMT(second_stat.st_mode):
-        raise SystemExit(1)
-    if stat.S_ISREG(first_stat.st_mode):
-        if (first_stat.st_mode & 0o111) != (second_stat.st_mode & 0o111):
-            raise SystemExit(1)
-        if hashlib.sha256(first.read_bytes()).digest() != hashlib.sha256(second.read_bytes()).digest():
-            raise SystemExit(1)
-    elif stat.S_ISLNK(first_stat.st_mode):
-        if os.readlink(first) != os.readlink(second):
-            raise SystemExit(1)
-PY
+  python3 "$script_dir/trees-equal.py" "$1" "$2"
 }
 
 skill_names=()
@@ -86,8 +116,25 @@ while IFS= read -r line; do
 done < <(find "$source_root" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | LC_ALL=C sort)
 [[ ${#skill_names[@]} -gt 0 ]] || { echo "No skills found." >&2; exit 1; }
 
+is_without() {
+  local name=$1 candidate
+  for candidate in ${without[@]+"${without[@]}"}; do
+    [[ $candidate == "$name" ]] && return 0
+  done
+  return 1
+}
+
+for candidate in ${without[@]+"${without[@]}"}; do
+  found=0
+  for name in "${skill_names[@]}"; do
+    [[ $name == "$candidate" ]] && found=1 && break
+  done
+  [[ $found -eq 1 ]] || { echo "--without names an unknown managed skill: $candidate" >&2; exit 2; }
+done
+
 conflicts=()
 for name in "${skill_names[@]}"; do
+  is_without "$name" && continue
   target="$destination/$name"
   [[ -e "$target" || -L "$target" ]] || continue
   if ! trees_equal "$source_root/$name" "$target"; then
@@ -132,6 +179,14 @@ fi
 if [[ $mode == uninstall ]]; then
   for name in "${skill_names[@]}"; do
     target="$destination/$name"
+    if is_without "$name"; then
+      if [[ $dry_run -eq 1 ]]; then
+        echo "Would skip not-selected: $name"
+      else
+        echo "Skipped not-selected: $name"
+      fi
+      continue
+    fi
     [[ -e "$target" || -L "$target" ]] || continue
     if [[ $skip_conflicts -eq 1 ]] && is_conflict "$name"; then
       if [[ $dry_run -eq 1 ]]; then
@@ -160,6 +215,14 @@ fi
 for name in "${skill_names[@]}"; do
   source_skill="$source_root/$name"
   target="$destination/$name"
+  if is_without "$name"; then
+    if [[ $dry_run -eq 1 ]]; then
+      echo "Would skip not-selected: $name"
+    else
+      echo "Skipped not-selected: $name"
+    fi
+    continue
+  fi
   if [[ $skip_conflicts -eq 1 ]] && is_conflict "$name"; then
     if [[ $dry_run -eq 1 ]]; then
       echo "Would skip conflict: $name"

@@ -22,13 +22,25 @@ Set the compact TUI default in global or trusted-project settings, then `/reload
 
 `enabled` defaults to false; the compact TUI stays hidden unless explicitly enabled. `mode` accepts floating (default) or widget. Settings require Pi 1.2+ `getSettings`; older hosts keep defaults. `/works compact-on` shows the last selected visible mode, `/works compact-off` hides it, and floating/widget commands both select and show a layout. Commands override only the running extension instance and do not rewrite settings. Hiding does not disable tools, timing or continuation. `/works` remains an explicit on-demand dashboard.
 
+Set the native Herdr pane default in the same settings object:
+
+```json
+{
+  "pi-tasks": {
+    "herdrPanel": { "enabled": true }
+  }
+}
+```
+
+`pi-tasks.herdrPanel.enabled` defaults to false. When true, each new TUI session inside a local Herdr Core terminal installs missing assets and opens/focuses the Tasks pane at session start; a Tasks pane from the same terminal’s earlier session is replaced. Automatic startup keeps setup failures silent. `/works herdr-off` still closes the running session’s pane, and `/works herdr-on` still reports setup problems. Settings apply on startup/reload; commands never rewrite them.
+
 The package includes a native read-only mod at `herdr/pi-tasks/`. `/works herdr-on` automatically installs its missing files into your personal Herdr app home as `mods/pi-tasks/` (normally `~/.config/herdr-app/mods/pi-tasks/`; respecting `XDG_CONFIG_HOME` but ignoring inherited `HERDR_APP_HOME` fixture overrides for both app commands and asset installation), then opens the pane. No manual copying is required. Existing files, including customizations, are never overwritten; this is missing-file installation, not automatic mod upgrades. Developers can validate the installed mod with:
 
 ```sh
 herdr-app check ~/.config/herdr-app/mods/pi-tasks
 ```
 
-From a local Pi terminal already displayed in Herdr, run `/works herdr-on` to install/open the Tasks pane beside that exact terminal. The command first requires an initialized, valid snapshot for the current Pi session; it does not create a pane with missing binding props. If a running instance mixes older task modules with the updated command, restart Pi and resume the session before retrying. The first panel opens beside the source terminal. If same-session Loops/Monitors is already open, Tasks stacks below it instead. Reopening focuses the existing Tasks pane; closing either panel leaves the other in place. The command passes the session ID and authoritative snapshot path explicitly. It does not start another Pi process or choose whichever terminal happens to have focus. Use `/works compact-off` or the setting above to avoid duplicate compact TUI display. The mod reads/watches the file and shows a compact Work→Task tree with inline name-activated descriptions, leading running/blocked symbols, right-aligned numeric metrics and adjacent linked-task-only Agent buttons. It omits owner/status fact lines, connection/session bars and the bottom Read-only footer. It does not write task state or run model calls. Remote sessions and task editing from the pane are not included.
+From a local Pi terminal already displayed in Herdr, run `/works herdr-on` to install/open the Tasks pane beside that exact terminal, or enable `pi-tasks.herdrPanel.enabled` for automatic startup. The command first requires an initialized, valid snapshot for the current Pi session; it does not create a pane with missing binding props. If a running instance mixes older task modules with the updated command, restart Pi and resume the session before retrying. The first panel opens beside the source terminal. If same-session Loops/Monitors is already open, Tasks stacks below it instead. Reopening focuses the existing Tasks pane; closing either panel leaves the other in place. The command passes the session ID and authoritative snapshot path explicitly. It does not start another Pi process or choose whichever terminal happens to have focus. Use `/works compact-off` or the setting above to avoid duplicate compact TUI display. The mod reads/watches the file and shows a compact Work→Task tree with inline name-activated Final thoughts, leading running/blocked symbols, right-aligned numeric metrics and adjacent linked-task-only Agent buttons. It omits owner/status fact lines, connection/session bars and the bottom Read-only footer. It does not write task state or run model calls. Remote sessions and task editing from the pane are not included.
 
 The persistent close button lives in the actual native pane header. First setup creates/selects personal copies of the current visible top-header layout and its header mod; originals remain untouched and non-Tasks header behavior uses the copied original. A minimum 32px header supports the close target. Conflicting custom assets or unsupported header layouts fail with guidance rather than being overwritten. See [native header setup and rollback](../herdr/pi-tasks/README.md). The native content has no three-dot trigger or action menu. Copy and repository actions remain available through the `/works` dashboard and commands; reopen the native pane after a watcher error.
 
@@ -38,15 +50,15 @@ For every normal request that starts or continues work, Pi should:
 
 1. Find existing work and todos.
 2. Create the relevant Work collection, or refresh its shared context when needed.
-3. Create or update detailed todos for the requested scope.
+3. Create or update todos for the requested scope, with hidden coordination metadata and a concise visible Final thoughts when useful.
 4. Mark the current todo active before starting it. For an `owner: self` task, include `working=true` to select it for automatic timing; re-select at the start of each fresh run.
-5. During longer tasks, report interim progress after roughly 5–10 meaningful working steps or a milestone, when an estimate is possible.
-6. Mark the todo blocked immediately if its next step must wait on a dependency; otherwise update it after the attempt as active, completed, or cancelled.
+5. During longer tasks, report interim progress after roughly 5–10 meaningful working steps or a milestone, when an estimate is possible. Update Final thoughts only when the change is significant.
+6. Mark the todo blocked immediately if its next step must wait on a dependency, with the current `blockedReason`; otherwise update it after the attempt as active, completed, or cancelled, with a concise result when completing.
 7. Keep status on tasks only; update Work context when scope or shared decisions change.
 
 The extension applies this guidance across all loaded skills and does not skip work merely because it looks small. It does not update tracking during `/ask`, `/btw`, or BTW side threads.
 
-Write `workInfo` and `taskInfo` in normal prose with full sentences and spaces between words. Conversational brevity modes do not apply to stored records; do not concatenate words to shorten them. This is model-facing guidance, not automatic repair of existing text.
+Write `workInfo` in normal prose with full sentences and spaces between words. Conversational brevity modes do not apply to stored records; do not concatenate words to shorten them. `taskInfo` is hidden coordination metadata: the owner declaration, canonical artifact paths, parent IDs, and necessary execution constraints. `finalThoughts` is the only user-visible task text; see [Final thoughts](#final-thoughts). This is model-facing guidance, not automatic repair of existing text.
 
 ## Shared workflow and artifacts
 
@@ -73,7 +85,7 @@ Record the canonical artifact directory and parent session/Work/Task IDs in `tas
 
 ### Choose self or delegate
 
-Before each task, start `taskInfo` with `owner: self` or `owner: delegate` and a short reason. Preserve this declaration when updating the details. Delegate only when scope and acceptance criteria are clear, ownership can be isolated, required inputs and verified prerequisites are ready, and useful parallelism or expertise outweighs startup, context transfer, monitoring, and integration costs. The owning skill must permit delegation and required tracking and monitoring must be available. Small straightforward changes, tightly coupled edits, shared-interface design, and expensive-to-explain work normally stay with one owner. Risk alone is not a reason for parallel coding; independent review may still help. Do not use arbitrary file-count, agent-count, or depth thresholds. Reassess if scope changes; each allowed delegating child applies the same rule, and parents retain responsibility for monitoring, integration, verification, and cleanup.
+Before each task, start hidden `taskInfo` with `owner: self` or `owner: delegate` and a short reason. Preserve this declaration when updating the task. Delegate only when scope and acceptance criteria are clear, ownership can be isolated, required inputs and verified prerequisites are ready, and useful parallelism or expertise outweighs startup, context transfer, monitoring, and integration costs. The owning skill must permit delegation and required tracking and monitoring must be available. Small straightforward changes, tightly coupled edits, shared-interface design, and expensive-to-explain work normally stay with one owner. Risk alone is not a reason for parallel coding; independent review may still help. Do not use arbitrary file-count, agent-count, or depth thresholds. Reassess if scope changes; each allowed delegating child applies the same rule, and parents retain responsibility for monitoring, integration, verification, and cleanup.
 
 Workers are Core-only by default; no Herdr app, space, tab or adoption label is needed. When the user or the active harness explicitly requires a visible worker, pass `present: true` to AgentCreate, and that Core subagent gets its own Herdr app tab named exactly with the parent's delegated Todo ID, such as T34, without brackets or descriptions. Rename the owned tab when assigning a different parent Todo. The tab label is not the worker's session/Task identity. Use real returned terminalId/tabId handles because labels repeat across parent sessions; `tabId` exists only for a presented worker.
 
@@ -87,7 +99,7 @@ Every subagent must create or resume its own session-local Work and Todos before
 
 Works are collections with no status. Tasks use only `active`, `blocked`, `completed`, and `cancelled`. New tasks default to `active`; saved legacy task statuses `planned` and `pending` restore as active but are no longer accepted by tools. Old Work statuses are ignored during replay; no saved history is rewritten.
 
-Use `blocked` immediately when a task cannot proceed until another agent produces output, a review finishes, an external response arrives, the user responds, permission is granted, or another obstacle is resolved. Supply `blockedReason` when creating a blocked task or entering blocked status: explain which dependency it awaits and what will unblock it. Retain its current completion estimate. Other blocked edits preserve the reason; leaving blocked clears it. Older tasks without a reason show “No reason recorded.” Parent delegated tasks stay blocked while awaiting worker output; the worker's own local tasks may be active. AgentCreate automatically blocks the parent task after successful creation, retaining its progress. For manual delegation, mark the parent task blocked explicitly.
+Use `blocked` immediately when a task cannot proceed until another agent produces output, a review finishes, an external response arrives, the user responds, permission is granted, or another obstacle is resolved. Supply `blockedReason` when creating a blocked task or entering blocked status: explain which dependency it awaits and what will unblock it. That reason is the blocked task's visible Final thoughts, so do not duplicate it. Retain its current completion estimate. Other blocked edits preserve the reason; leaving blocked clears it. Older tasks without a reason show “No reason recorded.” A status change clears an unsupplied thought, so resumed and completed rows never show a stale waiting message. Parent delegated tasks stay blocked while awaiting worker output; the worker's own local tasks may be active. AgentCreate automatically blocks the parent task after successful creation, retaining its progress. For manual delegation, mark the parent task blocked explicitly.
 
 When the dependency resolves and work resumes, mark the affected tasks active. Do not assign status to the parent Work. To cancel the whole collection, cancel its remaining tasks explicitly. Neither blocked status nor changing it schedules a wake automatically; use the appropriate monitor or event when an automatic notification is needed.
 
@@ -143,18 +155,32 @@ Work tools do not accept `status`; `WorkList` filters by Work ID only. `WorkList
 ## Todo tools
 
 ```text
-TodoCreate workId="W1" taskName="Inspect token flow" taskInfo="Detailed context..." completionPercent=0
+TodoCreate workId="W1" taskName="Inspect token flow" taskInfo="owner: self — inspection and implementation." finalThoughts="Inspecting the token flow and call sites." completionPercent=0
 TodoList workId="W1"
 TodoList status="active"
 TodoList workId="W1" limit=10
-TodoUpdate taskId="T1" status="active" completionPercent=40 taskInfo="Inspection is complete; implementation and verification remain."
+TodoUpdate taskId="T1" status="active" completionPercent=40 finalThoughts="Inspection is complete; implementation and verification remain."
 TodoUpdate taskId="T1" status="blocked" blockedReason="Waiting for the review findings. Resume when the reviewer returns them."
-TodoUpdate taskId="T1" status="completed" taskInfo="Detailed verified outcome..."
-TodoUpdate taskId="T2" completionPercent=null taskInfo="The scope changed; the previous estimate is no longer reliable."
+TodoUpdate taskId="T1" status="completed" finalThoughts="The token flow is fixed; typecheck and build passed. Live provider behavior remains unverified."
+TodoUpdate taskId="T2" completionPercent=null
 TodoDelete taskId="T1"
 ```
 
+`taskInfo` remains required for the hidden owner declaration and coordination metadata. `finalThoughts` is optional; send `finalThoughts=""` to clear it. `blockedReason` is the visible dependency for a blocked task. Completed tasks should include the short verified result, checks, and remaining limits in `finalThoughts`; a completion without one is accepted for historical callers but remains honestly empty rather than showing old narrative. Changing status clears an unsupplied thought.
+
 `TodoList` returns all matching todos when `limit` is omitted. A positive integer `limit` selects the newest matching todos after filters, displayed oldest-to-newest. The result shows how many todos were returned and how many matched in total. Both list tools can still truncate very long text output at 50KB or 2,000 lines.
+
+## Final thoughts
+
+Final thoughts is the only task text shown in the compact native Tasks pane, the `/works` task detail, and copied Markdown. `taskInfo` stays stored for ownership, links, artifact paths, and resumption but is never rendered as task text.
+
+- **Blocked:** `blockedReason` is authoritative and states what is awaited and what will unblock the task. Do not duplicate it in `finalThoughts`. A legacy blocked record without a reason may fall back to an existing `finalThoughts`.
+- **Completed:** state the short actual result, the verification performed, and any remaining limits. A newly completed task should provide this; historical completed records without it remain honestly empty. Do not synthesize an outcome from old `taskInfo`.
+- **Active:** provide an occasional short update only when something significant changed. There is no required filler on every turn, estimate, or tool call.
+- **Never include:** the goal again, delegation or ownership rationale, `owner:` declarations, terminal/monitor links, artifact paths, parent IDs, sections, lists, or history. Those belong in `taskInfo` or the owning workflow records.
+- **Transitions:** changing status clears an unsupplied thought. This prevents an old active progress note from hiding a new blocker and prevents a resumed or completed task from showing a stale waiting message.
+
+No length cap, summarizer, migration, or history mechanism is added. Stored records are not rewritten. The guidance is model-facing; only completed status and its 100% rule are enforced.
 
 ### Active task time
 
@@ -195,7 +221,7 @@ Report files contain parent IDs, worker session identity and task timing values,
 
 ### Completion percentages
 
-During longer tasks, Pi should include a `completionPercent` estimate in `TodoUpdate` after roughly 5–10 meaningful working steps or a milestone, rather than waiting until completion or only updating status. Explain the evidence and remaining work in `taskInfo`. Estimates remain optional: use `null` when unknown, and leave a percentage unchanged if there is no new evidence. This is model-facing guidance, not an enforced schedule or an automatic percentage increase. These are approximate AI-reported values, not a fixed percentage for each status and not a time prediction. Use an integer 0–100 or `null` for unknown. Completed status means verified completion and displays 100%; 100 without completed status is rejected. Partial progress requires reopening a completed task; reopening without a fresh estimate makes it unknown. Blocking retains the current estimate.
+During longer tasks, Pi should include a `completionPercent` estimate in `TodoUpdate` after roughly 5–10 meaningful working steps or a milestone, rather than waiting until completion or only updating status. Explain visible evidence in `finalThoughts` only when the change is significant; never use `taskInfo` for progress narrative. Estimates remain optional: use `null` when unknown, and leave a percentage unchanged if there is no new evidence. This is model-facing guidance, not an enforced schedule or an automatic percentage increase. These are approximate AI-reported values, not a fixed percentage for each status and not a time prediction. Use an integer 0–100 or `null` for unknown. Completed status means verified completion and displays 100%; 100 without completed status is rejected. Partial progress requires reopening a completed task; reopening without a fresh estimate makes it unknown. Blocking retains the current estimate.
 
 Work progress averages all non-cancelled tasks equally and rounds down. Tasks at 100%, 40%, 0%, 0% produce 35% work completion, not 25% based on finished-task counts. If any eligible task lacks an estimate, the work displays `—`. No eligible tasks (an empty Work or only cancelled tasks) also means unknown. Work progress has no separate status or override. Existing sessions retain their records; legacy completed tasks display 100%, while other missing estimates remain unknown.
 
@@ -203,7 +229,7 @@ Work progress averages all non-cancelled tasks equally and rounds down. Tasks at
 
 Both the compact panel (floating or widget) and `/works` prefix work names with their IDs, such as `[W1] Locate subagent restrictions`. Task rows and dashboard detail headings also include ownership: `[T1] [self] Inspect the implement skill` or `[T2] [delegate] Implement storage`. These are display labels only; stored names and IDs are unchanged. Work IDs use the theme's accent color, task IDs use its type-highlight color, `[self]` uses success, `[delegate]` uses warning, and `[unassigned]` stays muted. Exact hues follow the selected theme; labels remain readable without relying on color.
 
-Ownership is read case-insensitively from explicit line-start `owner: self` or `owner: delegate` declarations in `taskInfo`, optionally followed by a reason or sentence. Incidental prose does not assign ownership. Missing, invalid, or conflicting declarations show `[unassigned]`; repeated declarations with the same valid value are unambiguous. No old records are rewritten and no new tool parameter is required. For example:
+Ownership is read case-insensitively from explicit line-start `owner: self` or `owner: delegate` declarations in hidden `taskInfo`, optionally followed by a reason or sentence. Incidental prose does not assign ownership. Missing, invalid, or conflicting declarations show `[unassigned]`; repeated declarations with the same valid value are unambiguous. No old records are rewritten and no new ownership parameter is required. Final thoughts never carries ownership. For example:
 
 ```text
 owner: self. This is a small, tightly coupled change.
@@ -212,7 +238,7 @@ The task covers the panel label and its documentation.
 
 ### Delegate terminal links
 
-A linked `[delegate]` badge uses `hc-terminal: <terminalId>` and `hc-monitor: <monitorId>` lines in taskInfo. AgentCreate adds these and blocks the parent task after creation; TodoUpdate preserves them for delegate-to-delegate detail edits. Set `hc-terminal: none` to unlink, or use AgentClose. Historical herdr-pane metadata is inert, never guessed into a Core address.
+A linked `[delegate]` badge uses `hc-terminal: <terminalId>` and `hc-monitor: <monitorId>` lines in hidden taskInfo. AgentCreate adds these and blocks the parent task after creation; TodoUpdate preserves them for delegate-to-delegate detail edits. Set `hc-terminal: none` to unlink, or use AgentClose. Historical herdr-pane metadata is inert, never guessed into a Core address. Opening a link uses normal herdr-app focus for a terminal that owns a pane or belongs to another machine. A pane-less Core child opens its own `terminal.peek` screen overlay over the current tab; it never navigates to the parent or reports a silent success. An address Herdr is not showing fails with an explicit error. These helpers classify from the desktop app listing and `hc get` and assume those commands target the same Core (`HC_SESSION`/`HC_SOCKET`); they do not perform Pet Town's `verified_world` cross-Core connection anchor, so isolated Core worlds are not independently matched.
 
 ## Agent tools
 
@@ -227,7 +253,7 @@ These tools are owned and registered by the separate [pi-herdr](https://github.c
 | `AgentSend` | `hc send <terminalId> <message>`, without --wait or --force. |
 | `AgentInterrupt` | `hc keys <terminalId> esc`. |
 | `AgentClose` | Stop the supplied monitor, kill the owned terminal if live, then remove its finished Core record. If the worker was presented, the app removes its ended pane/tab. |
-| `AgentFocus` | `herdr-app do agent.focus --terminal <terminalId>`; also used by delegate links. Reports `focused: false` when no app is available. |
+| `AgentFocus` | Shows an existing Core agent through herdr-app. A pane owner or another machine's terminal uses `agent.focus`; a pane-less sub-agent uses `terminal.peek` to open its own screen overlay over the current tab. Also used by delegate links. Reports `focused: false` with a reason when no app is available or the agent cannot be shown. |
 
 pi-herdr 0.1.0 requires the compatible local pi-tasks source with the version-1 prepare/attach/detach event-bus bridge. Published pi-tasks 0.15.0 lacks this bridge and owns legacy Agent tools; replace that source, do not load it alongside the updated local package. Reload or restart Pi after installing the coordinated pair. pi-tasks keeps timing, records, delegate links and task UI helpers. pi-herdr rejects duplicate Agent names with migration instructions rather than overriding them.
 
@@ -253,7 +279,7 @@ The timing descriptor and prepared assignment retain worker-local tracking, cano
 
 Use actual returned terminal addresses (t7 or machine/t7), not app pane IDs or tab names. A startup failure reports partial handles without blind relaunch, retries or automatic cleanup. Close only resources you created after their results are accepted. No registry or recovery runtime is added.
 
-Linked delegate badges are underlined and clickable in the compact panel, widget, dashboard and detail headings when fully visible. In /works use d; /works delegate T<number> works in regular mode too. Navigation calls herdr-app agent.focus; unavailable app/CLI or closed targets report errors. No subprocess runs while rendering. Without a valid Core link, badges remain informational. Open actions remain unchanged.
+Linked delegate badges are underlined and clickable in the compact panel, widget, dashboard and detail headings when fully visible. In /works use d; /works delegate T<number> works in regular mode too. Navigation uses herdr-app: a pane owner gets focus, while a pane-less Core child opens its existing terminal.peek overlay over the current tab without navigating to the parent. Unavailable app/CLI, closed targets, or a terminal Herdr is not showing report errors. No subprocess runs while rendering. Without a valid Core link, badges remain informational. Open actions remain unchanged.
 
 The compact panel no longer displays the session ID. Before Copy, its header shows nonzero task-state counts across all Works: `3!` blocked, `2▶` active, `5✓` completed, and `1×` cancelled, using the same icon colors as task rows. Counts update in floating, widget and minimized layouts; narrow headers shorten the toggle and truncate the summary when needed. Its underlined `[Open session]` action sits immediately after Copy in floating, widget and minimized layouts. It opens this agent's existing artifact directory under repository `var/` using the configured command, including a nested delegated session folder. If no folder exists, it creates `var/<full-sessionId>/`; multiple matching folders report an ambiguity rather than guessing. Session identity comes from Pi's context, not a pane name. Folder resolution and command launch happen only on activation, never during rendering. `/works open-session` is the keyboard-command alternative. The existing Open action still opens the repository. Narrow compact headers use `[-]`/`[+]` for Minimize/Maximize so all actions fit. The `/works` dashboard retains its existing title and controls.
 
@@ -263,7 +289,7 @@ The asynchronous Git cache refreshes every second while a view is attached; file
 
 In fullscreen TUI mode, click Copy in its title bar to copy every work and todo as Markdown, Open to run the configured command in the current session directory, or Minimize to collapse the panel to a small title bar. Copy and Open remain available while minimized, and Maximize restores the rows. The configured executable must be on PATH (or be an absolute path); launch failures produce visible error feedback. When more rows exist than fit, the floating panel starts at the newest rows; move the mouse over it and use the wheel to scroll older or newer rows without taking focus from the editor. In regular terminal mode, open `/works` to browse and copy the complete list.
 
-Use `/works minimize`, `/works maximize`, `/works open`, or `/works open-session` when mouse input is unavailable. Use `/works widget` for a right-aligned layout above the editor that renders every row and retains the clickable title actions, `/works floating` to return to the floating layout, `/works compact-off` to hide it, or `/works compact-on` to restore the last visible layout. `/works herdr-on` installs missing bundled mod files and opens the native Tasks pane.
+Use `/works minimize`, `/works maximize`, `/works open`, or `/works open-session` when mouse input is unavailable. Use `/works widget` for a right-aligned layout above the editor that renders every row and retains the clickable title actions, `/works floating` to return to the floating layout, `/works compact-off` to hide it, or `/works compact-on` to restore the last visible layout. `/works herdr-on` installs missing bundled mod files and opens the native Tasks pane; `pi-tasks.herdrPanel.enabled` opens it at each session start.
 
 Run `/works` for full details. Its top border mirrors repository-wide Git status, and its top bar includes Copy, Open, and Minimize actions. In fullscreen TUI mode, click Minimize to collapse the dashboard to a top bar showing the current work and todo totals; click Maximize to restore it. The actions also have keyboard shortcuts that work in regular terminal mode.
 

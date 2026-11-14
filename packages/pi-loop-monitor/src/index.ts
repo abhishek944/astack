@@ -5,6 +5,7 @@ import { ActivityProjection } from "./activity-projection.js";
 import { registerLoopCommand } from "./commands/loop-command.js";
 import { registerMonitorsCommand } from "./commands/monitors-command.js";
 import { setHerdrActivityPaneVisible } from "./herdr-panel.js";
+import { readHerdrPanelSettings } from "./herdr-panel-settings.js";
 import { atMaxFires } from "./loop-reducer.js";
 import { MonitorManager } from "./monitor-manager.js";
 import { buildLoopExpiredPayload } from "./runtime/loop-events.js";
@@ -29,6 +30,7 @@ function debug(...args: unknown[]) { if (DEBUG) console.error("[pi-loop-monitor]
 
 export default function (pi: ExtensionAPI) {
   const runtimeId = randomUUID();
+  const getSettings = () => (pi as ExtensionAPI & { getSettings?: () => unknown }).getSettings?.();
   const runtimeProbeEvent = `pi-loop-monitor:runtime-probe:${runtimeId}`;
   let sessionGeneration = 0;
   let latestCtx: ExtensionContext | undefined;
@@ -170,6 +172,25 @@ export default function (pi: ExtensionAPI) {
     setLatestCtx: (ctx) => { latestCtx = ctx; }, setSessionId: (sessionId) => { if (sessionId === undefined) projection.bind(undefined); }, widget, notificationRuntime,
     flushPendingNotifications: notificationRuntime.flushPendingNotifications, retryReadOnlyRetirements, finalizeReadOnlyRetirements, recoverReadOnlyRetirements, shutdownMonitors: () => monitorManager.shutdown(), isContextCurrent: isCurrentExtensionContext,
     emitLoopExpired: (entry, disposition, reason, generation) => emitExpired(entry, disposition, "session_recovery", reason, generation),
+  });
+
+  // Runs after the runtime hooks above, so the session projection is bound and
+  // flushed before the optional native pane reads it.
+  pi.on("session_start", async (_event, ctx) => {
+    if (ctx.mode !== "tui" || !process.env.HC_TERMINAL_ID) return;
+    let enabled: boolean;
+    try {
+      enabled = readHerdrPanelSettings(getSettings()).enabled;
+    } catch (error) {
+      ctx.ui.notify(error instanceof Error ? error.message : "Invalid Herdr panel settings.", "error");
+      return;
+    }
+    if (!enabled) return;
+    try {
+      await setHerdrActivityPaneVisible(ctx, true, projection.flush(), { replaceStale: true });
+    } catch {
+      // The native pane is an optional display; /monitors herdr-on reports the reason.
+    }
   });
 
   pi.events.on("monitor:started", async (event: unknown) => { const data = event as { monitorId?: string; command?: string; description?: string; timestamp?: number }; if (data.monitorId && data.command) await notificationRuntime.queueOrDeliverMonitorStarted({ monitorId: data.monitorId, command: data.command, description: data.description, timestamp: data.timestamp ?? Date.now(), sessionGeneration }); });

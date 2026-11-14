@@ -84,6 +84,8 @@ export type ImageModelRegistry = {
 export type ImageProviderRuntime = {
   modelRegistry?: ImageModelRegistry;
   mask?: ResolvedImageInput;
+  /** Transparent annotation layer for markup-guided edits; never combined with mask. */
+  markup?: ResolvedImageInput;
 };
 
 export type RawGenerationMetadata = {
@@ -93,7 +95,7 @@ export type RawGenerationMetadata = {
 };
 
 export type RawImageResult = {
-  /** Either base64 PNG bytes or a URL to fetch. */
+  /** Either base64 image bytes or a URL to fetch. Output may be raster, GIF or SVG. */
   data: { kind: 'base64'; bytes: string; mimeType?: string } | { kind: 'url'; url: string };
   revisedPrompt?: string;
   metadata?: RawGenerationMetadata;

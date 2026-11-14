@@ -50,7 +50,7 @@ export const openaiAdapter: ImageProviderAdapter = {
     }
     const base = withDefaultPath(provider.baseUrl, '/v1');
     if (inputs && inputs.length > 0) {
-      return generateWithImages(provider, base, remoteModelId, params, inputs, fetchImpl, signal, runtime?.mask);
+      return generateWithImages(provider, base, remoteModelId, params, inputs, fetchImpl, signal, runtime);
     }
     return generateFromText(provider, base, remoteModelId, params, fetchImpl, signal);
   },
@@ -72,9 +72,22 @@ async function generateFromText(
   };
   if (params.size) body.size = params.size;
   if (params.quality) body.quality = params.quality;
+  if (params.complexity) body.complexity = params.complexity;
   if (params.outputFormat) body.output_format = params.outputFormat;
   if (params.background) body.background = params.background;
   if (params.outputCompression != null) body.output_compression = params.outputCompression;
+  // Frame controls and the SVG author object are generation-only. Validation
+  // rejects them on the edit path, so this branch can rely on outputFormat.
+  if (params.outputFormat === 'gif') {
+    if (params.frameCount != null) body.frame_count = params.frameCount;
+    if (params.frameDurationMs != null) body.frame_duration_ms = params.frameDurationMs;
+  }
+  if (params.svgModel) {
+    body.svg = {
+      model: params.svgModel,
+      ...(params.svgReasoningEffort ? { reasoning: { effort: params.svgReasoningEffort } } : {}),
+    };
+  }
 
   let res: Response;
   try {
@@ -99,21 +112,28 @@ async function generateWithImages(
   inputs: ResolvedImageInput[],
   fetchImpl: typeof fetch,
   signal?: AbortSignal,
-  mask?: ResolvedImageInput,
+  runtime?: ImageProviderRuntime,
 ): Promise<RawImageResult[]> {
   const url = openAiImageUrl(provider, base, 'edits');
   const form = new FormData();
+  const mask = runtime?.mask;
+  const markup = runtime?.markup;
   form.append('model', remoteModelId);
   form.append('prompt', params.prompt);
   form.append('n', String(params.n ?? 1));
   if (params.size) form.append('size', params.size);
   if (params.quality) form.append('quality', params.quality);
+  if (params.complexity) form.append('complexity', params.complexity);
   if (params.outputFormat) form.append('output_format', params.outputFormat);
   if (params.background) form.append('background', params.background);
   if (params.outputCompression != null) form.append('output_compression', String(params.outputCompression));
   if (mask) {
     const ext = mask.mimeType.split('/')[1] ?? 'png';
     form.append('mask', new Blob([new Uint8Array(mask.bytes)], { type: mask.mimeType }), `mask.${ext}`);
+  }
+  if (markup) {
+    const ext = markup.mimeType.split('/')[1] ?? 'png';
+    form.append('markup', new Blob([new Uint8Array(markup.bytes)], { type: markup.mimeType }), `markup.${ext}`);
   }
   // OpenAI accepts repeated `image[]` for multi-image edits on gpt-image-2.
   const fieldName = inputs.length > 1 ? 'image[]' : 'image';

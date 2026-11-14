@@ -5,6 +5,7 @@ import { formatWorksMarkdown } from "../markdown.js";
 import { openRepository } from "../open-repository.js";
 import { formatCompletion, taskCompletion, workCompletion } from "../progress.js";
 import { safeMultiline, safeSingleLine } from "../text.js";
+import { finalThoughtsFor } from "../thoughts.js";
 import { formatTime, taskTime, workTime } from "../time.js";
 import { border, delegateHitRegion, frame, gitBorder, metricsColumn, metricsHeader, ownerBadge, recordId, rule, todoIcon } from "./panel.js";
 import { readTaskView } from "./task-view.js";
@@ -334,19 +335,20 @@ export class WorksDashboard {
             lines.push(...wrap(this.theme.fg("muted", `${recordId(item.work.workId, this.theme)} ${safeSingleLine(item.work.workName)}`)), "");
             const status = `${todoIcon(task.status, this.theme)} ${task.status}`;
             lines.push(...wrap(`${status} · ${formatCompletion(taskCompletion(task))} complete · Time: ${formatTime(taskTime(task))}`), "");
-            if (task.status === "blocked") {
-                const reasonWidth = Math.max(1, contentWidth - 2);
-                for (const line of safeMultiline(`Reason: ${task.blockedReason ?? "No reason recorded."}`)) {
-                    lines.push(...wrapTextWithAnsi(line || " ", reasonWidth).map((part) => this.theme.fg("warning", `│ ${part}`)));
-                }
-                lines.push("");
-            }
         }
         else {
             lines.push(...wrap(`${formatCompletion(workCompletion(item.work))} complete · Time (task effort): ${formatTime(workTime(item.work))}`), "");
         }
-        lines.push(this.theme.fg("accent", this.theme.bold(task ? "Task details" : "Work details")));
-        lines.push(...safeMultiline(task?.taskInfo ?? item.work.workInfo).flatMap(wrap));
+        if (task) {
+            lines.push(this.theme.fg("accent", this.theme.bold("Final thoughts")));
+            const thoughts = finalThoughtsFor(task) ?? "No final thoughts recorded.";
+            const color = task.status === "blocked" ? "warning" : "muted";
+            lines.push(...safeMultiline(thoughts).flatMap(wrap).map((line) => this.theme.fg(color, line)));
+        }
+        else {
+            lines.push(this.theme.fg("accent", this.theme.bold("Work details")));
+            lines.push(...safeMultiline(item.work.workInfo).flatMap(wrap));
+        }
         this.detailPageSize = budget;
         this.detailOffset = Math.max(0, Math.min(this.detailOffset, Math.max(0, lines.length - budget)));
         const shown = lines.slice(this.detailOffset, this.detailOffset + budget);

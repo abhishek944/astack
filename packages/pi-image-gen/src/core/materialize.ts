@@ -1,6 +1,6 @@
 import type { RawImageResult } from '../types/provider.js';
 import {
-  MAX_BASE64_IMAGE_CHARS, MAX_IMAGE_BYTES, MAX_TOTAL_REFERENCE_IMAGE_BYTES, sniffMime,
+  MAX_BASE64_IMAGE_CHARS, MAX_IMAGE_BYTES, MAX_TOTAL_REFERENCE_IMAGE_BYTES, sniffMime, sniffOutputMime,
 } from '../image-input.js';
 import { decodeBase64 } from './base64.js';
 import { awaitWithAbort } from './deadline.js';
@@ -14,12 +14,12 @@ export function byteLimit(value: number | undefined, ceiling: number): number {
   return value ?? ceiling;
 }
 
-export function validateOriginal(original: Original, limit: number, catalog = false): Original {
+export function validateOriginal(original: Original, limit: number, catalog = false, allowSvgOutput = false): Original {
   if (!original || !(original.bytes instanceof Uint8Array) || typeof original.mimeType !== 'string' ||
       !original.bytes.byteLength || original.bytes.byteLength > limit) {
     throw new ImageGenError('Original image bytes are missing or exceed the safety ceiling.', 'invalid original bytes');
   }
-  const actual = sniffMime(original.bytes);
+  const actual = allowSvgOutput ? sniffOutputMime(original.bytes) : sniffMime(original.bytes);
   const declared = original.mimeType.toLowerCase().replace('image/jpg', 'image/jpeg');
   if (!actual || actual !== declared ||
       (catalog && !['image/png', 'image/jpeg', 'image/webp'].includes(actual))) {
@@ -30,12 +30,13 @@ export function validateOriginal(original: Original, limit: number, catalog = fa
 
 export async function loadReferences<Stored>(
   request: PreparedImageRequest, host: ImageHost<Stored>, signal: AbortSignal,
-): Promise<{ images: Original[]; mask?: Original }> {
+): Promise<{ images: Original[]; mask?: Original; markup?: Original }> {
   const totalLimit = byteLimit(host.limits?.referenceBytes, MAX_TOTAL_REFERENCE_IMAGE_BYTES);
   const imageLimit = byteLimit(host.limits?.imageBytes, MAX_IMAGE_BYTES);
   const images: Original[] = [];
   let total = 0;
   let mask: Original | undefined;
+  let markup: Original | undefined;
   // Sequential loading bounds input-sized work; it does not serialize independent image tools.
   for (const reference of request.references) {
     const original = validateOriginal(
@@ -44,9 +45,10 @@ export async function loadReferences<Stored>(
     );
     total += original.bytes.byteLength;
     if (reference.role === 'mask') mask = original;
+    else if (reference.role === 'markup') markup = original;
     else images.push(original);
   }
-  return { images, ...(mask ? { mask } : {}) };
+  return { images, ...(mask ? { mask } : {}), ...(markup ? { markup } : {}) };
 }
 
 export async function materializeOutput<Stored>(
@@ -59,12 +61,12 @@ export async function materializeOutput<Stored>(
       throw new ImageGenError('Provider output exceeds the size ceiling.', 'oversized image output');
     }
     const bytes = decodeBase64(raw.data.bytes);
-    const mimeType = sniffMime(bytes);
+    const mimeType = sniffOutputMime(bytes);
     if (!mimeType) throw new ImageGenError('Provider output is not a supported image.', 'invalid output format');
-    return validateOriginal({ bytes, mimeType }, limit, catalog);
+    return validateOriginal({ bytes, mimeType }, limit, catalog, true);
   }
   if (raw.data.kind !== 'url' || typeof raw.data.url !== 'string' || !/^https?:\/\//i.test(raw.data.url)) {
     throw new ImageGenError('Provider did not return a supported output URL.', 'invalid output URL');
   }
-  return validateOriginal(await awaitWithAbort(host.loadOutput(raw.data.url, signal), signal), limit, catalog);
+  return validateOriginal(await awaitWithAbort(host.loadOutput(raw.data.url, signal), signal), limit, catalog, true);
 }

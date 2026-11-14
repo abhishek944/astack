@@ -1,5 +1,12 @@
 export type ImageResize = { width: number; height: number; fit?: 'contain' | 'cover' };
 
+/** Provider output encodings the package can materialize, save and preview safely. */
+export type ImageOutputFormat = 'png' | 'jpeg' | 'webp' | 'gif' | 'svg';
+/** Provider planning effort (GPT Image 2.6), independent of rendering quality. */
+export type ImageComplexity = 'low' | 'medium' | 'high';
+/** Reasoning effort of the text/instruct model that authors SVG output. */
+export type SvgReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export type GenerateImageParams = {
   prompt: string;
   /**
@@ -34,14 +41,38 @@ export type GenerateImageParams = {
    * that don't expose a quality knob.
    */
   quality?: string;
-  /** Provider-supported output encoding. */
-  outputFormat?: 'png' | 'jpeg' | 'webp';
+  /** Provider-supported output encoding. `gif` and `svg` are generation-only. */
+  outputFormat?: ImageOutputFormat;
+  /**
+   * Provider planning effort, independent of `quality`. Only models whose
+   * capabilities declare `complexityValues` accept it. For SVG output this
+   * controls the reference image, not the SVG author's reasoning.
+   */
+  complexity?: ImageComplexity;
+  /** Frames for native GIF output (generation only). Provider bounds are documented per model. */
+  frameCount?: number;
+  /** Per-frame delay in milliseconds for native GIF output (generation only). */
+  frameDurationMs?: number;
+  /**
+   * Model that authors SVG output. Supply only when the account has SVG model
+   * selection enabled; omit the whole SVG author object otherwise. The top-level
+   * model still creates the reference image.
+   */
+  svgModel?: string;
+  /** SVG author reasoning effort. Requires `svgModel`, matching the API's required `svg.model` when selection is enabled. */
+  svgReasoningEffort?: SvgReasoningEffort;
   /** Provider-supported background behavior. */
   background?: 'auto' | 'transparent' | 'opaque';
   /** JPEG/WebP compression from 0–100. */
   outputCompression?: number;
   /** Optional edit mask path/URL; exposed only for verified mask-capable models. */
   mask?: string;
+  /**
+   * Transparent annotation PNG overlaid on the first input image for
+   * markup-guided edits. It cannot be combined with `mask`, and requires an
+   * edit target in `image`.
+   */
+  markup?: string;
   /** Provider-native negative prompt. */
   negativePrompt?: string;
   /** Provider-native reproducibility seed. */
@@ -114,10 +145,14 @@ export type ImageModelCapabilities = {
   imageSizes?: string[];
   /** Model-specific quality vocabulary when the provider exposes a quality knob. */
   qualityValues?: string[];
-  outputFormats?: Array<'png' | 'jpeg' | 'webp'>;
+  outputFormats?: ImageOutputFormat[];
+  /** Planning-effort vocabulary; absence means the model has no `complexity` knob. */
+  complexityValues?: ImageComplexity[];
   backgroundValues?: Array<'auto' | 'transparent' | 'opaque'>;
   supportsOutputCompression?: boolean;
   supportsMask?: boolean;
+  /** Whether the edit path accepts a markup annotation layer. */
+  supportsMarkup?: boolean;
   supportsNegativePrompt?: boolean;
   supportsSeed?: boolean;
   supportsPromptEnhance?: boolean;

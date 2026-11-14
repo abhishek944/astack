@@ -5,7 +5,7 @@ description: "Generate one coherent sprite action sheet with the optional sprite
 
 # Sprite generation
 
-Use `sprite_generate` for an ordered animation made from one coherent generated sheet. Use `image_generate` for ordinary single images.
+Use `sprite_generate` for an ordered animation made from one coherent generated sheet. Use `image_generate` for ordinary single images, and for native provider GIF/vector output when the active model advertises it (`sprite_generate` intentionally does not encode GIF).
 
 ## Availability
 
@@ -49,7 +49,7 @@ For references, label each role: `Image 1: canonical identity and costume`, `Ima
 - `align: "feet"` suits grounded characters; `center` suits floating effects and projectiles.
 - `scaleStrategy: "fit"` computes one shared scale. `preserve` keeps source scale unless one uniform safety reduction is needed.
 - `componentMode: "largest"` favors a main character. `all` preserves meaningful detached effect parts.
-- `format: "png"` returns a static normalized sprite sheet. `apng` (default) and `webp` write animations after validation; WebP is lossless and preserves transparency. Both animations require at least two frames. `frames` remains supported for normalized PNG assets. Every format preserves the PNG sheet and individual PNG frames.
+- `format: "png"` returns a static normalized sprite sheet. `apng` (default) and `webp` write animations after validation; WebP is lossless and preserves transparency. Both animations require at least two frames. `frames` remains supported for normalized PNG assets. Every format preserves the PNG sheet and individual PNG frames. Native provider GIF output is a separate `image_generate` feature, not a sprite format.
 - Set `spriteGeneration.defaultFormat` in settings to choose the default; per-call `format` overrides it.
 - `strictValidation: true` blocks animation approval for clipping and serious motion findings.
 - Model-aware `size`, `aspectRatio`, `imageSize`, and `quality` appear only when supported.

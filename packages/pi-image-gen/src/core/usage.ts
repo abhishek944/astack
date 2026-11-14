@@ -7,9 +7,13 @@ import type { ImageTokenUsage, ReportedUsage, UsageValue } from './protocol.js';
  * with allowlisted keys survive, with fixed depth/key/item/total-value caps. This keeps
  * meaningful nested token details (e.g. `input_tokens_details.text_tokens`)
  * without retaining arbitrary response text, URLs or raw bodies as metadata.
+ * The single string exception is a validated model identifier at
+ * `svg_usage.model`, which names the model whose separately reported author
+ * counters follow; it is never merged into image token totals.
  */
 const KEY_RE = /^[A-Za-z0-9_.:-]{1,64}$/;
 const USAGE_TAGS = new Set(['text', 'image', 'audio', 'video', 'input', 'output', 'cached', 'uncached', 'tokens']);
+const MODEL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const MAX_DEPTH = 4;
 const MAX_KEYS = 64;
 const MAX_ITEMS = 16;
@@ -22,19 +26,30 @@ export function sanitizeReportedUsage(value: unknown): ReportedUsage | undefined
   return Object.keys(clean).length > 0 ? (clean as ReportedUsage) : undefined;
 }
 
-function sanitizeValue(value: unknown, depth: number, budget: { keys: number; values: number }): UsageValue | undefined {
+function sanitizeValue(
+  value: unknown,
+  depth: number,
+  budget: { keys: number; values: number },
+  path: readonly string[] = [],
+): UsageValue | undefined {
   if (budget.values <= 0) return undefined;
   budget.values -= 1;
   if (typeof value === 'number') {
     return Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER ? value : undefined;
   }
-  if (typeof value === 'string') return USAGE_TAGS.has(value) ? value : undefined;
+  if (typeof value === 'string') {
+    if (USAGE_TAGS.has(value)) return value;
+    const isSvgAuthorModel = path.length === 2 && path[0] === 'svg_usage' && path[1] === 'model';
+    return isSvgAuthorModel && MODEL_ID_RE.test(value) ? value : undefined;
+  }
   if (typeof value === 'boolean' || value === null) return value;
   if (depth >= MAX_DEPTH) return undefined;
   if (Array.isArray(value)) {
     const items: UsageValue[] = [];
     for (const item of value.slice(0, MAX_ITEMS)) {
-      const clean = sanitizeValue(item, depth + 1, budget);
+      // Array items never sit at an allowlisted object path; the marker keeps
+      // svg_usage.model from accepting an array of model-shaped strings.
+      const clean = sanitizeValue(item, depth + 1, budget, [...path, '[]']);
       if (clean !== undefined) items.push(clean);
     }
     return items.length > 0 ? items : undefined;
@@ -44,7 +59,7 @@ function sanitizeValue(value: unknown, depth: number, budget: { keys: number; va
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
       if (budget.keys <= 0) break;
       if (!KEY_RE.test(key) || ['__proto__', 'constructor', 'prototype'].includes(key)) continue;
-      const clean = sanitizeValue(item, depth + 1, budget);
+      const clean = sanitizeValue(item, depth + 1, budget, [...path, key]);
       if (clean === undefined) continue;
       budget.keys -= 1;
       out[key] = clean;

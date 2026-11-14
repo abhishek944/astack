@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.11 - 2026-11-14
+
+- Add `pi-loop-monitor.herdrPanel.enabled` to open or focus the native Loops/Monitors pane at each session start in a local Herdr Core TUI session, after the session projection is bound and flushed. A malformed value reports a diagnostic and stays off.
+- Replace this terminal's activity pane from an earlier session or runtime before opening the current one, so a resumed session never keeps a view bound to a stale runtime.
+
 ## 0.2.10 - 2026-11-03
 
 - Add a native read-only Herdr Loops/Monitors activity view opened with `/monitors herdr-on`, plus `/monitors compact-on|compact-off` and `herdr-off` display controls that never stop loops or monitors. It reads a bounded session/runtime/terminal projection, freezes and labels stale data, and installs bundled mod assets without overwriting customizations.

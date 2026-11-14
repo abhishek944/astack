@@ -90,7 +90,7 @@ If delegation is unavailable or fails, the coordinator should report the concret
 
 ### Coordinator tool allowlist
 
-While coordinator mode is effective, the model can use only `read`, `grep`, `find`, `ls` and tools registered by an installed pi-tasks, pi-loop-monitor, pi-decisions or pi-herdr package. The extension derives that set from the packages' actual registrations, so their task, decision, monitor, loop and Agent tools keep their normal schemas and behavior; `MonitorCreate` is not argument-filtered. Other active tools are hidden from the model and re-filtered before each request, including direct tools registered during a multi-turn run such as a slow MCP connection. Direct or nested calls to them are rejected at Pi's `tool_call` boundary with an actionable delegation message, including nested calls made through codemode or another tool.
+While coordinator mode is effective, the model can use only `read`, `grep`, `find`, `ls` and tools registered by an installed pi-tasks, pi-loop-monitor, pi-decisions, pi-herdr or pi-schedulers package. The extension derives that set from the packages' actual registrations, so their task, decision, monitor, loop and Agent tools keep their normal schemas and behavior; `MonitorCreate` is not argument-filtered. Other active tools are hidden from the model and re-filtered before each request, including direct tools registered during a multi-turn run such as a slow MCP connection. Direct or nested calls to them are rejected at Pi's `tool_call` boundary with an actionable delegation message, including nested calls made through codemode or another tool.
 
 Off mode, an explicit `--firstmate-worker` process and verified Core workers keep ordinary tools. `/firstmate off` and `/firstmate default` restore the active-tool set that existed before the restriction, without enabling unrelated inactive tools. The baseline is stored in existing session state under this session's identity, so turning the mode off after resuming a saved session restores the original set even when the restricted declarations were the last ones recorded. A fork does not inherit another session's baseline.
 
@@ -99,6 +99,38 @@ When pi-research (`/ask`) owns its read-only guard, First Mate keeps that restri
 This is Pi tool-call enforcement, not an OS sandbox. Allowed tools can still start or control processes, and permissions, trust, user authorization and `/ask` or `/btw` limits still apply. Do not describe it as absolute prevention through every allowed command or monitor.
 
 Shell, codemode and project-edit tools are intentionally unavailable to a coordinator; this is not a missing permission or a broken installation. A blocked call reports the restriction and points to checking the installed delegation backend, not to enabling the tool.
+
+### Optional scheduler creation
+
+An installed pi-schedulers package owns `SchedulerCreate`, including its schema,
+preview, mandatory human Create/Cancel dialog and transactional definition save.
+First Mate only controls its exposure from the actual package-owned registration;
+it does not implement scheduling or guess a foreign tool name. Use it only when
+the human explicitly asks for scheduled work, never proactively or from inferred
+permission. Each creation, including duplicates, needs its own human confirmation.
+
+The scheduler registers hidden by default. While `resolveMode().effective` is
+true, First Mate allows the scheduler-owned registration to become model-only
+and activates it, without widening `/ask`'s read-only guard. The synchronous
+`pi-firstmate:mode:probe` event answers `available`, `protocolVersion: 1`,
+`effective`, and a `generation` that changes on effective-mode transitions.
+`pi-firstmate:mode:changed` asks consumers to re-probe; the owning scheduler
+publishes `pi-schedulers:tools:changed` after changing its registration so late
+registration is handled in either extension load order. The existing explicit
+`/firstmate on` behavior after an inconclusive Core lookup is unchanged; actual
+worker suppression remains authoritative.
+
+Off, shutdown, reload and resume restoration never add coordinator-only scheduler
+tools to the ordinary baseline, and unrelated active/inactive choices remain
+unchanged. Without First Mate the registration stays hidden. The scheduler
+rechecks the authoritative effective generation at execute entry, after the human
+answers, and before initiating its definition write/commit. Off/on while a dialog
+is open invalidates it; no model approval flag bypasses the human dialog. Once a
+filesystem commit has been initiated it cannot be revoked atomically by a later
+mode change. No rollback/recovery infrastructure is added. Scheduled workers keep
+normal configured tools/MCP and First Mate suppression; this integration does not
+turn creation back on in those workers. Reload Pi after updating both packages
+when it is safe to do so; installation of native mods is separate.
 
 ### Other worker launchers
 

@@ -37,7 +37,7 @@ export async function generateImageCore<Stored>(
       throw new ImageGenError('The trusted image transport is not configured.', 'image transport missing');
     }
     progress(host, 'loading-inputs');
-    const { images, mask } = await loadReferences(request, host, signal);
+    const { images, mask, markup } = await loadReferences(request, host, signal);
     if (signal.aborted) throw cancelledError('image generation');
     progress(host, 'waiting-provider');
     const markDispatched = () => { dispatched = true; phase = 'dispatched'; };
@@ -51,7 +51,7 @@ export async function generateImageCore<Stored>(
       raws = await awaitWithAbort(host.adapter!.generate(
         request.route.provider, request.route.remoteModelId, params,
         host.providerFetch ?? fetch, signal, images,
-        { ...host.providerRuntime, ...(mask ? { mask } : {}) },
+        { ...host.providerRuntime, ...(mask ? { mask } : {}), ...(markup ? { markup } : {}) },
       ), signal);
     }
     if (!Array.isArray(raws) || !raws.length || raws.length > MAX_GENERATED_IMAGES) {

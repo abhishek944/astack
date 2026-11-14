@@ -20,8 +20,10 @@ export const APPROVED_PACKAGES = new Set([
     "@abhishek944/pi-loop-monitor",
     "@abhishek944/pi-decisions",
     "@abhishek944/pi-herdr",
+    "@abhishek944/pi-schedulers",
 ]);
-export const COORDINATOR_TOOLS_DESCRIPTION = "read, grep, find, ls and installed pi-tasks, pi-loop-monitor, pi-decisions and pi-herdr tools";
+const COORDINATOR_ONLY_PACKAGES = new Set(["@abhishek944/pi-schedulers"]);
+export const COORDINATOR_TOOLS_DESCRIPTION = "read, grep, find, ls and installed pi-tasks, pi-loop-monitor, pi-decisions, pi-herdr and coordinator-only pi-schedulers tools";
 function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -33,26 +35,25 @@ function sourceBaseDir(sourceInfo) {
     return dirname(sourceInfo.path);
 }
 export function createToolGate(pi) {
-    const packageApproval = new Map();
+    const sourcePackages = new Map();
     // Package identity comes from the registration's installed package root, not
     // from a tool name list or self-declared annotations. The extension entry can
     // live in `dist/` (explicit extension paths) or the package root (discovered
     // packages), so walk to the nearest manifest. A missing or unreadable manifest
     // stays unapproved so new or unexpected tools fail closed.
-    function approvedSource(sourceInfo) {
+    function sourcePackage(sourceInfo) {
         const baseDir = sourceBaseDir(sourceInfo);
         if (baseDir === undefined)
-            return false;
-        const cached = packageApproval.get(baseDir);
+            return null;
+        const cached = sourcePackages.get(baseDir);
         if (cached !== undefined)
             return cached;
-        let approved = false;
+        let packageName = null;
         let directory = baseDir;
         while (true) {
             try {
                 const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
-                approved =
-                    isRecord(manifest) && typeof manifest.name === "string" && APPROVED_PACKAGES.has(manifest.name);
+                packageName = isRecord(manifest) && typeof manifest.name === "string" ? manifest.name : null;
                 break;
             }
             catch {
@@ -62,20 +63,25 @@ export function createToolGate(pi) {
                 directory = parent;
             }
         }
-        packageApproval.set(baseDir, approved);
-        return approved;
+        sourcePackages.set(baseDir, packageName);
+        return packageName;
     }
     // Rebuild from the live registry so tools registered after session start are
     // classified from their actual installation instead of a stale snapshot.
     function allowedNames() {
         const allowed = new Set(INSPECTION_TOOLS);
         for (const tool of pi.getAllTools()) {
-            if (approvedSource(tool.sourceInfo))
+            if (APPROVED_PACKAGES.has(sourcePackage(tool.sourceInfo) ?? ""))
                 allowed.add(tool.name);
         }
         return allowed;
     }
     return {
+        coordinatorOnlyNames() {
+            return new Set(pi.getAllTools()
+                .filter((tool) => COORDINATOR_ONLY_PACKAGES.has(sourcePackage(tool.sourceInfo) ?? ""))
+                .map((tool) => tool.name));
+        },
         permits(toolName) {
             if (INSPECTION_TOOLS.has(toolName))
                 return true;

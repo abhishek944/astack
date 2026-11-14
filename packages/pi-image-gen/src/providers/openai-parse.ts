@@ -1,5 +1,5 @@
 import { ImageGenError, providerLogLabel, readBodyText, redactUrl, throwHttpError } from '../errors.js';
-import { classifyImageOutput, MAX_BASE64_IMAGE_CHARS, MAX_GENERATED_IMAGES, sniffMime } from '../image-input.js';
+import { classifyImageOutput, MAX_BASE64_IMAGE_CHARS, MAX_GENERATED_IMAGES, sniffOutputMime } from '../image-input.js';
 import { decodeBase64 } from '../core/base64.js';
 import { ProviderResultError } from '../core/provider-result.js';
 import { coreMetadata, parseReportedCost, preferredReportedCost } from '../core/usage.js';
@@ -32,13 +32,19 @@ export async function parseImagesResponse(
     }
     if (!isRecord(json)) throw invalidResponseError(provider);
     const usage = isRecord(json.usage) ? json.usage : undefined;
+    // SVG author tokens are reported separately from image rendering usage. Keep them
+    // nested under svg_usage so image-token normalization and costing never double count them.
+    const svgUsage = isRecord(json.svg_usage) ? json.svg_usage : undefined;
+    const reportedUsage = usage || svgUsage
+      ? { ...(usage ?? {}), ...(svgUsage ? { svg_usage: svgUsage } : {}) }
+      : undefined;
     const reportedCost = preferredReportedCost(
       parseReportedCost(json.cost, json.currency, 'provider-response'),
       parseReportedCost(usage?.cost, usage?.currency, 'provider-response', json.currency),
     );
     metadata = coreMetadata({
       ...(requestId ? { requestId } : {}),
-      ...(usage ? { reportedUsage: usage } : {}),
+      ...(reportedUsage ? { reportedUsage } : {}),
       ...(reportedCost ? { reportedCost } : {}),
       ...(reportedCost?.basis === 'provider-response' ? { cost: reportedCost.amount } : {}),
     });
@@ -71,8 +77,8 @@ function imageEntries(
         throw new ImageGenError('Provider returned an image that exceeds the size ceiling.',
           `${providerLogLabel(provider)} returned an oversized image`);
       }
-      const prefix = decodeBase64(entry.b64_json.slice(0, 24));
-      const mimeType = sniffMime(prefix)
+      const prefix = decodeBase64(entry.b64_json.slice(0, 1536));
+      const mimeType = sniffOutputMime(prefix)
         ?? (typeof entry.media_type === 'string' ? entry.media_type : undefined) ?? 'image/png';
       payload = { kind: 'base64', bytes: entry.b64_json, mimeType };
     } else {

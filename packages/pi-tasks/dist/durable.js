@@ -26,6 +26,7 @@ import { defineDoc, defineExtension, defineTool } from "@earendil-works/pi-durab
 import { Type } from "typebox";
 import { taskOwner } from "./ownership.js";
 import { safeSingleLine } from "./text.js";
+import { finalThoughtsFor } from "./thoughts.js";
 const STATE_KIND = "pi-tasks.state";
 const STATE_VERSION = 1;
 const tasksDoc = defineDoc({
@@ -38,6 +39,8 @@ const tasksDoc = defineDoc({
 });
 const StatusSchema = StringEnum(["active", "blocked", "completed", "cancelled"]);
 const InfoSchema = Type.String({ minLength: 1, maxLength: 10_000 });
+const TaskInfoSchema = Type.String({ minLength: 1, maxLength: 10_000, description: "Hidden coordination metadata for resumption: owner declaration, canonical artifact paths, parent IDs, and necessary execution constraints. Never shown as task text; do not narrate goals or progress here." });
+const FinalThoughtsSchema = Type.String({ description: "The only user-visible task text. One concise update, not a goal, history, list, or section. Completed tasks state the actual result, verification, and remaining limits; active tasks update only for significant changes with no filler; blocked tasks use blockedReason as the authoritative dependency. Never include owner declarations, links, paths, or parent IDs." });
 const NameSchema = Type.String({ minLength: 1, maxLength: 240 });
 const CompletionSchema = Type.Union([Type.Integer({ minimum: 0, maximum: 100 }), Type.Null()]);
 const BlockedReasonSchema = Type.Union([Type.String({ minLength: 1, maxLength: 10_000 }), Type.Null()]);
@@ -68,6 +71,12 @@ function requiredText(value) {
     if (!text)
         throw new Error("Details must not be empty.");
     return text;
+}
+function optionalThoughts(value) {
+    if (value === undefined)
+        return undefined;
+    const text = value.trim();
+    return text || undefined;
 }
 function checkCompletion(status, value) {
     if (value === undefined || value === null)
@@ -121,8 +130,7 @@ function normalizeBlockedReason(status, supplied, current) {
 }
 function formatTodo(todo) {
     const owner = taskOwner(todo.taskInfo);
-    const blocked = todo.status === "blocked" ? `\nBlocked reason: ${todo.blockedReason ?? "No reason recorded."}` : "";
-    return `${todo.taskId} [${todo.status}] [${owner === "self" || owner === "delegate" ? owner : "unassigned"}] ${todo.taskName} · ${formatCompletion(taskCompletion(todo.status, todo.completionPercent))}\nWork: ${todo.workId}${blocked}\nTask info:\n${todo.taskInfo}`;
+    return `${todo.taskId} [${todo.status}] [${owner === "self" || owner === "delegate" ? owner : "unassigned"}] ${todo.taskName} · ${formatCompletion(taskCompletion(todo.status, todo.completionPercent))}\nWork: ${todo.workId}\nFinal thoughts:\n${finalThoughtsFor(todo) ?? "None recorded."}\nTask info (hidden coordination metadata):\n${todo.taskInfo}`;
 }
 function formatWork(doc, work, filter) {
     const todos = doc.todos
@@ -271,11 +279,12 @@ export function createTasksDurableExtension(settings = {}) {
     });
     const todoCreate = defineTool({
         name: "TodoCreate",
-        description: "Create one concrete todo under an existing work with detailed taskInfo. New tasks default to active. Supply blockedReason when creating a blocked task. completionPercent is an optional 0-100 estimate, null for unknown; 100 requires completed status.",
+        description: "Create one concrete todo under an existing work. New tasks default to active. taskInfo is hidden coordination metadata; finalThoughts is the only user-visible task text. Supply blockedReason when creating a blocked task; it is the visible dependency. completionPercent is an optional 0-100 estimate, null for unknown; 100 requires completed status.",
         parameters: Type.Object({
             workId: Type.String({ minLength: 1 }),
             taskName: NameSchema,
-            taskInfo: InfoSchema,
+            taskInfo: TaskInfoSchema,
+            finalThoughts: Type.Optional(FinalThoughtsSchema),
             status: Type.Optional(StatusSchema),
             completionPercent: Type.Optional(CompletionSchema),
             blockedReason: Type.Optional(BlockedReasonSchema),
@@ -295,11 +304,15 @@ export function createTasksDurableExtension(settings = {}) {
                 const status = (args.status ?? "active");
                 checkCompletion(status, args.completionPercent ?? null);
                 const now = Date.now();
+                // Chord rejects an own undefined property as non-JSON. Normalize once and
+                // omit the field entirely when the caller supplied nothing or blank text.
+                const finalThoughts = optionalThoughts(args.finalThoughts);
                 const todo = {
                     taskId: `T${doc.nextTaskId}`,
                     workId: args.workId,
                     taskName: requiredName(args.taskName),
                     taskInfo: requiredText(args.taskInfo),
+                    ...(finalThoughts === undefined ? {} : { finalThoughts }),
                     status,
                     blockedReason: normalizeBlockedReason(status, args.blockedReason ?? undefined, undefined),
                     completionPercent: status === "completed" ? 100 : (args.completionPercent ?? null),
@@ -346,11 +359,12 @@ export function createTasksDurableExtension(settings = {}) {
     });
     const todoUpdate = defineTool({
         name: "TodoUpdate",
-        description: "Update a todo's name, details, status, progress, or blocked reason. Requires at least one changed field. Completion follows: 100 only with completed status; reopening a completed task without a fresh estimate resets progress to unknown. Effort timing is unsupported natively: there is no working field.",
+        description: "Update a todo's name, hidden coordination metadata, visible final thoughts, status, progress, or blocked reason. Requires at least one changed field. A status change clears an unsupplied thought; supply the new completed result or blocked dependency. Completion follows: 100 only with completed status; reopening a completed task without a fresh estimate resets progress to unknown. Effort timing is unsupported natively: there is no working field.",
         parameters: Type.Object({
             taskId: Type.String({ minLength: 1 }),
             taskName: Type.Optional(NameSchema),
-            taskInfo: Type.Optional(InfoSchema),
+            taskInfo: Type.Optional(TaskInfoSchema),
+            finalThoughts: Type.Optional(FinalThoughtsSchema),
             status: Type.Optional(StatusSchema),
             completionPercent: Type.Optional(CompletionSchema),
             blockedReason: Type.Optional(BlockedReasonSchema),
@@ -388,6 +402,21 @@ export function createTasksDurableExtension(settings = {}) {
                         todo.taskInfo = info;
                         changed = true;
                     }
+                }
+                if (args.finalThoughts !== undefined) {
+                    const thoughts = optionalThoughts(args.finalThoughts);
+                    if (thoughts !== todo.finalThoughts) {
+                        if (thoughts === undefined)
+                            delete todo.finalThoughts;
+                        else
+                            todo.finalThoughts = thoughts;
+                        changed = true;
+                    }
+                }
+                else if (transitioned && todo.finalThoughts !== undefined) {
+                    // Do not carry a stale active or blocked thought into the new state.
+                    delete todo.finalThoughts;
+                    changed = true;
                 }
                 if (transitioned) {
                     todo.status = status;

@@ -29,6 +29,9 @@ const SECTION_KEY = "first_mate";
 const STATUS_KEY = "firstmate";
 const ASK_GUARD_RELEASED_EVENT = "pi-ask:guard:released";
 const ASK_GUARD_PROBE_EVENT = "pi-ask:guard:probe";
+const MODE_PROBE_EVENT = "pi-firstmate:mode:probe";
+const MODE_CHANGED_EVENT = "pi-firstmate:mode:changed";
+const SCHEDULER_TOOLS_CHANGED_EVENT = "pi-schedulers:tools:changed";
 const POLICY_DISPLAY_PATH = "skills/firstmate/SKILL.md";
 const POLICY_URL = new URL("../skills/firstmate/SKILL.md", import.meta.url);
 const BANNER_ASSETS = new URL("../herdr/firstmate-banner/", import.meta.url);
@@ -119,6 +122,33 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 	let skillWarningKey: string | null = null;
 	// Cached for the synchronous Ask release hook, which receives no context.
 	let sessionCtx: ExtensionContext | undefined;
+	let schedulerMode = false;
+	let modeGeneration = 0;
+	let publishedGeneration = -1;
+
+	// This synchronous query mirrors the existing effective-mode authority,
+	// including its explicit-on handling and verified-worker suppression.
+	function coordinatorMode(): { effective: boolean; generation: number } {
+		const mode = resolveMode();
+		const effective = sessionCtx !== undefined && mode.effective;
+		if (effective !== schedulerMode) {
+			schedulerMode = effective;
+			modeGeneration += 1;
+		}
+		return { effective, generation: modeGeneration };
+	}
+
+	function publishCoordinatorMode(): void {
+		const mode = coordinatorMode();
+		if (publishedGeneration === mode.generation) return;
+		publishedGeneration = mode.generation;
+		pi.events.emit(MODE_CHANGED_EVENT, undefined);
+	}
+
+	pi.events.on(MODE_PROBE_EVENT, (request: unknown) => {
+		if (!isRecord(request)) return;
+		Object.assign(request, { available: true, protocolVersion: 1, ...coordinatorMode() });
+	});
 
 	function refreshConfig(): void {
 		const settings: unknown = pi.getSettings();
@@ -189,7 +219,8 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 		}
 
 		override = restored;
-		savedActiveTools = restoredTools;
+		const coordinatorOnly = toolGate.coordinatorOnlyNames();
+		savedActiveTools = restoredTools?.filter((name) => !coordinatorOnly.has(name)) ?? null;
 		savedBaselineKey = toolSetKey(restoredTools);
 		// A persisted First Mate prompt section is direct evidence that earlier
 		// coordinator guidance exists in this session, including after reload.
@@ -271,15 +302,32 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 	}
 
 	function syncToolGate(ctx: ExtensionContext | ExtensionCommandContext): void {
+		publishCoordinatorMode();
+		const coordinatorOnly = toolGate.coordinatorOnlyNames();
+		const ordinaryTools = (tools: string[]): string[] => tools.filter((name) => !coordinatorOnly.has(name));
+		if (savedActiveTools !== null) savedActiveTools = ordinaryTools(savedActiveTools);
+		if (!coordinatorMode().effective || askGuardActive()) {
+			const active = pi.getActiveTools();
+			const kept = ordinaryTools(active);
+			if (kept.length !== active.length) pi.setActiveTools(kept);
+		}
 		if (resolveMode().effective) {
 			offRequestPrepared = false;
 			const active = pi.getActiveTools();
 			// Record everything that is actually active before hiding it. This
 			// includes direct tools registered and auto-activated during the run,
 			// without adding tools that were never active.
-			savedActiveTools = savedActiveTools === null ? active : [...new Set([...savedActiveTools, ...active])];
+			savedActiveTools = ordinaryTools(savedActiveTools === null ? active : [...new Set([...savedActiveTools, ...active])]);
 			saveToolBaseline(ctx, savedActiveTools);
 			toolGate.hide();
+			// Never widen ASK's read-only set. Only the owning scheduler can make
+			// its registration declarable; do not guess a foreign tool name.
+			if (coordinatorMode().effective && !askGuardActive()) {
+				const available = pi.getAllTools().filter((tool) => coordinatorOnly.has(tool.name) && tool.exposure === "model-only");
+				const current = pi.getActiveTools();
+				const missing = available.filter((tool) => !current.includes(tool.name));
+				if (missing.length > 0) pi.setActiveTools([...current, ...missing.map((tool) => tool.name)]);
+			}
 			return;
 		}
 		if (savedActiveTools === null) return;
@@ -695,9 +743,12 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
+		sessionCtx = undefined;
+		publishCoordinatorMode();
+		const coordinatorOnly = toolGate.coordinatorOnlyNames();
 		if (savedActiveTools !== null) {
 			try {
-				pi.setActiveTools([...new Set([...savedActiveTools, ...pi.getActiveTools()])]);
+				pi.setActiveTools([...new Set([...savedActiveTools, ...pi.getActiveTools()])].filter((name) => !coordinatorOnly.has(name)));
 			} catch {
 				// Shutdown cleanup is best-effort.
 			}
@@ -717,6 +768,10 @@ export default function firstMateExtension(pi: ExtensionAPI): void {
 		}
 		banner = undefined;
 		ctx.ui.setStatus(STATUS_KEY, undefined);
+	});
+
+	pi.events.on(SCHEDULER_TOOLS_CHANGED_EVENT, () => {
+		if (sessionCtx) syncToolGate(sessionCtx);
 	});
 
 	// Ask publishes this event synchronously after restoring the tool list it

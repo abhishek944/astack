@@ -1,5 +1,6 @@
 import { formatCompletion, taskCompletion, workCompletion } from "./progress.js";
 import { safeMultiline, safeSingleLine } from "./text.js";
+import { finalThoughtsFor } from "./thoughts.js";
 import { formatTime, taskTime, workTime } from "./time.js";
 import type { WorkWithTodos } from "./types.js";
 
@@ -30,11 +31,12 @@ export function formatWorksMarkdown(works: WorkWithTodos[]): string {
         `#### ${todo.taskId} — ${escapeMarkdownInline(safeSingleLine(todo.taskName))}`,
         "",
         `**Status:** ${todo.status}`,
-        ...(todo.status === "blocked" ? ["", "**Blocked reason:**", "", markdownBody(todo.blockedReason ?? "No reason recorded."), ""] : []),
         `**Completion:** ${formatCompletion(taskCompletion(todo))}`,
         `**Time:** ${formatTime(taskTime(todo))}${todo.workingSince === undefined ? "" : " (running)"}`,
         "",
-        markdownBody(todo.taskInfo),
+        "**Final thoughts:**",
+        "",
+        markdownBody(finalThoughtsFor(todo) ?? "No final thoughts recorded."),
         "",
       );
     }

@@ -91,6 +91,35 @@ function sniffFtypBrand(bytes: Uint8Array): string | undefined {
   return FTYP_BRAND_MIME[brand];
 }
 
+/**
+ * Output-side MIME detection. Provider output may be an SVG document (UTF-8
+ * XML), which has no binary magic. Reference, mask and markup inputs keep using
+ * `sniffMime`, because an SVG is not a supported raster edit input.
+ */
+export function sniffOutputMime(bytes: Uint8Array): string | undefined {
+  return sniffMime(bytes) ?? (looksLikeSvgDocument(bytes) ? 'image/svg+xml' : undefined);
+}
+
+const SVG_HEAD_BYTES = 1024;
+
+function looksLikeSvgDocument(bytes: Uint8Array): boolean {
+  if (!bytes.length) return false;
+  let head: string;
+  try {
+    head = new TextDecoder('utf-8', { fatal: false }).decode(bytes.subarray(0, SVG_HEAD_BYTES));
+  } catch {
+    return false;
+  }
+  const text = head.replace(/^\uFEFF/, '').trimStart();
+  if (!text.startsWith('<')) return false;
+  if (/^<svg[\s>]/i.test(text)) return true;
+  // The API returns XML. A prolog or leading comment plus an <svg> root confirms
+  // it; a truncated prolog with no root element yet is still SVG output.
+  if (/^<\?xml/i.test(text)) return /<svg[\s>]/i.test(text) || !text.includes('?>');
+  if (text.startsWith('<!--')) return /<svg[\s>]/i.test(text);
+  return false;
+}
+
 export function assertReferenceImageAggregateBytes(
   totalBytes: number,
   ceiling = MAX_TOTAL_REFERENCE_IMAGE_BYTES,

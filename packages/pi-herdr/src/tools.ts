@@ -164,7 +164,7 @@ export function registerAgentTools(pi: ExtensionAPI): void {
     renderCall: renderTaskCall("AgentClose"), renderResult: renderTaskResult,
   });
   pi.registerTool({
-    name: "AgentFocus", label: "AgentFocus", description: "Bring an app-presented Core agent's visible tab forward through herdr-app. Also powers underlined delegate badge links. Requires a running Herdr app: when none is available the result reports focused:false and the terminal keeps running.",
+    name: "AgentFocus", label: "AgentFocus", description: "Show an existing Core agent through herdr-app. A pane owner or another machine's terminal gets normal focus; a pane-less sub-agent opens its own screen overlay over the current tab without navigating to its parent. Also powers underlined delegate badge links. Requires a running Herdr app: when none is available or the terminal cannot be shown, the result reports focused:false with the reason and the terminal keeps running.",
     parameters: Target, ...output, ...mutation,
     async execute(_id, params, signal, _update, ctx) { requireMainWork(pi); return result("AgentFocus", { terminalId: params.terminalId, ...(await focusTerminal(params.terminalId, ctx.cwd, signal)) }); },
     renderCall: renderTaskCall("AgentFocus"), renderResult: renderTaskResult,

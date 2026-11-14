@@ -56,6 +56,7 @@ export function validateSnapshot(value: unknown, sessionId: string): asserts val
   for (const todo of value.todos) {
     if (!object(todo) || !id(todo.taskId, "T") || todos.has(todo.taskId) || !text(todo.workId) || !works.has(todo.workId)
       || !text(todo.taskName) || !text(todo.taskInfo) || !integer(todo.createdAt) || !integer(todo.updatedAt)
+      || (todo.finalThoughts !== undefined && !text(todo.finalThoughts))
       || !["active", "blocked", "completed", "cancelled"].includes(String(todo.status))
       || Number(todo.taskId.slice(1)) >= value.nextTaskId
       || (todo.blockedReason !== undefined && todo.blockedReason !== null && !text(todo.blockedReason))

@@ -16,7 +16,10 @@ export interface Todo {
     taskId: string;
     workId: string;
     taskName: string;
+    /** Hidden coordination metadata: owner declaration, artifact paths, parent IDs, identifiers. Never shown as task text. */
     taskInfo: string;
+    /** The only visible task text. Concise status update, not a goal or narrative. */
+    finalThoughts?: string;
     status: TodoStatus;
     /** Current obstacle and resume condition; cleared when leaving blocked. */
     blockedReason?: string | null;
@@ -58,7 +61,7 @@ export type TaskEvent = {
     type: "todo-updated";
     at: number;
     taskId: string;
-    patch: Partial<Pick<Todo, "taskName" | "taskInfo" | "status" | "blockedReason" | "completionPercent">>;
+    patch: Partial<Pick<Todo, "taskName" | "taskInfo" | "finalThoughts" | "status" | "blockedReason" | "completionPercent">>;
 } | {
     version: 1;
     type: "todo-time";

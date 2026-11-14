@@ -1,5 +1,5 @@
 import { taskOwner } from "../ownership.js";
-import { app, TERMINAL_ID } from "./herdr.js";
+import { app, hc, object, TERMINAL_ID } from "./herdr.js";
 
 export interface DelegateLink { terminalId: string }
 
@@ -12,7 +12,30 @@ export function delegateLink(taskInfo: string): DelegateLink | undefined {
 
 export async function focusTerminal(terminalId: string, cwd: string, signal?: AbortSignal): Promise<void> {
   if (!TERMINAL_ID.test(terminalId)) throw new Error("Use the terminalId returned by hc.");
-  await app(["do", "agent.focus", JSON.stringify({ terminal: terminalId })], cwd, signal);
+  const presentation = await presentationRoute(terminalId, cwd, signal);
+  await app(["do", presentation === "peek" ? "terminal.peek" : "agent.focus", JSON.stringify({ terminal: terminalId })], cwd, signal);
+}
+
+/** The same small routing contract as pi-herdr's AgentFocus and the native panel. */
+async function presentationRoute(terminalId: string, cwd: string, signal?: AbortSignal): Promise<"focus" | "peek"> {
+  if (terminalId.includes("/")) return "focus";
+  const inventory = await app(["ls"], cwd, signal);
+  let listedChild = false;
+  for (const rawSpace of Array.isArray(inventory.spaces) ? inventory.spaces : []) {
+    const space = object(rawSpace);
+    for (const rawTab of Array.isArray(space?.tabs) ? space.tabs : []) {
+      const tab = object(rawTab);
+      for (const rawTerminal of Array.isArray(tab?.terminals) ? tab.terminals : []) {
+        const terminal = object(rawTerminal);
+        if (terminal?.terminal === terminalId) return "focus";
+        if (Array.isArray(terminal?.sub_agents) && terminal.sub_agents.includes(terminalId)) listedChild = true;
+      }
+    }
+  }
+  if (listedChild) return "peek";
+  const record = await hc(["get", terminalId], cwd, signal);
+  if (typeof record.parent === "string" && record.parent.trim()) return "peek";
+  throw new Error("Herdr is not showing this agent. Open its space, then retry.");
 }
 
 export function preservePaneLink(current: string, next: string): string {

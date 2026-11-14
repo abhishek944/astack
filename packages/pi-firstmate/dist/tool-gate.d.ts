@@ -14,9 +14,11 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 /** Installed packages whose tools stay available to a coordinator. */
 export declare const APPROVED_PACKAGES: Set<string>;
-export declare const COORDINATOR_TOOLS_DESCRIPTION = "read, grep, find, ls and installed pi-tasks, pi-loop-monitor, pi-decisions and pi-herdr tools";
+export declare const COORDINATOR_TOOLS_DESCRIPTION = "read, grep, find, ls and installed pi-tasks, pi-loop-monitor, pi-decisions, pi-herdr and coordinator-only pi-schedulers tools";
 type ToolHost = Pick<ExtensionAPI, "getActiveTools" | "getAllTools" | "setActiveTools">;
 export interface ToolGate {
+    /** Actual installed registrations that must never enter the ordinary-tool baseline. */
+    coordinatorOnlyNames(): Set<string>;
     /** Whether coordinator mode may call this tool. */
     permits(toolName: string): boolean;
     /** Hide every active tool outside the allowlist and return the hidden names. */

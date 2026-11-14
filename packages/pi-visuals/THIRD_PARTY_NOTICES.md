@@ -5,12 +5,12 @@ This package's original packaging and documentation use the root [MIT License](L
 ## Archify
 
 - Covered files: `skills/archify/`
-- Upstream: [tt-a1i/archify](https://github.com/tt-a1i/archify), v3.0.1 at `2ab3cae7ac2c2a55d7386ca789d03c4fcd31816c`
+- Upstream: [tt-a1i/archify](https://github.com/tt-a1i/archify), v3.2.0 at `208acba8d412335185b2056fedf54b3405df43fb`
 - License: MIT for Archify code and content
 - Copyright: Copyright (c) 2026 tt-a1i (Archify); Copyright (c) 2025 Cocoon AI
 - Required text: [`skills/archify/LICENSE`](skills/archify/LICENSE)
 - Complete release runtime retained without modifications; skill instructions adapted for Pi. See [`skills/archify/PROVENANCE.md`](skills/archify/PROVENANCE.md) for the archive checksum and local adaptations.
-- Bundled brand marks retain their own copyright, license, and trademark terms; see [`skills/archify/THIRD_PARTY_NOTICES.md`](skills/archify/THIRD_PARTY_NOTICES.md). JetBrains Mono uses the [bundled SIL Open Font License](skills/archify/assets/JetBrainsMono-OFL.txt).
+- Bundled brand marks retain their own copyright, license, and trademark terms; see [`skills/archify/THIRD_PARTY_NOTICES.md`](skills/archify/THIRD_PARTY_NOTICES.md). JetBrains Mono uses the [bundled SIL Open Font License](skills/archify/assets/JetBrainsMono-OFL.txt). The explainer's vendored Pele chart subset and its MIT license are described in the same notices and stored at [`skills/archify/explainer/vendor/pele/`](skills/archify/explainer/vendor/pele/LICENSE).
 
 ## visual-explainer
 

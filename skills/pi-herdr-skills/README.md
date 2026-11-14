@@ -26,6 +26,20 @@ The installer copies this repository's skills into the shared global `~/.agents/
 
 Use `./scripts/install.sh --skip-conflicts` when some managed skills are locally modified but you still want missing/non-conflicting managed skills installed. It leaves every conflicting directory untouched, installs only missing or already-compatible skills, and reports the preserved conflicts. The default still refuses to overwrite conflicts; `--force` remains the only replacement route, and `--force`/`--skip-conflicts` are mutually exclusive.
 
+The two broad browser skills are one selection, never two defaults. `./scripts/install.sh` resolves the selection from `--browser`, then `$ASTACK_BROWSER`, then the recorded `$ASTACK_HOME/env.sh`, then `browser-use`. A fresh no-argument install therefore never adds `aside-browser` alongside `browser-use`, and an Aside host's recorded choice is reused. Pass `--browser aside` to select it directly, or `--browser none` for no browser skill:
+
+```bash
+./scripts/install.sh --browser aside
+./scripts/install.sh --browser browser-use
+./scripts/install.sh --browser none
+```
+
+`--without NAME` remains the generic explicit exclusion for any managed skill: the name is never installed, never reported as a conflict, and never removed implicitly. For example, `--without browser-use` excludes that skill even though it is the default selection.
+
+`scripts/check-repo.sh` verifies exactly one declared selection, so a deliberate omission is still checked instead of silently skipped. It reads `--browser aside|browser-use|none`, then `$ASTACK_BROWSER`, then the `ASTACK_BROWSER` line in `$ASTACK_HOME/env.sh`, then the `browser-use` default. With `aside` it verifies the managed `aside-browser` skill and requires `browser-use` to be absent. With `browser-use` it verifies `browser-use` and leaves an installed `aside-browser` untouched. With `none` it does not verify browser skills at all.
+
+Astack's own `bash scripts/setup.sh --browser ...` selects the same way and records the choice in `env.sh`.
+
 Restart Pi, or run `/reload` in an existing Pi session. See the official [skills documentation](https://pi.dev/docs/latest/skills) for Pi's discovery rules.
 
 ### Update or remove
@@ -63,14 +77,16 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 
 | Skill | Purpose |
 | --- | --- |
-| `browser-use` | Automates browser navigation, forms, screenshots, testing, and extraction. |
+| `aside-browser` | Bundles the vendor Aside entry point as a managed skill, selected with `--browser aside`. The file directs the agent to run `aside guide` for the live vendor instructions. |
+| `browser-use` | Automates browser navigation, forms, screenshots, testing, and extraction. Selection-scoped: an Aside host installs the bundled `aside-browser` skill instead. |
 | `commit-and-merge` | Commits real changes and merges into the default branch when explicitly requested. |
 | `computer-use` | Operates desktop apps through local Cua Driver MCP with grounded input, screenshot forwarding, and verified outcomes. |
 | `implement` | Coordinates every tracked Work with session/Work/Task artifact paths, self-versus-delegate decisions, checks, and proportionate review while preserving specialized scope. |
 | `retro` | Reviews a coding session for ways to improve the agent's working environment; invoke explicitly with `/skill:retro`. |
 | `talk-human` | Writes clear, friendly, concise replies with plain language and exact technical detail. |
+| `typescript-best-practices` | Applies type-system rules to TypeScript work: discriminated unions, branded types, boundary validation, exhaustive variants, and schema-derived types. |
 
-These six skills are the complete set this installer owns. Some of them depend on other installed skills by name. Install the complete set rather than copying only `implement`.
+These eight skills are the complete set this installer owns. Exactly one of the two browser skills is selected per host, so the default install is seven skills; every non-browser skill is always installed. Some of them depend on other installed skills by name. Install the complete set rather than copying only `implement`, unless a host deliberately selects another browser backend with `--browser aside` or `--browser none`.
 
 ### Package-owned skills
 

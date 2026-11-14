@@ -4,7 +4,7 @@ Two skill-only Pi workflows for diagrams and visual explanations:
 
 | Skill | Purpose |
 | --- | --- |
-| `archify` | Renders and validates interactive architecture, workflow, sequence, data-flow, and state diagrams as standalone HTML with inline SVG, dark/light themes and PNG/JPEG/WebP/SVG/WebM export. |
+| `archify` | Renders and validates interactive architecture, workflow, sequence, data-flow, lifecycle, ERD, class, tree, timeline, and waterfall diagrams, plus conclusion-first one-page explainers, as standalone HTML with inline SVG, dark/light themes, motion and PNG/JPEG/WebP/SVG/WebM export. |
 | `visual-explainer` | Produces a self-contained HTML page that visually explains a system, change, plan, comparison, or structured data. |
 
 This package contains only skill instructions and their bundled runtime, references, schemas,
@@ -50,7 +50,7 @@ the duplicate name.
 
 ## Update the bundled Archify runtime
 
-The complete pinned [Archify v3.0.1](https://github.com/tt-a1i/archify/releases/tag/v3.0.1)
+The complete pinned [Archify v3.2.0](https://github.com/tt-a1i/archify/releases/tag/v3.2.0)
 runtime is bundled under `skills/archify/`; no npm install or separate skill-manager install is
 needed. Update through a reviewed release archive, reapply the documented instruction
 adaptations, and verify the runtime and packaged files. Do not install a second copy through

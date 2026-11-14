@@ -26,7 +26,7 @@ Requirements: a modern Pi host supporting nested tool calls, active Work/Todo to
 | `AgentSend` | Send a prompt without force or waiting. |
 | `AgentInterrupt` | Send Escape without closing the terminal. |
 | `AgentClose` | Stop its monitor, kill the owned live terminal, remove its record and clear matching task links. |
-| `AgentFocus` | Bring an app-presented worker's visible Herdr app tab forward; reports `focused: false` when no app is available. |
+| `AgentFocus` | Show an existing Core agent through the Herdr app. A terminal that owns a pane, or another machine's terminal, gets normal `agent.focus`; a pane-less sub-agent opens its own `terminal.peek` screen overlay over the current tab without navigating to its parent. This assumes `hc` and the running app target the same Core; it does not perform Pet Town's `verified_world` cross-Core anchor. Reports `focused: false` with a reason when no app is available or the agent cannot be shown. |
 
 For an existing `owner: delegate` task, `AgentCreate` derives and creates the canonical task directory. Root sessions omit `parentTaskDir`; a delegated worker passes the exact `parentTaskDir` from its assignment:
 

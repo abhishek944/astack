@@ -14,7 +14,7 @@ import type { ImageProviderAdapter, ImageProviderRuntime, ResolvedProvider } fro
 export type ImageArgs = Omit<GenerateImageParams, 'outputDir' | 'resize'>;
 
 /** Freezable per-response defaults used only for controls the model omitted. */
-export type ImageDefaults = Omit<ImageArgs, 'prompt' | 'image' | 'mask' | 'filename'>;
+export type ImageDefaults = Omit<ImageArgs, 'prompt' | 'image' | 'mask' | 'markup' | 'filename'>;
 
 export type ControlSource = 'explicit' | 'response-default';
 export type ControlSources = Partial<Record<keyof ImageArgs, ControlSource>>;
@@ -24,7 +24,7 @@ export type Phase = 'loading-inputs' | 'waiting-provider' | 'saving-output';
 /** One ordered original reference: full URL identifier plus its request role. */
 export type OriginalReference = {
   readonly url: string;
-  readonly role: 'image' | 'mask';
+  readonly role: 'image' | 'mask' | 'markup';
   readonly index: number;
 };
 
@@ -184,8 +184,8 @@ export interface ImageHost<Stored> {
   readonly cloudflareRun?: CloudflareRun;
   /** Optional adapter override (desktop Codex etc.). */
   readonly adapter?: ImageProviderAdapter;
-  /** Provider runtime extras such as the Pi model registry; mask is core-owned. */
-  readonly providerRuntime?: Omit<ImageProviderRuntime, 'mask'>;
+  /** Provider runtime extras such as the Pi model registry; mask and markup are core-owned. */
+  readonly providerRuntime?: Omit<ImageProviderRuntime, 'mask' | 'markup'>;
   loadOriginal(reference: OriginalReference, signal?: AbortSignal): Promise<Original>;
   loadOutput(providerUrl: string, signal?: AbortSignal): Promise<Original>;
   store(output: Original, index: number, context: ImageStoreContext): Promise<Stored>;

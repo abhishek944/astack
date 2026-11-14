@@ -1,5 +1,6 @@
 import { formatCompletion, taskCompletion, workCompletion } from "./progress.js";
 import { safeMultiline, safeSingleLine } from "./text.js";
+import { finalThoughtsFor } from "./thoughts.js";
 import { formatTime, taskTime, workTime } from "./time.js";
 export function formatWorksMarkdown(works) {
     const lines = ["# Works and Todos", ""];
@@ -12,7 +13,7 @@ export function formatWorksMarkdown(works) {
             continue;
         }
         for (const todo of work.tasks) {
-            lines.push(`#### ${todo.taskId} — ${escapeMarkdownInline(safeSingleLine(todo.taskName))}`, "", `**Status:** ${todo.status}`, ...(todo.status === "blocked" ? ["", "**Blocked reason:**", "", markdownBody(todo.blockedReason ?? "No reason recorded."), ""] : []), `**Completion:** ${formatCompletion(taskCompletion(todo))}`, `**Time:** ${formatTime(taskTime(todo))}${todo.workingSince === undefined ? "" : " (running)"}`, "", markdownBody(todo.taskInfo), "");
+            lines.push(`#### ${todo.taskId} — ${escapeMarkdownInline(safeSingleLine(todo.taskName))}`, "", `**Status:** ${todo.status}`, `**Completion:** ${formatCompletion(taskCompletion(todo))}`, `**Time:** ${formatTime(taskTime(todo))}${todo.workingSince === undefined ? "" : " (running)"}`, "", "**Final thoughts:**", "", markdownBody(finalThoughtsFor(todo) ?? "No final thoughts recorded."), "");
         }
     }
     return `${lines.join("\n").trimEnd()}\n`;

@@ -10,7 +10,11 @@ import {
   capabilitySizeDescription,
   genericCapabilitiesForApi,
   hasAspectRatioKnob,
+  MAX_GIF_FRAMES,
+  MIN_GIF_FRAMES,
+  MIN_GIF_FRAME_DURATION_MS,
   referenceImageDescription,
+  SVG_REASONING_EFFORTS,
 } from './capabilities.js';
 import {
   canonicalProviderRouteId,
@@ -128,9 +132,9 @@ export default function piImageGenExtension(pi: ExtensionAPI): void {
       name: 'image_generate',
       label: 'ImageGen',
       description:
-        'Generate or edit images. The primary route is configured in pi-image-gen.default (legacy defaultProvider/defaultModel also work), with optional ordered fallback routes for safely classified failures. This tool does not accept provider or model parameters; use image_compare only for explicit comparisons. Pass `image` to do image-to-image / edit / style transfer / character preservation: a regular image file inside the session cwd (absolute or relative) or a public http(s) URL. To iterate on a previous result, pass its file path back when it is inside cwd. Do NOT pass base64 or data: URIs — write bytes to a file under cwd first. Saves the output to disk and returns the absolute path(s) with bounded inline image previews when available. Use saved originals, not preview copies, for edits or exact pixel inspection. When reporting the result to the user, render each generated image as inline markdown — copy the `![alt](…)` line(s) from the tool result verbatim so the UI can display it; do not just paste the bare path. Run /image-gen list to see the active model.',
+        'Generate or edit images. The primary route is configured in pi-image-gen.default (legacy defaultProvider/defaultModel also work), with optional ordered fallback routes for safely classified failures. This tool does not accept provider or model parameters; use image_compare only for explicit comparisons. Pass `image` to do image-to-image / edit / style transfer / character preservation: a regular image file inside the session cwd (absolute or relative) or a public http(s) URL. To iterate on a previous result, pass its file path back when it is inside cwd. Do NOT pass base64 or data: URIs — write bytes to a file under cwd first. Saves the output to disk and returns the absolute path(s) with bounded inline image previews when available. Use saved originals, not preview copies, for edits or exact pixel inspection. When reporting the result to the user, copy the output lines from the tool result verbatim: raster and GIF lines are inline image Markdown, while SVG lines are ordinary file links and must stay links (never convert them into image embeds). Do not just paste the bare path. Run /image-gen list to see the active model.',
       promptSnippet:
-        'Generate or edit raster images, including icons, logos, and diagrams when requested. Prefer repo-native SVG/CSS/canvas when editability or exact integration with existing assets matters.',
+        'Generate or edit images, including raster photos and graphics, native GIF animation, and editable SVG where the active model supports them. Prefer repo-native SVG/CSS/canvas when editability or exact integration with existing assets matters.',
       promptGuidelines: buildImageGuidelines(caps),
       parameters: buildImageToolParameters(caps) as never,
       async execute(_toolCallId: string, rawParams: unknown, signal, onUpdate, ctx) {
@@ -181,7 +185,7 @@ export default function piImageGenExtension(pi: ExtensionAPI): void {
     pi.registerTool({
       name: 'image_compare',
       label: 'ImageCompare',
-      description: 'Compare images only when the user explicitly requests a model comparison. Generates independently with every provider/model pair in pi-image-gen.compare, using each model\'s native defaults and the same prompt/references. Each entry may consume quota or API charges. Never changes the default, uses fallback, or accepts arbitrary models/providers. Returns labeled successes/failures, saved originals, Markdown links and bounded previews. Copy image Markdown lines verbatim when presenting results.',
+      description: 'Compare images only when the user explicitly requests a model comparison. Generates independently with every provider/model pair in pi-image-gen.compare, using each model\'s native defaults and the same prompt/references. Each entry may consume quota or API charges. Never changes the default, uses fallback, or accepts arbitrary models/providers. Returns labeled successes/failures, saved originals, Markdown links and bounded previews. Copy the returned lines verbatim when presenting results; SVG results are file links, not image embeds.',
       promptSnippet: 'Explicitly compare the configured image models; each route is a separate generation request.',
       promptGuidelines: ['Use image_generate for ordinary generation. Use image_compare only for an explicit request to compare models; do not invoke it for a routine image request. Do not automatically rerun failed comparison entries.'],
       parameters: Type.Object({
@@ -953,13 +957,46 @@ export function buildImageToolParameters(caps: ImageToolCapabilities): TObject {
         }
       : {}),
     ...(model?.outputFormats?.length
-      ? { outputFormat: Type.Optional(StringEnum(model.outputFormats, { description: 'Output image encoding.' })) }
+      ? { outputFormat: Type.Optional(StringEnum(model.outputFormats, { description: 'Output image encoding. gif and svg are generation-only.' })) }
       : {}),
     ...(model?.backgroundValues?.length
       ? { background: Type.Optional(StringEnum(model.backgroundValues, { description: 'Background behavior. Transparent output requires a format that preserves alpha.' })) }
       : {}),
     ...(model?.supportsOutputCompression
-      ? { outputCompression: Type.Optional(Type.Integer({ minimum: 0, maximum: 100, description: 'JPEG/WebP compression level from 0 to 100.' })) }
+      ? { outputCompression: Type.Optional(Type.Integer({ minimum: 0, maximum: 100, description: 'JPEG/WebP compression level from 0 to 100. GIF and SVG output do not accept compression.' })) }
+      : {}),
+    ...(model?.complexityValues?.length
+      ? {
+          complexity: Type.Optional(StringEnum(model.complexityValues, {
+            description: `Planning effort, independent of quality. Allowed values: ${model.complexityValues.join(', ')}. For SVG output it controls the reference image, not the SVG author.`,
+          })),
+        }
+      : {}),
+    ...(model?.outputFormats?.includes('gif')
+      ? {
+          frameCount: Type.Optional(Type.Integer({
+            minimum: MIN_GIF_FRAMES,
+            maximum: MAX_GIF_FRAMES,
+            description: `GIF frame count (${MIN_GIF_FRAMES}-${MAX_GIF_FRAMES}; default 9). Requires outputFormat gif and a generation request.`,
+          })),
+          frameDurationMs: Type.Optional(Type.Integer({
+            minimum: MIN_GIF_FRAME_DURATION_MS,
+            description: 'Per-frame GIF delay in milliseconds (default 200). The API rounds to the nearest 10 ms and caps the encoded delay. Requires outputFormat gif.',
+          })),
+        }
+      : {}),
+    ...(model?.outputFormats?.includes('svg')
+      ? {
+          svgModel: Type.Optional(Type.String({
+            description: 'Model that authors the SVG. Supply it when the account enables SVG model selection; omit it (and the effort) otherwise. The top-level model still renders the reference image.',
+          })),
+          svgReasoningEffort: Type.Optional(StringEnum(SVG_REASONING_EFFORTS, {
+            description: 'SVG author reasoning effort, independent of image complexity. Requires svgModel and outputFormat svg.',
+          })),
+        }
+      : {}),
+    ...(model?.supportsMarkup
+      ? { markup: Type.Optional(Type.String({ description: 'Transparent annotation PNG over the first input image for markup-guided edits. Requires an edit target and cannot be combined with mask.' })) }
       : {}),
     ...(model?.supportsMask
       ? { mask: Type.Optional(Type.String({ description: 'Mask image path or public URL for precise editing. Requires at least one image edit target; transparent mask regions are replaced.' })) }
@@ -1029,6 +1066,26 @@ export function buildImageGuidelines(caps: ImageToolCapabilities): string[] {
   guidelines.push(
     'The default route is fixed in settings; there is no model/provider parameter. Configured fallback routes are used only after safely classified rejections. For an explicit model comparison use image_compare, never call image_generate repeatedly expecting it to select different models. Use /image-gen list to inspect default, fallback and compare routes.',
   );
+  if (caps.model?.outputFormats?.includes('gif')) {
+    guidelines.push(
+      'Native `outputFormat: "gif"` is a generation-only provider feature: describe the subject, motion and desired loop, use `frameCount`/`frameDurationMs` only with gif, and do not combine it with reference images, masks, or compression. GIF access is provider-gated and its frames share the saved-output byte ceiling.',
+    );
+  }
+  if (caps.model?.outputFormats?.includes('svg')) {
+    guidelines.push(
+      'Native `outputFormat: "svg"` is a generation-only editable vector: set n to 1, do not combine it with reference images, masks, compression, or SVG edits, and pass `svgModel`/`svgReasoningEffort` only when the account enables SVG model selection. SVG is not an accepted edit input, and saved SVGs are not rasterized for inline preview. Copy an SVG result as the file link in the tool result; never turn it into an image embed.',
+    );
+  }
+  if (caps.model?.supportsMarkup) {
+    guidelines.push(
+      'For markup-guided edits, keep the original as the first `image` and pass a transparent annotation PNG as `markup`; describe what to change and what to preserve. Markup applies to the first image, cannot be combined with `mask`, and needs the same dimensions as that image after orientation.',
+    );
+  }
+  if (caps.model?.complexityValues?.length) {
+    guidelines.push(
+      '`complexity` controls how much the model plans before rendering, independently of `quality`; use low for focused edits and medium/high for dense text or complex layouts.',
+    );
+  }
   return guidelines;
 }
 
@@ -1056,13 +1113,22 @@ export function formatComparisonText(report: ImageCompareResult): string {
 }
 
 export function formatToolResultText(result: ImageGenResult): string {
+  const hasVectorOutput = result.images.some((img) => img.mimeType === 'image/svg+xml');
+  const instruction = hasVectorOutput
+    ? 'Copy the lines below verbatim into your reply. Raster and GIF lines are inline image Markdown; SVG lines are ordinary file links — keep them as links and never convert them into image embeds:'
+    : 'Show each one to the user as inline markdown — copy the lines below verbatim into your reply:';
   const lines: string[] = [
-    `Generated ${result.images.length} image(s) via ${result.provider} (${result.model}). Show each one to the user as inline markdown — copy the lines below verbatim into your reply:`,
+    `Generated ${result.images.length} image(s) via ${result.provider} (${result.model}). ${instruction}`,
     '',
     ...result.images.flatMap((img) => {
       const alt = altFromPath(img.path);
-      const md = `![${alt}](${markdownImageUrl(img.path)})`;
-      const dimensions = img.dimensions ? ` (${img.dimensions.width}×${img.dimensions.height})` : '';
+      const isSvg = img.mimeType === 'image/svg+xml';
+      // SVG is a saved vector original: link it instead of embedding it. Raster and GIF
+      // keep the inline image Markdown the UI already renders.
+      const md = isSvg
+        ? `[${alt}](${markdownImageUrl(img.path)}) (SVG file; keep this as a link)`
+        : `![${alt}](${markdownImageUrl(img.path)})`;
+      const dimensions = !isSvg && img.dimensions ? ` (${img.dimensions.width}×${img.dimensions.height})` : '';
       return [ `${md}${dimensions}`,
         ...(img.originalPath ? [`Original: ${img.originalPath}`] : []),
         ...(img.resizeError ? [`Resize failed; showing saved original: ${img.resizeError}`] : []),

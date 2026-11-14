@@ -10,7 +10,7 @@ import type { GenerateImageOptions } from './options.js';
 
 const MIME_TO_EXT: Record<string, string> = {
   'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp',
-  'image/gif': 'gif', 'image/bmp': 'bmp', 'image/tiff': 'tiff', 'image/heic': 'heic', 'image/heif': 'heif',
+  'image/gif': 'gif', 'image/svg+xml': 'svg', 'image/bmp': 'bmp', 'image/tiff': 'tiff', 'image/heic': 'heic', 'image/heif': 'heif',
 };
 
 export function desktopSink(params: GenerateImageParams, options: GenerateImageOptions, model: string) {
@@ -52,6 +52,11 @@ export function desktopSink(params: GenerateImageParams, options: GenerateImageO
       const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
       const resizedImages: GeneratedImage[] = [];
       for (const [index, image] of images.entries()) {
+        if (image.mimeType === 'image/gif' || image.mimeType === 'image/svg+xml') {
+          resizedImages.push({ ...image, resizeError:
+            'Animated GIF and SVG output cannot be locally resized; the original is preserved.' });
+          continue;
+        }
         try {
           signal.throwIfAborted();
           const resized = await resizeRaster(resizeInputs[index]!, params.resize);

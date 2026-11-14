@@ -60,8 +60,13 @@ function blocks(value: unknown): Record<string, unknown>[] {
   return [...(node.type === "block" ? [node] : []), ...(Array.isArray(node.children) ? node.children.flatMap(blocks) : [])];
 }
 
+export interface HerdrTasksPaneOptions {
+  /** Close this terminal's Tasks pane from an earlier session before opening the current one. */
+  replaceStale?: boolean;
+}
+
 /** Show beside this terminal, or hide only its same-session Tasks mod panes. */
-export async function setHerdrTasksPaneVisible(ctx: ExtensionContext, visible: boolean, snapshot: string, openCommand: string[] = ["cursor"]): Promise<void> {
+export async function setHerdrTasksPaneVisible(ctx: ExtensionContext, visible: boolean, snapshot: string, openCommand: string[] = ["cursor"], options: HerdrTasksPaneOptions = {}): Promise<void> {
   if (visible && (typeof snapshot !== "string" || !isAbsolute(snapshot))) {
     throw new Error("This Pi instance has no session task snapshot binding. Restart Pi, resume this session, then run /works herdr-on again.");
   }
@@ -103,6 +108,16 @@ export async function setHerdrTasksPaneVisible(ctx: ExtensionContext, visible: b
         if (existing.length) {
           await app(["do", "pane.focus", JSON.stringify({ pane: existing[0]!.id })], ctx.cwd, ctx.signal);
           return;
+        }
+        if (options.replaceStale) {
+          for (const pane of panes) {
+            const content = object(pane.content);
+            const binding = object(content?.props);
+            if (typeof pane.id === "string" && content?.terminal == null && content?.mod === "pi-tasks"
+              && binding?.terminal === terminal && binding.sessionId !== sessionId) {
+              await app(["do", "pane.close", JSON.stringify({ pane: pane.id })], ctx.cwd, ctx.signal);
+            }
+          }
         }
         const activity = panes.find((pane) => matches(pane, "pi-loop-monitor"));
         await installBundledMod(appHome);

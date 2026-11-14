@@ -65,7 +65,7 @@ Assign a different accessibility auditor for Tab/Shift+Tab order, activation, vi
 
 ### Forms, search and navigation agent
 
-Assign a different interaction auditor for typing, clear controls, no-results, validation, loading/error states, Back/Forward and active navigation. Compare search behavior across relevant routes without unauthorized submissions or autosaves.
+Assign a different interaction auditor for typing, clear controls, no-results, validation, loading/error states, Back/Forward and active navigation. Compare search behavior across relevant routes without unauthorized submissions or autosaves. For navigation or auth links in scope, report app-owned and provider-rendered links separately with their expected destination, origin and rendered mode, plus the sign-in to sign-up flow and back, and relevant deep links, without submitting credentials; cover sign-out or account switch only when that session is already authorized.
 
 ### Themes and content agent
 
@@ -146,7 +146,7 @@ For popovers, menus, tooltips, dialogs, dropdowns, inspectors and expanded panel
 - Search: click, type, clear, no-results, Escape and keyboard navigation; inspect unexpected rings, underlines, jumps or text clipping.
 - Forms: labels, caret/focus discoverability, error text, disabled/busy distinction and stable geometry; do not submit without authorization.
 - Chat keyboard contracts: where specified, Enter sends, Shift+Enter inserts a newline, and IME composition does not submit. Compare Enter with the Send button and inspect disabled reasons; actual sends still require authorization, including paid-model permission.
-- Navigation: active state, Back/Forward, reachable actions and no accidental document-level horizontal scrolling.
+- Navigation: active state, Back/Forward, reachable actions and no accidental document-level horizontal scrolling. When the authorized scope includes navigation or authentication, follow app-owned links and links rendered by an SDK or identity provider separately, and verify the actual destination origin, path, hash and rendered mode rather than the visible label. Check the auth flows in both directions, such as sign-in to sign-up and back, plus relevant deep links and any `next`, return or callback value, and cover sign-out or account switch only when that session is already authorized. Stop at the credential prompt; do not fill or submit credentials or bypass authentication. Skip this check when the scope has no navigation or auth surface.
 - Dense layouts: long names, wrapped text, scroll areas, fixed headers/footers, menus near viewport edges and controls at 200% zoom.
 - Keyboard: logical order, visible focus consistent with approved styling, no focus hidden beneath overlays, correct Escape target and restored trigger focus.
 - Feedback: loading/error/empty states are distinguishable; do not trigger billable or destructive work merely to generate a state.

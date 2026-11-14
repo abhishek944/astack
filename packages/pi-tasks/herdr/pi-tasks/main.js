@@ -1,7 +1,7 @@
 import { View, div, svg } from "gpui-kit";
 import { Button, h_flex, v_flex } from "gpui-base";
 import { readFile } from "fs/promises";
-import { agents, props, readTextFile, run, terminals, theme, watchFolder } from "herdr";
+import { agents, panes, props, readTextFile, run, terminals, theme, watchFolder } from "herdr";
 
 const SESSION = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 const TERMINAL = /^(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)?t[0-9a-z]+$/;
@@ -72,6 +72,7 @@ function validate(value, sessionId) {
     if (!object(todo) || !/^T[1-9][0-9]*$/.test(todo.taskId) || tasks.has(todo.taskId) || !works.has(todo.workId)
       || !text(todo.taskName) || !text(todo.taskInfo) || !STATUSES.includes(todo.status)
       || (todo.blockedReason != null && typeof todo.blockedReason !== "string")
+      || (todo.finalThoughts !== undefined && !text(todo.finalThoughts))
       || (todo.workingSince !== undefined && !number(todo.workingSince))
       || (todo.delegatedTimes !== undefined && (!Array.isArray(todo.delegatedTimes) || todo.delegatedTimes.some((source) => !object(source) || (source.elapsedMs !== null && !number(source.elapsedMs)))))) throw new Error("Invalid task in the task snapshot.");
     tasks.add(todo.taskId);
@@ -180,17 +181,18 @@ export default class Tasks extends View {
       : todo.status === "completed" ? "Completed" : todo.status === "cancelled" ? "Cancelled" : "Active; not running";
   }
 
-  button(id, label, accessible, callback, t, taskName = false) {
+  button(id, label, accessible, callback, t, underlineFocus = false) {
     return Button.new(id).min_w(0).rounded(4).cursor_pointer().text_color(t.foreground)
       .accessibility_label(accessible).tooltip(accessible).tab_stop(true)
-      // Task selection belongs to the row; underline keeps keyboard focus visible without a second fill.
-      .focus((style) => taskName ? style.underline() : style.bg(t.selected).text_color(t.accent))
+      // Name controls underline on focus; a selected background fill looks like
+      // selected text. Task-row selection keeps its own background.
+      .focus((style) => underlineFocus ? style.underline() : style.bg(t.selected).text_color(t.accent))
       .on_click((event, cx) => { cx.stop_propagation(); callback(cx, event); }).child(label);
   }
 
-  nameButton(id, label, accessible, callback, t, taskName = false) {
+  nameButton(id, label, accessible, callback, t) {
     // Constrain the label itself so long names ellipsize at the end, not under the status glyph.
-    return this.button(id, div().flex_1().min_w(0).truncate().text_left().child(label), accessible, callback, t, taskName)
+    return this.button(id, div().flex_1().min_w(0).truncate().text_left().child(label), accessible, callback, t, true)
       .flex().flex_1().min_w(0).items_center().justify_start().overflow_hidden();
   }
 
@@ -204,14 +206,26 @@ export default class Tasks extends View {
   openAgent(todo, cx) {
     const link = this.linked(todo);
     if (!link) { this.actionError = "The linked agent is no longer available."; cx.notify(); return; }
-    try { run("agent.focus", { terminal: link }); this.actionError = ""; }
-    catch { this.actionError = "Could not focus the linked agent."; }
+    // A pane-less sub-agent cannot be selected; agent.focus acknowledges it but
+    // shows nothing. Present its own screen over the current tab instead. The
+    // app lists only the first child level, so a deeper child is recognized by
+    // its Core parent. A terminal that owns a pane, or another machine's
+    // terminal, keeps the normal agent focus. Never navigate to the parent.
+    let command;
+    if (link.includes("/") || panes().some((pane) => pane.terminal === link)) command = "agent.focus";
+    else {
+      const record = terminals().find((terminal) => terminal.address === link);
+      command = record?.parent ? "terminal.peek" : null;
+    }
+    if (!command) { this.actionError = "Herdr is not showing this agent. Open its space, then retry."; cx.notify(); return; }
+    try { run(command, { terminal: link }); this.actionError = ""; }
+    catch { this.actionError = command === "terminal.peek" ? "Could not open the linked agent's screen." : "Could not focus the linked agent."; }
     cx.notify();
   }
 
-  visibleInfo(info) {
-    return info.split("\n").filter((line) => !/^\s*hc-(terminal|monitor):/i.test(line))
-      .map((line) => line.replace(/^\s*owner:\s*(self|delegate)(?=[\s.,;:]|$)[\s.,;:]*/i, "")).join("\n").trim();
+  finalThoughts(todo) {
+    if (todo.status === "blocked") return (todo.blockedReason || "").trim() || (todo.finalThoughts || "").trim();
+    return (todo.finalThoughts || "").trim();
   }
 
   stateMark(todo, t) {
@@ -253,11 +267,11 @@ export default class Tasks extends View {
         .child(div().w(10).h(17).flex_none().border_l(1).border_b(1).border_color(t.input).rounded_bl(4))
         .child(this.stateMark(todo, t))
         .child(this.nameButton("name-" + todo.taskId, todo.taskName,
-          todo.taskName + ". " + this.state(todo) + ". " + (this.expanded.has(todo.taskId) ? "Hide description" : "Show description"),
+          todo.taskName + ". " + this.state(todo) + ". " + (this.expanded.has(todo.taskId) ? "Hide final thoughts" : "Show final thoughts"),
           (cx, event) => {
             // A double-click is one activation, not an immediate open followed by close.
             if (event.click_count === 1) this.toggleTask(todo, cx);
-          }, t, true).text_size(this.width < 450 ? 11 : 12.5).font_medium())
+          }, t).text_size(this.width < 450 ? 11 : 12.5).font_medium())
         .child(div().flex_none().text_size(this.width < 450 ? 9 : 11).text_color(t.dim).child(todo.taskId))
         .when(Boolean(link), (element) => element.child(this.button("agent-" + todo.taskId, "Agent ↗",
           "Focus existing linked agent for " + todo.taskName, (cx) => this.openAgent(todo, cx), t)
@@ -266,14 +280,12 @@ export default class Tasks extends View {
       .child(this.metric("time-" + todo.taskId, duration(time), this.effortDescription(todo, time), columns.time, t));
     const elements = [row];
     if (this.expanded.has(todo.taskId)) {
-      const info = this.visibleInfo(todo.taskInfo);
+      const thoughts = this.finalThoughts(todo);
       const detail = v_flex().id("description-" + todo.taskId).flex_none().min_w(0).ml(this.width < 450 ? 20 : 38)
         .pl(23).pr(10).py(10).gap(8).border_l(1).border_color(t.input).text_size(12).text_color(t.muted);
-      if (info) detail.child(div().min_w(0).whitespace_normal().child(info));
-      if (todo.status === "blocked" && todo.blockedReason && !info.includes(todo.blockedReason)) {
-        detail.child(div().min_w(0).whitespace_normal().text_color(t.blocked).child(todo.blockedReason));
-      }
-      if (!info && !(todo.status === "blocked" && todo.blockedReason)) detail.child("No description recorded.");
+      detail.child(div().text_size(10).text_color(t.dim).child("Final thoughts"));
+      detail.child(div().min_w(0).whitespace_normal().text_color(todo.status === "blocked" ? t.blocked : t.muted)
+        .child(thoughts || "No final thoughts recorded."));
       elements.push(detail);
     }
     return elements;

@@ -1,7 +1,7 @@
 import { defineExtension, defineTool } from '@earendil-works/pi-durable';
 import type { Extension, ToolRegistration } from '@earendil-works/pi-durable';
 import { Type } from 'typebox';
-import { capabilitiesForApi } from './capabilities.js';
+import { capabilitiesForApi, MAX_GIF_FRAMES, MIN_GIF_FRAMES, MIN_GIF_FRAME_DURATION_MS } from './capabilities.js';
 import { normalizeImageGenSettings, resolveModel } from './config.js';
 import { errorMessageForUser, ImageGenError, type RetainedPartialFailure } from './errors.js';
 import type { ImageToolCapabilities } from './extension.js';
@@ -71,12 +71,24 @@ const generateParameters = Type.Object({
     description: 'Gemini-style resolution tier. Only honored by models with a size-tier knob.' })),
   quality: Type.Optional(Type.String({ minLength: 1, maxLength: 32,
     description: 'Quality hint. Only honored by providers that expose a quality knob.' })),
-  outputFormat: Type.Optional(Type.Union([Type.Literal('png'), Type.Literal('jpeg'), Type.Literal('webp')], {
-    description: 'Provider-supported output encoding.' })),
+  outputFormat: Type.Optional(Type.Union([Type.Literal('png'), Type.Literal('jpeg'), Type.Literal('webp'), Type.Literal('gif'), Type.Literal('svg')], {
+    description: 'Provider-supported output encoding. gif and svg are generation-only.' })),
   background: Type.Optional(Type.Union([Type.Literal('auto'), Type.Literal('transparent'), Type.Literal('opaque')], {
     description: 'Background behavior. Transparent output requires a format that preserves alpha.' })),
   outputCompression: Type.Optional(Type.Integer({ minimum: 0, maximum: 100,
     description: 'JPEG/WebP compression level from 0 to 100.' })),
+  complexity: Type.Optional(Type.Union([Type.Literal('low'), Type.Literal('medium'), Type.Literal('high')], {
+    description: 'Planning effort independent of quality, honored only by models that declare it. For SVG it controls the reference image.' })),
+  frameCount: Type.Optional(Type.Integer({ minimum: MIN_GIF_FRAMES, maximum: MAX_GIF_FRAMES,
+    description: `GIF frame count (${MIN_GIF_FRAMES}-${MAX_GIF_FRAMES}; default 9). Requires outputFormat gif.` })),
+  frameDurationMs: Type.Optional(Type.Integer({ minimum: MIN_GIF_FRAME_DURATION_MS,
+    description: 'Per-frame GIF delay in milliseconds (default 200). Requires outputFormat gif.' })),
+  svgModel: Type.Optional(Type.String({ minLength: 1,
+    description: 'Model that authors SVG output; supply it only when SVG model selection is enabled.' })),
+  svgReasoningEffort: Type.Optional(Type.Union([Type.Literal('none'), Type.Literal('minimal'), Type.Literal('low'), Type.Literal('medium'), Type.Literal('high'), Type.Literal('xhigh'), Type.Literal('max')], {
+    description: 'SVG author reasoning effort. Requires svgModel and outputFormat svg.' })),
+  markup: Type.Optional(Type.String({ minLength: 1, maxLength: 8192,
+    description: 'Transparent annotation PNG over the first input image for markup-guided edits. Requires an edit target and cannot be combined with mask.' })),
   mask: Type.Optional(Type.String({ minLength: 1, maxLength: 8192,
     description: 'Edit mask image path or public URL. Requires at least one image edit target.' })),
   negativePrompt: Type.Optional(Type.String({ minLength: 1, maxLength: 8000,
@@ -201,6 +213,12 @@ function escapeMarkdownPath(path: string): string {
   return path.replace(/[\s#%()?<>]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`);
 }
 
+/** Saved SVG is a vector file: link it, never emit an inline image embed for it. */
+function savedOutputMarkdown(path: string, mimeType: string, alt: string): string {
+  const target = escapeMarkdownPath(path);
+  return mimeType === 'image/svg+xml' ? `[${alt}](${target})` : `![${alt}](${target})`;
+}
+
 /** Render retained receipts on a failed call without faking success or echoing provider bodies. */
 function formatPartialError(base: string, partial: RetainedPartialFailure | undefined): string {
   if (!partial || (partial.images.length === 0 && !partial.dispatched)) return base;
@@ -209,7 +227,7 @@ function formatPartialError(base: string, partial: RetainedPartialFailure | unde
     lines.push('', `Retained ${partial.images.length} already-saved image(s); nothing saved was deleted:`);
     for (const image of partial.images) {
       const dimensions = image.dimensions ? ` ${image.dimensions.width}x${image.dimensions.height}` : '';
-      lines.push(`- ![retained image](${escapeMarkdownPath(image.path)}) (${image.mimeType}${dimensions})`);
+      lines.push(`- ${savedOutputMarkdown(image.path, image.mimeType, 'retained image')} (${image.mimeType}${dimensions})`);
     }
   }
   lines.push(`Outcome: dispatched=${partial.dispatched} uncertain=${partial.uncertain} storageUncertain=${partial.storageUncertain}. Do not retry paid generation without a new explicit user request.`);
@@ -221,7 +239,7 @@ function formatGenerateResult(result: ImageGenResult): string {
   for (const image of result.images) {
     const dimensions = image.dimensions ? ` ${image.dimensions.width}x${image.dimensions.height}` : '';
     const revised = image.revisedPrompt ? ` revised-prompt: ${image.revisedPrompt}` : '';
-    lines.push(`- ![generated image](${escapeMarkdownPath(image.path)}) (${image.mimeType}${dimensions})${revised}`);
+    lines.push(`- ${savedOutputMarkdown(image.path, image.mimeType, 'generated image')} (${image.mimeType}${dimensions})${revised}`);
   }
   lines.push(...formatAccounting(result.metadata));
   return lines.join('\n');
@@ -241,9 +259,10 @@ export function createImageExtension(
     description: 'Generate or edit images with the configured pi-image-gen default route and its ordered fallback. '
       + 'This tool does not accept provider or model parameters. Pass `image` for image-to-image, edits, style transfer, '
       + 'or character preservation: a regular image file inside the session cwd or a public http(s) URL. Files are saved '
-      + 'to the settings-governed output directory; copy the `![alt](…)` line(s) verbatim so the UI can display them. '
-      + 'Use independent native calls for multiple requested images. After a dispatched or uncertain failure, do not '
-      + 'repeat generation without a new explicit user request; retain already-saved images.',
+      + 'to the settings-governed output directory; copy the output lines verbatim so the UI can display them: raster '
+      + 'and GIF lines are inline image Markdown, while SVG lines are file links and must stay links. Use independent '
+      + 'native calls for multiple requested images. After a dispatched or uncertain failure, do not repeat generation '
+      + 'without a new explicit user request; retain already-saved images.',
     parameters: generateParameters,
     replay: 'unsafe',
     executionMode: 'parallel',
@@ -297,7 +316,7 @@ export function createImageExtension(
           }
           const retained = entry.partialImages?.length
             ? `\nRetained ${entry.partialImages.length} already-saved image(s); nothing saved was deleted:\n` +
-              entry.partialImages.map((image) => `- ![retained image](${escapeMarkdownPath(image.path)}) (${image.mimeType})`).join('\n')
+              entry.partialImages.map((image) => `- ${savedOutputMarkdown(image.path, image.mimeType, 'retained image')} (${image.mimeType})`).join('\n')
             : '';
           return `## ${entry.route.provider}/${entry.route.model}: ${entry.status} — ${entry.error}${retained}`;
         });

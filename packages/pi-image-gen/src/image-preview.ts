@@ -16,8 +16,14 @@ export async function buildImagePreviews(
 ): Promise<Array<TextContent | ImageContent>> {
   const content: Array<TextContent | ImageContent> = [];
   let attached = 0;
+  let vectorSkipped = 0;
   for (const [index, image] of images.slice(0, MAX_PREVIEWS).entries()) {
     if (signal?.aborted) break;
+    // SVG is a vector document: never rasterize or embed it for a display copy.
+    if (image.mimeType === 'image/svg+xml') {
+      vectorSkipped++;
+      continue;
+    }
     try {
       const file = await open(image.path, constants.O_RDONLY | constants.O_NOFOLLOW);
       let bytes: Buffer;
@@ -48,6 +54,12 @@ export async function buildImagePreviews(
     } catch {
       // A missing file or failed decoder must not hide successful saved outputs.
     }
+  }
+  if (vectorSkipped > 0) {
+    content.push({
+      type: 'text',
+      text: 'SVG output is saved as an editable vector original; inline previews are not rasterized or embedded.',
+    });
   }
   if (attached < images.length) {
     content.push({

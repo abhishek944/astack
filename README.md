@@ -17,9 +17,11 @@ Each directory under `packages/`, `skills/`, and `services/` is an independent u
 | `packages/pi-loop-monitor` | `@abhishek944/pi-loop-monitor` | publishable; published on npm |
 | `packages/pi-research` | `@abhishek944/pi-research` | publishable; replaces `pi-ask`; not published on npm |
 | `packages/pi-review` | `@abhishek944/pi-review` | publishable; skill-only; not published on npm |
+| `packages/pi-schedulers` | `@abhishek944/pi-schedulers` | publishable; not published on npm |
 | `packages/pi-tasks` | `@abhishek944/pi-tasks` | publishable; published on npm |
 | `packages/pi-visuals` | `@abhishek944/pi-visuals` | publishable; skill-only; not published on npm |
 | `skills/pi-herdr-skills` | `pi-herdr-skills` (private) | not published; shared skill source + checksum manifest |
+| `services/pi-litellm` | `pi-litellm` (private) | not published; local Docker LiteLLM gateway + Postgres |
 | `services/pi-slack` | `pi-slack` (private) | not published; separately configured Slack service |
 
 “Publishable” means the manifest, `exports`, `files`, and pack output are intact; it is not a claim that the current local version has been released. Registry status was checked on 2026-11-03.
@@ -41,6 +43,7 @@ The tables below list the current source-of-record surface: registered tool name
 | `@abhishek944/pi-loop-monitor` | Extension | `LoopCreate`, `LoopList`, `LoopUpdate`, `LoopDelete`, `MonitorCreate`, `MonitorList`, `MonitorUpdate`, `MonitorStop` | `/loop`, `/monitors` | — | — |
 | `@abhishek944/pi-research` | Extension + prompt + skills | — | `/ask` | `design-council`, `read-flows`, `research` | `/ask <question>` is a prompt template; the extension adds `/ask on`, `off`, `status`, and `tools` and applies a read-only tool policy. |
 | `@abhishek944/pi-review` | Skill-only | — | — | `agent-review`, `awesome-logging-standards`, `codebase-design`, `no-arbitrary-limits`, `no-unit-tests`, `security-audit`, `ui-ux-testing` | No extension code or runtime tools. `ui-ux-testing` is a read-only audit; the caller owns fixes and delegation. |
+| `@abhishek944/pi-schedulers` | Extension + Herdr mod | — | `/schedulers` | — | The scheduler clock lives in a Herdr mod's always-shown bar, so runs happen only while the Herdr app is running: no service, login item or supervisor. On macOS the red close button hides the app and Herdr 0.1.12 exposes no visibility signal, so closing the window does not stop scheduling; quitting does. Runs adopt one tab per run in a Schedulers space; unattended runs need Pi 1.0.4+ and use an explicit tool allowlist with `--no-mcp --no-approve`. |
 | `@abhishek944/pi-tasks` | Extension | `WorkCreate`, `WorkList`, `WorkUpdate`, `WorkDelete`, `TodoCreate`, `TodoList`, `TodoUpdate`, `TodoDelete`, `TaskTimeExport`, `TaskTimeImport` | `/works` | — | `/works` opens the task dashboard and accepts `delegate T<number>`. |
 | `@abhishek944/pi-visuals` | Skill-only | — | — | `archify`, `visual-explainer` | No extension code or runtime tools. |
 
@@ -57,18 +60,22 @@ The tables below list the current source-of-record surface: registered tool name
 
 ### Standalone global skills
 
-`skills/pi-herdr-skills` owns these six standalone skills. None is bundled by a package.
+`skills/pi-herdr-skills` owns these eight standalone skills. Exactly one of the two browser skills is selected per host; none is bundled by a package.
 
 | Skill | Purpose | Invocation |
 |---|---|---|
-| `browser-use` | Browser testing, screenshots, forms, and extraction with isolated local Chrome. | `/skill:browser-use` |
+| `aside-browser` | Bundled vendor Aside entry point, selected with `--browser aside`; it directs the agent to `aside guide` for the live instructions. | `/skill:aside-browser` |
+| `browser-use` | Browser testing, screenshots, forms, and extraction with isolated local Chrome. Selected by default. | `/skill:browser-use` |
 | `commit-and-merge` | Commit requested repository changes and merge into the default branch using repository conventions. | Manual only: `/skill:commit-and-merge` (`disable-model-invocation: true`). |
 | `computer-use` | Operate desktop apps through the local Cua Driver with accessibility elements and verified outcomes. | `/skill:computer-use` |
 | `implement` | Coordinate tracked work with artifact paths, ownership decisions, and verification. | `/skill:implement` |
 | `retro` | Run a retrospective on a coding session. | Manual only: `/skill:retro` (`disable-model-invocation: true`). |
 | `talk-human` | Write clear, beginner-oriented user-facing messages. | `/skill:talk-human` |
+| `typescript-best-practices` | Apply type-system rules to TypeScript work: discriminated unions, branded types, boundary validation, exhaustive variants, and schema-derived types. | `/skill:typescript-best-practices` |
 
 All skills, including package-bundled skills, use Pi's generic `/skill:<name>` command when skill commands are enabled. That is separate from extension-registered commands such as `/classifier` and from prompt-template commands such as `/ask`.
+
+`browser-use` is the default browser backend and skill. A host can instead declare `--browser aside` to install the bundled managed `aside-browser` skill and drop the conflicting `browser-use` default, or `--browser none` to install no browser skill. `browser-use` remains installed and current on hosts that keep the default. See [SETUP.md](SETUP.md#browser-backend-selection).
 
 ## Requirements
 
@@ -85,7 +92,7 @@ bash scripts/setup.sh           # install missing runtimes/capabilities, build, 
 npm run setup                   # same entry after Node exists
 ```
 
-It prepares every package independently, registers the 11 local packages, syncs the six shared skills, and reports each capability as ready/installed/manual/unsupported/failed. Existing tools, auth, package entries, modified skills, sessions, and user services are preserved; by default only `settings.json` packages and an absent `cua-driver` MCP entry can change, with backups. See [SETUP.md](SETUP.md) for options, platform notes, and the Slack delegation boundary.
+It prepares every package independently, registers the 11 local packages, syncs the selected shared skills, and reports each capability as ready/installed/manual/unsupported/failed. The browser backend is an explicit choice: `--browser browser-use` (default), `--browser aside`, or `--browser none`. Existing tools, auth, package entries, modified skills, sessions, and user services are preserved; by default only `settings.json` packages and an absent `cua-driver` MCP entry can change, with backups. See [SETUP.md](SETUP.md) for options, platform notes, and the Slack delegation boundary.
 
 A headless Ubuntu/Debian host can additionally opt in to a private desktop for the local Cua Driver. It is never installed by default:
 
@@ -122,7 +129,7 @@ node scripts/check.mjs --all   # npm run check plus the skills check
 
 - `npm run check` never installs or edits package metadata. It requires each directory's `node_modules` to exist and fails with the underlying tool error when dependencies are missing.
 - `npm run verify` runs `npm ci` in directories that have a lockfile and `npm install --no-package-lock` in `pi-firstmate` (the only unit without one), then runs the same checks.
-- `npm run check:skills` compares `skills/*` with `~/.agents/skills/*`; it requires those global installs and does not touch package builds.
+- `npm run check:skills` compares the selected `skills/*` entries with `~/.agents/skills/*`; it requires those global installs and does not touch package builds. The selection comes from `--browser`, then `$ASTACK_BROWSER`, then `~/.local/share/astack/env.sh`, then `browser-use`.
 - None of these commands creates or runs unit tests.
 
 ## Install and cutover
@@ -130,7 +137,7 @@ node scripts/check.mjs --all   # npm run check plus the skills check
 Current Pi installations keep working because the original repositories remain in place. Distribution paths are unchanged except for the pi-ask consolidation into pi-research:
 
 - Published on npm: `pi install npm:@abhishek944/pi-classifier`, `pi-image-gen`, `pi-loop-monitor`, `pi-tasks`. The registry version may be older than the local `package.json`; publishing is manual and was not performed during migration. The published `@abhishek944/pi-ask` package still installs, but this checkout replaces it with `pi-research`.
-- Not published on npm: `pi-decisions`, `pi-firstmate`, `pi-grill-me`, `pi-herdr`, `pi-research`, `pi-review`, and `pi-visuals` install from a local checkout, for example `pi install ./astack/packages/<package>` or the original checkout path. `pi-grill-me`, `pi-review`, and `pi-visuals` are skill-only packages; they have no extension code or runtime tools. `pi-research` bundles the `/ask` extension, its reusable read-only guard, and the research, read-flows, and design-council skills.
+- Not published on npm: `pi-decisions`, `pi-firstmate`, `pi-grill-me`, `pi-herdr`, `pi-research`, `pi-review`, `pi-schedulers`, and `pi-visuals` install from a local checkout, for example `pi install ./astack/packages/<package>` or the original checkout path. `pi-grill-me`, `pi-review`, and `pi-visuals` are skill-only packages; they have no extension code or runtime tools. `pi-research` bundles the `/ask` extension, its reusable read-only guard, and the research, read-flows, and design-council skills.
 - Git sources target a repository URL as a whole; Pi has no subdirectory syntax for `pi install git:`. Do not point a git install at Astack expecting a nested package.
 
 Installed-path cutover is user-owned and was not applied during the migration. To switch local-path installs to Astack, update the corresponding entries in `~/.pi/agent/settings.json`:
@@ -166,6 +173,10 @@ The `here-now` skill is retired. Its source, global install, provenance files, a
 The remaining shared skills are `browser-use`, `commit-and-merge`, `computer-use`, `implement`, `retro`, and `talk-human`; they stay global and follow the contract above.
 
 Run `npm run check:skills` after any skill edit.
+
+## LiteLLM gateway
+
+`services/pi-litellm` is a private, local-only Docker Compose unit: the LiteLLM gateway with its Admin UI plus a Postgres database, two containers with the proxy published on loopback and no host port for the database. Pi reaches it over the OpenAI-compatible API using a per-person virtual key, not the master key. Generated local credentials live in the gitignored `services/pi-litellm/.env` (mode 0600); only `.env.example` placeholders are tracked. See `services/pi-litellm/README.md` for bootstrap order, key issuance, Pi `models.json` wiring and cost caveats.
 
 ## Slack service
 

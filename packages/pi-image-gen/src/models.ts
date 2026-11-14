@@ -147,6 +147,44 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
       backgroundValues: ['auto', 'transparent', 'opaque'] as Array<'auto' | 'transparent' | 'opaque'>,
       supportsOutputCompression: true,
       supportsMask: true,
+      supportsMarkup: true,
+      nMax: 10,
+      maxReferenceImages: 16,
+      inputFormats: ['PNG', 'WEBP', 'JPEG'],
+      inputMaxBytes: 20 * MB,
+      referenceLimitsSource: 'extension' as const,
+    },
+  })),
+
+  // GPT Image 2.6 (Flare = fast iteration, Sunburst = detailed work). The Image API adds complexity
+  // planning, markup-guided edits, native GIF animation and native SVG output. The model pages do
+  // not publish a size table; the API-wide arbitrary WxH range documented for 2.5 is carried over as
+  // advice and the provider stays the authority. Quality lists the values the 2.6 material names
+  // (low/medium/high); the API reference documents xhigh/max only for 2.5. GIF and SVG are
+  // generation-only, and the API gates them on GIF-preview and SVG-model-selection access.
+  ...(['gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'] as const).map((id) => ({
+    id,
+    provider: 'openai' as const,
+    capabilities: {
+      sizeRange: {
+        separator: 'x' as const,
+        allowAuto: true,
+        minArea: 655_360,
+        maxArea: 8_294_400,
+        minRatio: 1 / 3,
+        maxRatio: 3,
+        divisibleBy: 16,
+        maxEdge: 3840,
+      },
+      qualityValues: ['low', 'medium', 'high', 'auto'],
+      outputFormats: ['png', 'jpeg', 'webp', 'gif', 'svg'] as Array<
+        'png' | 'jpeg' | 'webp' | 'gif' | 'svg'
+      >,
+      complexityValues: ['low', 'medium', 'high'] as Array<'low' | 'medium' | 'high'>,
+      backgroundValues: ['auto', 'transparent', 'opaque'] as Array<'auto' | 'transparent' | 'opaque'>,
+      supportsOutputCompression: true,
+      supportsMask: true,
+      supportsMarkup: true,
       nMax: 10,
       maxReferenceImages: 16,
       inputFormats: ['PNG', 'WEBP', 'JPEG'],

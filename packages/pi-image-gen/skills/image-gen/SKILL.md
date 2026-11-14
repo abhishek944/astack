@@ -1,6 +1,6 @@
 ---
 name: image-gen
-description: "Generate or edit raster images with the image_generate tool: photos, illustrations, textures, sprites, product/UI mockups, concept art, icons, logos, diagrams, or image-to-image edits. For assets that could be repo-native SVG/vector/CSS/canvas, treat that format as a preference when editability or exact integration matters—not as a prohibition on image generation."
+description: "Generate or edit images with the image_generate tool: photos, illustrations, textures, sprites, product/UI mockups, concept art, native GIF animation, editable SVG output where supported, icons, logos, diagrams, or image-to-image edits. For assets that could be repo-native SVG/vector/CSS/canvas, treat that format as a preference when editability or exact integration matters—not as a prohibition on image generation."
 ---
 
 # Image generation
@@ -13,6 +13,15 @@ This skill guides `image_generate` and explicit `image_compare` requests from `@
 - A new image guided by one or more reference images (style, composition, mood, subject).
 - Editing an existing image: inpainting, background replacement, object removal, lighting or weather changes, compositing, style transfer, character preservation.
 - Several assets or variants for one task.
+- A looping animation or an editable vector asset when the active model advertises native `gif` or `svg` output.
+
+## Native animation and vector output
+
+GPT Image 2.6 on the OpenAI Images API can return an animated GIF or an editable SVG instead of a raster still. These are generation-only formats: they do not accept reference images or masks, and they do not apply to edits.
+
+- GIF: use `outputFormat: "gif"` and describe the subject, motion, and desired loop. `frameCount` is 2–16 (default 9) and `frameDurationMs` defaults to 200 ms with a 20 ms floor. Do not combine GIF with `outputCompression`. The saved `.gif` keeps the complete animation; the 20 MB saved-output ceiling still applies.
+- SVG: use `outputFormat: "svg"` with `n: 1`. The result is static vector XML with editable paths, shapes, and colors — not a raster wrapped in SVG. Supply `svgModel` (and optionally `svgReasoningEffort`) only when the account has SVG model selection enabled; otherwise omit both. SVG cannot be used as an edit input, and saved SVGs are not rasterized for inline preview.
+- Both features are account-gated (GIF preview access, SVG model selection). If the provider rejects the request, report its error; do not silently change format or model.
 
 ## Choosing image generation vs repo-native assets
 
@@ -97,8 +106,12 @@ Start from a clean base prompt, then make **one targeted change at a time** and 
 - `n` — model-specific variants of one prompt (default 1; universal extension maximum 10, with the schema description naming any lower active ceiling, such as 6 for Qwen). It is hidden for models such as Seedream, Meta Muse Image, and Microsoft MAI that return one image per request; direct calls requesting more than one are rejected.
 - `resize` — optional `{ width, height, fit?: "contain" | "cover" }` for exact local output dimensions, separate from provider size controls. Dimensions are 1–8192, at most 40 million pixels. Still JPEG/PNG/WebP inputs produce a PNG copy. `contain` (default) pads transparently without cropping; `cover` explicitly crops. The original stays at `originalPath`. If `resizeError` is present, report the failure and saved original; never regenerate paid output automatically. This option is on `image_generate`, not `image_compare` or portable/Durable APIs.
 - `size` — e.g. `"1024x1024"`. Provider-specific; some models require a minimum (Seedream ≥ 4.5 needs 2K+, so `1024x1024` fails there). Meta Muse Image accepts a free-form size; official cookbook examples include `1024x1024`, `1536x1024`, and `1024x1536`.
-- `quality` — model-specific. GPT Image 2 and the verified Codex route expose `"low"` / `"medium"` / `"high"` / `"auto"`; OpenAI API models `gpt-image-2.5-flare` and `gpt-image-2.5-sunburst` also expose `"xhigh"` and `"max"`. This parameter is **provider-conditional**: it exists in the tool schema for a built-in gpt-image route, including Azure OpenAI image deployments. It is absent for Gemini, DashScope/Qwen, Ark/Seedream, Meta Muse Image, Microsoft MAI, non-gpt-image routes, and custom providers unless their model explicitly declares `capabilities.qualityValues` on an adapter that forwards quality. If you don't see `quality`, do not try to force it.
-- `outputFormat`, `background`, `outputCompression` — model-aware web-asset controls for verified OpenAI API and discovered OpenRouter routes. Transparent output requires PNG or WebP; compression is for JPEG/WebP.
+- `quality` — model-specific. GPT Image 2, GPT Image 2.6, and the verified Codex route expose `"low"` / `"medium"` / `"high"` / `"auto"`; OpenAI API models `gpt-image-2.5-flare` and `gpt-image-2.5-sunburst` also expose `"xhigh"` and `"max"`. This parameter is **provider-conditional**: it exists in the tool schema for a built-in gpt-image route, including Azure OpenAI image deployments. It is absent for Gemini, DashScope/Qwen, Ark/Seedream, Meta Muse Image, Microsoft MAI, non-gpt-image routes, and custom providers unless their model explicitly declares `capabilities.qualityValues` on an adapter that forwards quality. If you don't see `quality`, do not try to force it.
+- `outputFormat`, `background`, `outputCompression` — model-aware web-asset controls for verified OpenAI API and discovered OpenRouter routes. Transparent output requires PNG or WebP; compression is for JPEG/WebP. On GPT Image 2.6, `outputFormat` also accepts `gif` and `svg` (generation-only, as above).
+- `complexity` — GPT Image 2.6 planning effort (`low`/`medium`/`high`, default `high`), independent of `quality`. Use low for focused edits; medium/high for dense text or complex layouts. For SVG it controls the reference image, not the SVG author.
+- `frameCount`, `frameDurationMs` — native GIF controls only. They require `outputFormat: "gif"`.
+- `svgModel`, `svgReasoningEffort` — SVG author controls. They require `outputFormat: "svg"` and an account with SVG model selection; `svgReasoningEffort` also requires `svgModel`.
+- `markup` — transparent annotation PNG for markup-guided edits on GPT Image 2.5/2.6. It applies to the first `image`, requires an edit target, and cannot be combined with `mask`.
 - `mask` — precise edit mask for verified OpenAI API models. It requires at least one `image` edit target; use a transparent mask region for the area to replace.
 - `negativePrompt`, `seed`, `promptEnhance`, `enableThinking`, `watermark` — provider-native controls shown only when the active model advertises them. Seeds improve reproducibility but do not guarantee identical bytes.
 - `seriesMaxImages` — Seedream related-image series, distinct from independent `n` variants.

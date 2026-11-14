@@ -5,7 +5,14 @@ import {
   MAX_REFERENCE_IMAGE_INPUTS,
   MAX_TOTAL_REFERENCE_IMAGE_BYTES,
 } from './image-input.js';
-import type { ApiStyle, GenerateImageParams, ImageModelCapabilities } from './types.js';
+import type {
+  ApiStyle,
+  GenerateImageParams,
+  ImageComplexity,
+  ImageModelCapabilities,
+  ImageOutputFormat,
+  SvgReasoningEffort,
+} from './types.js';
 
 /**
  * Capability-driven description helpers, shared by the tool schema builder
@@ -22,6 +29,23 @@ import type { ApiStyle, GenerateImageParams, ImageModelCapabilities } from './ty
  * rejects parameter combinations OUR adapters would silently drop (see
  * validateGenerateParams).
  */
+
+export const SVG_REASONING_EFFORTS = [
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+] as const satisfies ReadonlyArray<SvgReasoningEffort>;
+
+/** API reference/SDK bounds for `frame_count`. The guide currently says 2–64; this package
+ * follows the reference/SDK 2–16 until the official sources agree. */
+export const MIN_GIF_FRAMES = 2;
+export const MAX_GIF_FRAMES = 16;
+/** API reference minimum for `frame_duration_ms`; the API rounds to 10 ms and caps the encoded delay. */
+export const MIN_GIF_FRAME_DURATION_MS = 20;
 
 /**
  * Remove model-declared controls that the selected wire adapter cannot carry.
@@ -47,6 +71,20 @@ export function capabilitiesForApi(
   if (api !== 'openai' && api !== 'openrouter') {
     delete clean.outputFormats;
     delete clean.supportsOutputCompression;
+  }
+  if (api !== 'openai') {
+    // Only the OpenAI Images adapter carries the 2.6 controls: native GIF/SVG output,
+    // complexity planning and markup edits. A compatible gateway may still accept raster
+    // encodings, but never advertise a knob this adapter would silently drop.
+    if (clean.outputFormats) {
+      const raster = clean.outputFormats.filter(
+        (format) => format === 'png' || format === 'jpeg' || format === 'webp',
+      );
+      if (raster.length) clean.outputFormats = raster;
+      else delete clean.outputFormats;
+    }
+    delete clean.complexityValues;
+    delete clean.supportsMarkup;
   }
   if (
     clean.supportsOutputCompression &&
@@ -125,6 +163,9 @@ export function capabilitySizeDescription(caps: ImageModelCapabilities, exampleS
   }
   if (range.divisibleBy) parts.push(`dimensions divisible by ${range.divisibleBy}`);
   if (range.maxEdge) parts.push(`longest edge at most ${range.maxEdge}px`);
+  if (caps.outputFormats?.includes('gif')) {
+    parts.push('for GIF output this describes each frame, and the frames share the model pixel budget');
+  }
   let text = `${parts.join('; ')}.`;
   if (range.tiers) {
     text += ` Alternatively a tier token: ${range.tiers.join(', ')} — do not mix the two forms.`;
@@ -208,6 +249,12 @@ export function validateGenerateParams(
   }
   const unsupported: Array<[unknown, boolean | undefined, string]> = [
     [params.outputFormat, Boolean(caps.outputFormats?.length), 'outputFormat'],
+    [params.complexity, Boolean(caps.complexityValues?.length), 'complexity'],
+    [params.frameCount, Boolean(caps.outputFormats?.includes('gif')), 'frameCount'],
+    [params.frameDurationMs, Boolean(caps.outputFormats?.includes('gif')), 'frameDurationMs'],
+    [params.svgModel, Boolean(caps.outputFormats?.includes('svg')), 'svgModel'],
+    [params.svgReasoningEffort, Boolean(caps.outputFormats?.includes('svg')), 'svgReasoningEffort'],
+    [params.markup, caps.supportsMarkup, 'markup'],
     [params.background, Boolean(caps.backgroundValues?.length), 'background'],
     [params.outputCompression, caps.supportsOutputCompression, 'outputCompression'],
     [params.mask, caps.supportsMask, 'mask'],
@@ -226,17 +273,76 @@ export function validateGenerateParams(
   if (params.outputFormat && !caps.outputFormats?.includes(params.outputFormat)) {
     throw new ImageGenError(`${modelId} does not support output format ${params.outputFormat}.`, 'outputFormat invalid');
   }
+  if (params.complexity && !caps.complexityValues?.includes(params.complexity)) {
+    throw new ImageGenError(`${modelId} does not support complexity ${params.complexity}.`, 'complexity invalid');
+  }
+  const format = params.outputFormat;
+  if ((format === 'gif' || format === 'svg') && params.image && params.image.length > 0) {
+    throw new ImageGenError(
+      `${format.toUpperCase()} output is generation-only; the image edit endpoint does not support it.`,
+      `${format} output requires generation`,
+    );
+  }
+  if (format === 'svg' && (params.n ?? 1) !== 1) {
+    throw new ImageGenError('SVG output requires n to be 1.', 'svg requires n=1');
+  }
+  if (params.frameCount != null) {
+    if (format !== 'gif') {
+      throw new ImageGenError('frameCount requires an explicit gif outputFormat.', 'frameCount requires gif');
+    }
+    if (!Number.isInteger(params.frameCount) || params.frameCount < MIN_GIF_FRAMES || params.frameCount > MAX_GIF_FRAMES) {
+      throw new ImageGenError(
+        `frameCount must be an integer from ${MIN_GIF_FRAMES} to ${MAX_GIF_FRAMES}.`,
+        'frameCount invalid',
+      );
+    }
+  }
+  if (params.frameDurationMs != null) {
+    if (format !== 'gif') {
+      throw new ImageGenError('frameDurationMs requires an explicit gif outputFormat.', 'frameDurationMs requires gif');
+    }
+    if (!Number.isInteger(params.frameDurationMs) || params.frameDurationMs < MIN_GIF_FRAME_DURATION_MS) {
+      throw new ImageGenError(
+        `frameDurationMs must be an integer of at least ${MIN_GIF_FRAME_DURATION_MS} milliseconds.`,
+        'frameDurationMs invalid',
+      );
+    }
+  }
+  if (params.svgModel !== undefined && !params.svgModel.trim()) {
+    throw new ImageGenError('svgModel must be a non-empty model id.', 'svgModel invalid');
+  }
+  if (params.svgModel && format !== 'svg') {
+    throw new ImageGenError('svgModel requires an explicit svg outputFormat.', 'svgModel requires svg');
+  }
+  if (params.svgReasoningEffort && !params.svgModel) {
+    throw new ImageGenError(
+      'svgReasoningEffort requires svgModel; omit both when SVG model selection is disabled, or supply the author model.',
+      'svgReasoningEffort requires svgModel',
+    );
+  }
+  if (params.svgReasoningEffort && format !== 'svg') {
+    throw new ImageGenError('svgReasoningEffort requires an explicit svg outputFormat.', 'svgReasoningEffort requires svg');
+  }
   if (params.background && !caps.backgroundValues?.includes(params.background)) {
     throw new ImageGenError(`${modelId} does not support background ${params.background}.`, 'background invalid');
   }
   if (params.outputCompression != null && (!Number.isInteger(params.outputCompression) || params.outputCompression < 0 || params.outputCompression > 100)) {
     throw new ImageGenError('outputCompression must be an integer from 0 to 100.', 'outputCompression invalid');
   }
+  if (params.outputCompression != null && (format === 'gif' || format === 'svg')) {
+    throw new ImageGenError('GIF and SVG output do not support outputCompression.', 'outputCompression unsupported for format');
+  }
   if (params.outputCompression != null && params.outputFormat !== 'jpeg' && params.outputFormat !== 'webp') {
     throw new ImageGenError('outputCompression requires an explicit jpeg or webp outputFormat.', 'outputCompression requires compressed format');
   }
-  if (params.background === 'transparent' && params.outputFormat === 'jpeg') {
-    throw new ImageGenError('Transparent backgrounds require png or webp outputFormat.', 'transparent jpeg unsupported');
+  if (params.background === 'transparent' && params.outputFormat && params.outputFormat !== 'png' && params.outputFormat !== 'webp') {
+    throw new ImageGenError('Transparent backgrounds require png or webp outputFormat.', 'transparent format unsupported');
+  }
+  if (params.mask && params.markup) {
+    throw new ImageGenError('markup cannot be combined with mask.', 'markup with mask');
+  }
+  if (params.markup && (!params.image || params.image.length === 0)) {
+    throw new ImageGenError('markup requires at least one edit target in image.', 'markup without edit target');
   }
   if (params.mask && (!params.image || params.image.length === 0)) {
     throw new ImageGenError('mask requires at least one edit target in image.', 'mask without edit target');
@@ -327,8 +433,14 @@ export function sanitizeCapabilities(
         else drop(key, value, 'an array of quality values');
         break;
       case 'outputFormats':
-        if (stringArray(value) && value.every((v) => v === 'png' || v === 'jpeg' || v === 'webp')) clean.outputFormats = value as Array<'png' | 'jpeg' | 'webp'>;
-        else drop(key, value, 'an array containing png, jpeg, or webp');
+        if (stringArray(value) && value.every((v) => v === 'png' || v === 'jpeg' || v === 'webp' || v === 'gif' || v === 'svg'))
+          clean.outputFormats = value as ImageOutputFormat[];
+        else drop(key, value, 'an array containing png, jpeg, webp, gif, or svg');
+        break;
+      case 'complexityValues':
+        if (stringArray(value) && value.every((v) => v === 'low' || v === 'medium' || v === 'high'))
+          clean.complexityValues = value as ImageComplexity[];
+        else drop(key, value, 'an array containing low, medium, or high');
         break;
       case 'backgroundValues':
         if (stringArray(value) && value.every((v) => v === 'auto' || v === 'transparent' || v === 'opaque')) clean.backgroundValues = value as Array<'auto' | 'transparent' | 'opaque'>;
@@ -336,6 +448,7 @@ export function sanitizeCapabilities(
         break;
       case 'supportsOutputCompression':
       case 'supportsMask':
+      case 'supportsMarkup':
       case 'supportsNegativePrompt':
       case 'supportsSeed':
       case 'supportsPromptEnhance':

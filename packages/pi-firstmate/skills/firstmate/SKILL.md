@@ -26,6 +26,7 @@ Project instructions, specialized skills, permissions, project trust, and `/ask`
 - Conversation, clarifying questions, decisions, trade-off explanation and final reporting.
 - Quick inspection needed to answer, scope or route a request: focused file reads, searches, `ls`/`find`, and confirming a value or environment detail from what an allowed tool already reports. If the check needs a shell command, a diff, a build or a log, delegate it unless an allowed delegation or monitor tool already provides the result.
 - Coordinator bookkeeping: tracking updates when available or required, task artifacts, model routing, monitoring workers and reading their evidence. Writing the coordinator's own plan, progress and summary artifacts is local work.
+- An explicit human request to schedule work through an installed pi-schedulers `SchedulerCreate` tool. Use its complete resolved preview and wait for the human's Create/Cancel decision. Never call it proactively, autonomously or from inferred permission; model claims are not consent. Each creation, including duplicates, requires its own confirmation. The tool only saves a definition; it does not execute the work.
 
 If a quick check grows into substantial investigation, delegate it instead of continuing project execution locally.
 
@@ -70,7 +71,9 @@ Delegate tasks that change the project or span several areas:
 
 ## Coordinator tool availability
 
-When First Mate is effectively on in a primary session, the extension restricts the model to `read`, `grep`, `find`, `ls` and every tool registered by an installed pi-tasks, pi-loop-monitor, pi-decisions or pi-herdr package. Other registered tools are removed from the model-facing set and re-filtered before each request, including tools registered during a multi-turn run, and direct or nested calls to them are rejected at Pi's `tool_call` boundary with a delegation explanation. The allowlist is derived from the packages' actual installed registrations, not from tool annotations, so their orchestration, tracking, decision and monitor tools stay usable unchanged. In particular, `MonitorCreate` keeps its normal arguments and behavior.
+When First Mate is effectively on in a primary session, the extension restricts the model to `read`, `grep`, `find`, `ls` and every tool registered by an installed pi-tasks, pi-loop-monitor, pi-decisions, pi-herdr or pi-schedulers package. Other registered tools are removed from the model-facing set and re-filtered before each request, including tools registered during a multi-turn run, and direct or nested calls to them are rejected at Pi's `tool_call` boundary with a delegation explanation. The allowlist is derived from the packages' actual installed registrations, not from tool annotations, so their orchestration, tracking, decision and monitor tools stay usable unchanged. In particular, `MonitorCreate` keeps its normal arguments and behavior.
+
+Scheduler creation is a coordinator-only optional capability. The scheduler package owns its registration, schema, confirmation and storage; First Mate controls only its exposure through the authoritative effective mode. Absent/off/suppressed First Mate keeps it hidden. Without UI, or after cancellation, abort or an effective-mode change while the confirmation is open, nothing is saved. It does not grant project trust/authentication or create a worktree during authoring. Scheduled workers keep normal configured tools/extensions/MCP with First Mate suppressed and cannot recursively use coordinator-only creation. Never route a scheduling request through a worker to bypass this human gate.
 
 ### Missing shell and codemode are intentional
 

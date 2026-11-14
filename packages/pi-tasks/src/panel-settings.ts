@@ -3,6 +3,23 @@ export interface PanelSettings {
   mode: "floating" | "widget";
 }
 
+export interface HerdrPanelSettings {
+  enabled: boolean;
+}
+
+/** Startup default for the native Herdr Tasks pane; commands still override this running instance. */
+export function readHerdrPanelSettings(settings: unknown): HerdrPanelSettings {
+  const root = object(settings);
+  const config = object(root?.["pi-tasks"]);
+  const raw = config?.herdrPanel;
+  if (raw === undefined) return { enabled: false };
+  const panel = object(raw);
+  if (!panel || (panel.enabled !== undefined && typeof panel.enabled !== "boolean")) {
+    throw new Error("pi-tasks.herdrPanel must contain an optional boolean enabled field.");
+  }
+  return { enabled: panel.enabled === true };
+}
+
 /** Defaults apply on startup/reload; slash commands only override this running instance. */
 export function readPanelSettings(settings: unknown): PanelSettings {
   const root = object(settings);

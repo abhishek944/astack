@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.0 - 2026-11-14
+
+- Make `finalThoughts` the only user-visible task text and keep `taskInfo` as hidden coordination metadata in the tools, the Durable document, saved records, markdown, the panel and the native Herdr view. A blocked task shows its blocked reason, a completed task states its verified result, and a status change clears an unsupplied thought so an old note cannot hide a new blocker.
+- Add `pi-tasks.herdrPanel.enabled` to open or focus the native Herdr Tasks pane at each session start in a local Herdr Core TUI session, replacing this terminal's pane from an earlier session. A malformed value reports a diagnostic and stays off; automatic setup failures stay silent and commands still never rewrite settings.
+- Route delegate links through the same presentation contract as `AgentFocus`: a pane owner gets normal focus, and a pane-less Core child opens its own screen overlay over the current tab instead of navigating to its parent.
+
 ## 0.15.1 - 2026-11-03
 
 - Unify display controls under `/works`: bare opens the overlay, `compact-on|compact-off` controls the compact Pi display, and `herdr-on|herdr-off` controls only the current session/terminal's native mod pane. Remove `/works-panel`; keep auxiliary actions under `/works`. Hiding views never stops tracking.

@@ -7,7 +7,7 @@ Supported **generation** providers:
 | Provider                       | Model id (alias)                              | Authentication        |
 | ------------------------------ | --------------------------------------------- | --------------------- |
 | ChatGPT Codex                  | `gpt-image-2` on route `codex-subscription` (`gpt-image-2-codex`, `codex`, and `openai-codex` remain legacy aliases) | Pi `/login` → ChatGPT Plus/Pro (Codex) |
-| OpenAI                         | `gpt-image-2`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst` | `OPENAI_API_KEY`      |
+| OpenAI                         | `gpt-image-2`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst` | `OPENAI_API_KEY`      |
 | Azure OpenAI | Azure GPT Image deployment name (`azure-openai-api`); GPT Image 1 / 1-mini / 1.5 / 2 / 2.5 Flare / Sunburst | `AZURE_OPENAI_API_KEY` |
 | Google Gemini ("Nano Banana")  | `gemini-3-pro-image` (alias `nano-banana-pro`), `gemini-3.1-flash-image` (alias `nano-banana-2`), `gemini-3.1-flash-lite-image` (alias `nano-banana-2-lite`), `gemini-2.5-flash-image` (alias `nano-banana`) | `GEMINI_API_KEY` |
 | Alibaba DashScope (Qwen-Image) | `qwen-image-3.0-pro`, `qwen-image-3.0`, `qwen-image-2.0-pro`, `qwen-image-2.0` | `DASHSCOPE_API_KEY`   |
@@ -19,7 +19,7 @@ Supported **generation** providers:
 
 Upstream API docs (handy when debugging gateway behavior or adding new models):
 
-- OpenAI GPT Image — [generation guide](https://developers.openai.com/api/docs/guides/image-generation), [gpt-image-2](https://developers.openai.com/api/docs/models/gpt-image-2), [2.5 Flare](https://developers.openai.com/api/docs/models/gpt-image-2.5-flare), [2.5 Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst)
+- OpenAI GPT Image — [generation guide](https://developers.openai.com/api/docs/guides/image-generation), [gpt-image-2](https://developers.openai.com/api/docs/models/gpt-image-2), [2.5 Flare](https://developers.openai.com/api/docs/models/gpt-image-2.5-flare), [2.5 Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst), [2.6 Flare](https://developers.openai.com/api/docs/models/gpt-image-2.6-flare), [2.6 Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.6-sunburst)
 - Azure OpenAI — [image generation guide](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/dall-e), [v1 preview REST endpoints](https://learn.microsoft.com/en-us/azure/foundry/openai/reference-preview-latest)
 - Google Gemini image generation — [ai.google.dev/gemini-api/docs/image-generation](https://ai.google.dev/gemini-api/docs/image-generation)
 - Alibaba Qwen-Image 3.0 (generation & editing) — [help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference](https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference)
@@ -32,7 +32,7 @@ Upstream API docs (handy when debugging gateway behavior or adding new models):
 
 Built-in API-key routes read `providers.<id>.apiKey` in local `settings.json` first, then fall back to the environment variables shown above; they do not read keys saved by Pi's general `/login` flow. Subscription routes are separate: Meta can use a Pi credential created by the [`pi-meta-oauth`](https://github.com/BlockedPath/pi-meta-oauth) package, while Codex uses Pi's ChatGPT Plus/Pro login. Meta API billing also accepts `META_API_KEY`; legacy `MODEL_API_KEY` remains accepted.
 
-For subscription-backed generation, first run `/login` in Pi and select **ChatGPT Plus/Pro (Codex)**, then run `/image-gen use codex-subscription gpt-image-2`. No `OPENAI_API_KEY` is required. Codex requests use the ChatGPT-backed image endpoints and count against provider-managed subscription usage and limits. GPT Image 2.5 is intentionally **not** listed on this route: its API model ids have not been verified against the private Codex subscription endpoint.
+For subscription-backed generation, first run `/login` in Pi and select **ChatGPT Plus/Pro (Codex)**, then run `/image-gen use codex-subscription gpt-image-2`. No `OPENAI_API_KEY` is required. Codex requests use the ChatGPT-backed image endpoints and count against provider-managed subscription usage and limits. GPT Image 2.5 and 2.6 are intentionally **not** listed on this route: their API model ids and new controls have not been verified against the private Codex subscription endpoint.
 
 The primary route is configured in `settings.json` as `default: { provider, model }`. Optional `fallback` and `compare` arrays contain the same provider/model pairs. `image_generate` uses the default with selective fallback; `image_compare` runs only for explicit model comparisons. Neither tool accepts arbitrary model/provider arguments. Use `/image-gen use <provider> <model>` to update the default safely without changing either list.
 
@@ -316,7 +316,7 @@ Follow the selected host's documentation for installation and current compatibil
 
 ## Built-in setup walkthrough
 
-### 1. OpenAI (`gpt-image-2` and GPT Image 2.5)
+### 1. OpenAI (`gpt-image-2`, GPT Image 2.5 and 2.6)
 
 ```sh
 export OPENAI_API_KEY=sk-...
@@ -327,6 +327,8 @@ export OPENAI_API_KEY=sk-...
 ```
 
 Choose `gpt-image-2.5-flare` for fast everyday generation or `gpt-image-2.5-sunburst` when editing precision matters most. Both expose `low`, `medium`, `high`, `xhigh`, `max`, and `auto` quality. Their `-2026-09-08` snapshots are also built in. The older `gpt-image-2` remains available.
+
+GPT Image 2.6 adds `gpt-image-2.6-flare` (fast iteration) and `gpt-image-2.6-sunburst` (detailed visual work). Both add `complexity` (`low`/`medium`/`high`, default `high`, no separate fee), native animated GIF output (`outputFormat: "gif"` with `frameCount` and `frameDurationMs`), native editable SVG output (`outputFormat: "svg"`; `n` must be 1), optional SVG author controls (`svgModel`/`svgReasoningEffort` when the account has SVG model selection enabled), and markup-guided edits (`markup`). They list `low`/`medium`/`high`/`auto` quality. GIF and SVG are generation-only Image API features: the edit endpoint does not support them, and they cannot be combined with reference images, masks, `outputCompression`, streaming, partial images, or prompt rewriting. Both features are account-gated (GIF preview access and SVG model selection); the provider returns the authoritative error when access is absent. The API reference and SDK bound `frameCount` to 2–16; the guide currently says 2–64, and this extension follows the API reference/SDK until the sources agree.
 
 ### 2. Google Gemini "Nano Banana"
 
@@ -687,7 +689,7 @@ sprite_generate({
 })
 ```
 
-Six frames default to a 2×3 grid. `frameCount` must equal `rows × columns`, subject to the configured `maxFrames` and a hard maximum of 16. Supported output formats are `png` (a static normalized sprite sheet), `apng` (the default animation), `webp` (a lossless animation with transparency), and `frames` (the existing PNG-frame option). Set `spriteGeneration.defaultFormat` in settings or override it with `format` on a call. All formats preserve the PNG sheet and individual PNG frames. APNG and WebP require at least two frames; use `format: "png"` or `"frames"` for a single sprite. GIF is intentionally not advertised because it reduces alpha and color fidelity. Model-aware `size`, `aspectRatio`, `imageSize`, and `quality` controls appear only when the configured route supports them.
+Six frames default to a 2×3 grid. `frameCount` must equal `rows × columns`, subject to the configured `maxFrames` and a hard maximum of 16. Supported output formats are `png` (a static normalized sprite sheet), `apng` (the default animation), `webp` (a lossless animation with transparency), and `frames` (the existing PNG-frame option). Set `spriteGeneration.defaultFormat` in settings or override it with `format` on a call. All formats preserve the PNG sheet and individual PNG frames. APNG and WebP require at least two frames; use `format: "png"` or `"frames"` for a single sprite. GIF is intentionally not advertised for sprites because it reduces alpha and color fidelity; native provider GIF output is a separate `image_generate` feature and is not a sprite format. Model-aware `size`, `aspectRatio`, `imageSize`, and `quality` controls appear only when the configured route supports them.
 
 Processing controls:
 
@@ -727,10 +729,16 @@ image_generate({
   aspectRatio?: string,            // Gemini models only — enum from the model's vocabulary
   imageSize?: string,              // Gemini tier enum; 3.1 Flash also exposes "512px"
   quality?: 'low'|'medium'|'high'|'xhigh'|'max'|'auto', // exact enum is model-specific
-  outputFormat?: 'png'|'jpeg'|'webp', // verified OpenAI/OpenRouter routes
+  outputFormat?: 'png'|'jpeg'|'webp'|'gif'|'svg', // verified OpenAI routes; gif/svg generation-only on 2.6
   background?: 'auto'|'transparent'|'opaque',
   outputCompression?: number,        // 0–100; JPEG/WebP only
+  complexity?: 'low'|'medium'|'high', // GPT Image 2.6; independent of quality
+  frameCount?: number,               // native GIF: 2–16, default 9
+  frameDurationMs?: number,          // native GIF: minimum 20 ms, default 200
+  svgModel?: string,                 // SVG author model (when SVG model selection is enabled)
+  svgReasoningEffort?: 'none'|'minimal'|'low'|'medium'|'high'|'xhigh'|'max',
   mask?: string,                     // precise OpenAI edit mask; requires image
+  markup?: string,                   // transparent annotation PNG; requires image, excludes mask
   negativePrompt?: string,           // Qwen 3 / discovered OpenRouter support
   seed?: number,
   promptEnhance?: boolean,
@@ -743,9 +751,9 @@ image_generate({
 })
 ```
 
-Returns the absolute file path(s) of saved images. Files land in `outputDir` (default `<cwd>/.pi/images`), filename pattern `<filename or model-UTC-stamp>.<ext>`. Result details also include elapsed time, a sanitized provider request id when available, and decoded output dimensions. Accounting preserves nested provider counters in `metadata.reportedUsage` (including cached-token details), plus normalized disjoint `metadata.tokenUsage` buckets when the API's semantics are known: `input` excludes `cacheRead` and `cacheWrite`, and `output` includes billable output tokens. Missing counters are not invented from image dimensions.
+Returns the absolute file path(s) of saved images. Files land in `outputDir` (default `<cwd>/.pi/images`), filename pattern `<filename or model-UTC-stamp>.<ext>`. GIF output is saved byte-for-byte as `.gif`, preserving the complete animation; SVG output is decoded as UTF-8 XML and saved as `.svg`. Result details also include elapsed time, a sanitized provider request id when available, and decoded output dimensions (PNG/JPEG/WebP; GIF and SVG have no header dimensions here). Accounting preserves nested provider counters in `metadata.reportedUsage` (including cached-token details), plus normalized disjoint `metadata.tokenUsage` buckets when the API's semantics are known: `input` excludes `cacheRead` and `cacheWrite`, and `output` includes billable output tokens. SVG responses report the author model's tokens separately under `metadata.reportedUsage.svg_usage`; they are not folded into image `tokenUsage` or cost. Missing counters are not invented from image dimensions.
 
-Optional desktop `resize` is local postprocessing, not a provider control: `size`, `aspectRatio` and `imageSize` still select the provider's native output. Resize uses the same 1–8192-edge / 40-million-pixel contract as search and supports still JPEG/PNG/WebP inputs, producing an exact-sized PNG copy. `contain` pads transparently and preserves the whole image; `cover` crops. The returned image `path` identifies the derivative, and `originalPath` identifies the untouched provider original. Resizing runs after successful original storage, with a separate processing timeout using the configured generation timeout value. If local resizing fails, times out or is cancelled, the original is returned with `resizeError`; do not automatically regenerate paid output. Without `resize`, existing format/output behavior is unchanged. This local option is not exposed by `image_compare`, the portable core or Durable APIs.
+Optional desktop `resize` is local postprocessing, not a provider control: `size`, `aspectRatio` and `imageSize` still select the provider's native output. Resize uses the same 1–8192-edge / 40-million-pixel contract as search and supports still JPEG/PNG/WebP inputs, producing an exact-sized PNG copy. `contain` pads transparently and preserves the whole image; `cover` crops. The returned image `path` identifies the derivative, and `originalPath` identifies the untouched provider original. GIF and SVG output are never locally resized: the original is preserved and `resizeError` explains that animation/vector output cannot be re-encoded this way. Resizing runs after successful original storage, with a separate processing timeout using the configured generation timeout value. If local resizing fails, times out or is cancelled, the original is returned with `resizeError`; do not automatically regenerate paid output. Without `resize`, existing format/output behavior is unchanged. This local option is not exposed by `image_compare`, the portable core or Durable APIs.
 
 `metadata.costDetails` uses a valid provider-reported cost first (including zero). Otherwise it uses `pi-ai.calculateCost` only when a trusted registry adapter supplies an exact, endpoint-matched image model, explicitly attests `costCompatibility: 'complete-four-bucket-token-pricing'`, and sufficient token usage is available; otherwise cost is `unknown`. Stock Pi catalog entries do not provide this attestation: their numeric rates alone may omit image fees or use default zeros, so they are not automatically treated as complete image prices. Calculated costs are labeled estimates, not provider charges. There are no local price tables, pixel/quality token estimates, or gateway-estimate fallbacks. GPT Image's separate text/image input rates cannot be represented by Pi's four-rate calculator and therefore do not use this fallback. Older Pi registries without image-model lookup still support generation and provider-reported costs, but cannot supply calculated costs.
 
@@ -759,12 +767,13 @@ Legacy `metadata.usage` retains top-level numeric counters, and legacy numeric `
   - **Codex subscription (`gpt-image-2`)**: the tool exposes `"auto"`, `"1024x1024"`, `"1536x1024"`, and `"1024x1536"`, not the public OpenAI API's arbitrary-size range.
   - **OpenAI API `gpt-image-2`**: `"auto"` or `"<w>x<h>"` — arbitrary sizes allowed (both edges divisible by 16, ratio ≤ 3:1, 655,360–8,294,400 px, longest edge ≤ 3840), beyond the standard `1024x1024`/`1536x1024`/`1024x1536`.
   - **GPT Image 2.5 Flare/Sunburst**: the same arbitrary `"<w>x<h>"` range as GPT Image 2 (multiples of 16, ratio 1:3–3:1, 655,360–8,294,400 px, longest edge ≤ 3840), plus `"auto"`. The standard recommended sizes remain `1024x1024`, `1536x1024`, and `1024x1536`; resolutions above `2560x1440` are experimental.
+  - **GPT Image 2.6 Flare/Sunburst**: the same arbitrary `"<w>x<h>"` range as 2.5 plus `"auto"`. For GIF output, `size` describes each frame and the combined frame/dimension/`n` budget must fit the model's limit; reduce `frameCount`, the frame dimensions, or `n` when the provider reports the request is too large.
   - **Meta Muse Image**: passed through the Responses API's `image_generation` tool; official cookbook examples include `1024x1024`, `1536x1024`, and `1024x1536`, but the field remains free-form for provider validation.
   - Omit `size` to use the model's own default (qwen-image-3.0 auto-picks from the prompt).
 - `aspectRatio` / `imageSize` replace `size` for **Gemini** models (they have no pixel-size knob): `aspectRatio` is an enum from the model's vocabulary (10–14 values), `imageSize` an enum of the model's tiers. Gemini 3 Pro exposes `1K`/`2K`/`4K`; Gemini 3.1 Flash also exposes `512px` (the exact upstream literal remains pending live verification). The field is hidden for fixed-resolution models: Gemini 3.1 Flash Lite is fixed at `1K`, and Gemini 2.5 Flash has no tier control.
-- `n` is model-specific and carries the model's documented ceiling in its description (Qwen 6, GPT Image 2/2.5 10). The extension enforces a universal maximum of 10 outputs per call. It is **hidden for Codex, Seedream, and Meta Muse Image** — those routes expose no count knob here, and direct callers are rejected if they request more than one output.
+- `n` is model-specific and carries the model's documented ceiling in its description (Qwen 6, GPT Image 2/2.5/2.6 10). The extension enforces a universal maximum of 10 outputs per call. SVG output requires `n: 1`; GIF output may use `n` greater than 1 to request several animations, subject to the provider's total pixel budget. It is **hidden for Codex, Seedream, and Meta Muse Image** — those routes expose no count knob here, and direct callers are rejected if they request more than one output.
 - `image` spells out the active model's documented reference-image contract in its description (formats, max count, per-image byte ceiling, dimension advice): qwen documents ≤ 3 images (JPG/JPEG/PNG/BMP/TIFF/WEBP/GIF, ≤ 10MB each), Seedream ≤ 10–14 (incl. HEIC/HEIF, ≤ 30MB), OpenAI API gpt-image-2 ≤ 16 (png/webp/jpg, ≤ 50MB), Codex ≤ 5 (PNG/WEBP/JPEG, ≤ 20MB), Gemini ≤ 3–14 (≤ 20MB), Meta Muse Image labels the extension's own recognized formats (PNG/JPEG/GIF/WEBP/BMP/TIFF/HEIC/HEIF) because the cookbook does not publish an exhaustive input contract. Provider-documented contracts remain advisory; the extension-wide 16-reference, 20MB-per-input, and 128MB-combined safety ceilings are enforced locally, and providers may enforce stricter rules.
-- `quality` appears **only** for a **built-in gpt-image** route — the built-in OpenAI provider on `gpt-image-*`, or an OpenRouter route whose model id is gpt-image (e.g. `openrouter/openai/gpt-image-2`). GPT Image 2 and the verified Codex route use `low`/`medium`/`high`/`auto`; GPT Image 2.5 Flare and Sunburst additionally expose `xhigh` and `max`. It is **omitted from the schema entirely** for:
+- `quality` appears **only** for a **built-in gpt-image** route — the built-in OpenAI provider on `gpt-image-*`, or an OpenRouter route whose model id is gpt-image (e.g. `openrouter/openai/gpt-image-2`). GPT Image 2, GPT Image 2.6, and the verified Codex route use `low`/`medium`/`high`/`auto`; GPT Image 2.5 Flare and Sunburst additionally expose `xhigh` and `max` (the API reference documents those two values only for 2.5). It is **omitted from the schema entirely** for:
   - Gemini, DashScope/Qwen, Ark/Seedream, and Meta Muse Image — their image APIs have no `quality` field (Seedream varies quality by `size` resolution tier instead);
   - **non-gpt-image routes** on the OpenAI/OpenRouter wire — e.g. built-in `openai/dall-e-3` (which uses `standard`/`hd`) or an OpenRouter route to a non-OpenAI model like Seedream — because the enum above is gpt-image's vocabulary, not the wire format's; and
   - custom providers by default, including OpenAI-*compatible* ones — wire format alone does **not** imply a quality vocabulary. A custom model may opt in by explicitly declaring `capabilities.qualityValues`; this is honored only for the custom OpenAI/OpenRouter adapters that forward `quality`.
@@ -773,7 +782,7 @@ Legacy `metadata.usage` retains top-level numeric counters, and legacy numeric `
 
 Advanced controls are also capability-gated:
 
-- OpenAI API GPT Image routes expose `outputFormat`, `background`, `outputCompression`, and `mask`. The private Codex subscription route exposes `background` and forwards `auto`, `transparent`, or `opaque`; it returns PNG images and does not expose the other public-API controls. A mask requires an `image` edit target; transparent output requires PNG or WebP.
+- OpenAI API GPT Image routes expose `outputFormat`, `background`, `outputCompression`, and `mask`. GPT Image 2.6 also exposes `complexity`, `frameCount`, `frameDurationMs`, `svgModel`, and `svgReasoningEffort`; 2.5 and 2.6 expose `markup`. `outputFormat` accepts `png`/`jpeg`/`webp` wherever the schema exposes it and additionally `gif`/`svg` on 2.6. GIF and SVG are generation-only and reject reference images, masks, `outputCompression`, streaming, partial images, and prompt rewriting. `svg` requires `n: 1`. `frameCount` is 2–16 per the API reference and SDK; the guide currently says 2–64, and this extension follows the reference/SDK until the sources agree. `frameDurationMs` has a 20 ms floor, default 200 ms, rounding to 10 ms with the SDK's 655,350 ms encoded-delay cap. Pass `svgModel` (and optionally `svgReasoningEffort`) only when the account enables SVG model selection; omit both otherwise. `markup` is a transparent annotation PNG over **the first** input image, needs the same dimensions after orientation, cannot be combined with `mask`, and is subject to the provider's 16,777,216-pixel per-image/annotation limit; this extension's inherited 20 MB per-input ceiling is stricter than the provider's 50 MB annotation limit. GIF-preview access and SVG model selection are account-gated; the provider's error is authoritative. The private Codex subscription route exposes `background` and forwards `auto`, `transparent`, or `opaque`; it returns PNG images and does not expose the other public-API controls. A mask requires an `image` edit target; transparent output requires PNG or WebP.
 - Qwen Image 3 routes expose `negativePrompt`, `seed`, `promptEnhance`, `enableThinking`, and `watermark`.
 - Seedream exposes `watermark`; supported non-Pro models also expose `seriesMaxImages` (1–10). Seedream 5.0 Pro does not support series output. A series is a related set, not independent `n` variants.
 - OpenRouter capability discovery caches the selected model's endpoint metadata for ten minutes and may add format, background, compression, seed, or negative-prompt controls. Discovery has a five-second deadline and safely falls back to the static/generic schema.
@@ -785,14 +794,20 @@ Because the schema is fixed at registration, switching models via `/image-gen re
 
 ### Tool result format
 
-`image_generate` includes native image attachments so image-capable Pi clients can show previews directly beneath the tool call, without waiting for the agent's reply. The first four outputs are eligible for previews, each fitted within 1024×1024 pixels and 384 KiB of base64 (at most 1.5 MiB across four previews). These are display copies only: saved originals, file paths, and result metadata stay unchanged. Vision-capable models can also inspect the attachments, so previews may add image input usage to subsequent model requests. Missing, unreadable, or unresizable previews are skipped without failing generation. Clients without inline image rendering can still use the saved paths and Markdown links. The `/image-gen generate` command continues to report paths through a text notification.
+`image_generate` includes native image attachments so image-capable Pi clients can show previews directly beneath the tool call, without waiting for the agent's reply. The first four outputs are eligible for previews, each fitted within 1024×1024 pixels and 384 KiB of base64 (at most 1.5 MiB across four previews). These are display copies only: saved originals, file paths, and result metadata stay unchanged. Vision-capable models can also inspect the attachments, so previews may add image input usage to subsequent model requests. Missing, unreadable, or unresizable previews are skipped without failing generation. SVG output is deliberately not rasterized or embedded: its saved vector original is reported by path and the result notes that no inline preview was built. Clients without inline image rendering can still use the saved paths and Markdown links. The `/image-gen generate` command continues to report paths through a text notification.
 
-The tool's text result is still shaped as ready-to-paste markdown the model can copy verbatim into its reply, so the UI renders the image inline:
+The tool's text result is still shaped as ready-to-paste markdown the model can copy verbatim into its reply, so the UI renders raster and GIF results inline. SVG results use an ordinary file link instead of an inline image embed, because the saved vector is deliberately not embedded or rasterized. Copy that link as a link; do not turn it into `![alt](…)`.
 
 ```
 Generated 1 image(s) via amaster (custom) (qwen-image-2.0). Show each one to the user as inline markdown — copy the lines below verbatim into your reply:
 
 ![white](/Users/.../white.png)
+```
+
+For an SVG result the line is an ordinary link instead:
+
+```
+[logo](/Users/.../logo.svg) (SVG file; keep this as a link)
 ```
 
 The `alt` text is the filename without its extension — i.e. whatever you passed as `filename`, or `<model>-<UTC-stamp>` if you didn't. When OpenAI returns a `revised_prompt`, it appears as a quote line under the image:
@@ -808,10 +823,12 @@ The markdown URL is platform-shaped so any CommonMark host (desktop, TUI, CLI) k
 
 `image` is always an array — pass `["path"]` for a single image, `["a", "b"]` for multi-image conditioning. Each entry must be:
 
-- **Local file path** — a regular png/jpeg/gif/webp/bmp/tiff/heic/heif file inside the session cwd (the active model's accepted formats may be narrower — the `image` parameter description lists them). Paths may be absolute or relative, but symlinks and paths outside cwd are rejected.
+- **Local file path** — a regular png/jpeg/gif/webp/bmp/tiff/heic/heif file inside the session cwd (the active model's accepted formats may be narrower — the `image` parameter description lists them). SVG is not a supported raster edit input. Paths may be absolute or relative, but symlinks and paths outside cwd are rejected.
 - **Public http(s) URL** — private, loopback, link-local, metadata, credentialed, and unsafe redirect destinations are rejected.
 
 Base64 strings and `data:` URIs are intentionally rejected — tool arguments don't survive megabyte-sized strings cleanly. If you have raw image bytes, write them to a file under the session cwd and pass that path.
+
+For **markup-guided edits** on GPT Image 2.5/2.6, pass the original as the first `image` and a separate transparent annotation PNG as `markup`. The annotation must match the first image's dimensions after orientation and contain transparent pixels; describe the change and the details to preserve. Markup cannot be combined with `mask`, and the provider's 16,777,216-pixel per-image/annotation limit applies.
 
 **Iterating on a previous result:** pass the previous output path back. The next image is conditioned on the last one:
 
@@ -827,7 +844,7 @@ Provider behavior:
 
 | Provider | Image input route |
 |---|---|
-| OpenAI (`gpt-image-2`, GPT Image 2.5 Flare/Sunburst and their snapshots) | `POST /v1/images/edits` (multipart). Supports multi-image and optional masks. |
+| OpenAI (`gpt-image-2`, GPT Image 2.5/2.6 Flare/Sunburst and their snapshots) | `POST /v1/images/edits` (multipart). Supports multi-image, optional masks, and markup on 2.5/2.6. |
 | ChatGPT Codex subscription (`gpt-image-2`) | `POST /backend-api/codex/images/edits` with JSON `images` entries. The model contract documents up to 5 references. |
 | Gemini (`gemini-3-pro-image`, `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, `gemini-2.5-flash-image`) | `inline_data` parts prepended to the user message. Supports multi-image. |
 | DashScope (`qwen-image-3.0-pro`, `qwen-image-3.0`, `qwen-image-2.0-pro`, `qwen-image-2.0`) | `image` parts in `messages[].content`. Up to 3 images. |

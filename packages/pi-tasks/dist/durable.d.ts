@@ -18,7 +18,10 @@ export type DurableTodo = {
     taskId: string;
     workId: string;
     taskName: string;
+    /** Hidden coordination metadata: owner declaration, artifact paths, parent IDs. */
     taskInfo: string;
+    /** The only user-visible task text. */
+    finalThoughts?: string;
     status: DurableTaskStatus;
     blockedReason: string | null;
     completionPercent: number | null;

@@ -4,14 +4,15 @@ import type { ImageArgs, ImageDefaults, ResolvedImageRoute } from './protocol.js
 
 export const DEFAULT_KEYS = [
   'n', 'size', 'aspectRatio', 'imageSize', 'quality', 'outputFormat', 'background',
-  'outputCompression', 'negativePrompt', 'seed', 'promptEnhance', 'enableThinking',
+  'outputCompression', 'complexity', 'frameCount', 'frameDurationMs', 'svgModel',
+  'svgReasoningEffort', 'negativePrompt', 'seed', 'promptEnhance', 'enableThinking',
   'watermark', 'seriesMaxImages',
 ] as const satisfies ReadonlyArray<keyof ImageDefaults>;
-const PROVIDER_KEYS = new Set(['prompt', 'image', 'mask', 'filename', ...DEFAULT_KEYS]);
+const PROVIDER_KEYS = new Set(['prompt', 'image', 'mask', 'markup', 'filename', ...DEFAULT_KEYS]);
 const CATALOG_KEYS = new Set(['prompt', 'image', 'size', 'quality', 'background', 'outputFormat']);
 const STRING_KEYS = new Set([
-  'size', 'aspectRatio', 'imageSize', 'quality', 'outputFormat', 'background',
-  'negativePrompt', 'filename', 'mask',
+  'size', 'aspectRatio', 'imageSize', 'quality', 'outputFormat', 'background', 'complexity',
+  'svgModel', 'svgReasoningEffort', 'negativePrompt', 'filename', 'mask',
 ]);
 const BOOLEAN_KEYS = new Set(['promptEnhance', 'enableThinking', 'watermark']);
 
@@ -46,13 +47,14 @@ export function validateArguments(
     for (const value of record.image) checkReference(value, route.kind === 'catalog');
   }
   if (record.mask !== undefined) checkReference(record.mask, false);
+  if (record.markup !== undefined) checkReference(record.markup, false);
   return record;
 }
 
 function checkScalar(key: string, value: unknown): void {
   if (STRING_KEYS.has(key) && typeof value !== 'string') fail(`${key} must be a string.`);
   if (BOOLEAN_KEYS.has(key) && typeof value !== 'boolean') fail(`${key} must be boolean.`);
-  if (['n', 'outputCompression', 'seed', 'seriesMaxImages'].includes(key) &&
+  if (['n', 'outputCompression', 'seed', 'seriesMaxImages', 'frameCount', 'frameDurationMs'].includes(key) &&
       (typeof value !== 'number' || !Number.isFinite(value))) fail(`${key} must be a finite number.`);
 }
 

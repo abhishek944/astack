@@ -15,7 +15,7 @@ export function prepareImageRequest(
   const supplied: Record<string, unknown> = { prompt: record.prompt };
   const effective: Record<string, unknown> = { prompt: record.prompt };
   const controlSources: ControlSources = { prompt: 'explicit' };
-  for (const key of ['image', 'mask', 'filename', ...DEFAULT_KEYS] as const) {
+  for (const key of ['image', 'mask', 'markup', 'filename', ...DEFAULT_KEYS] as const) {
     if (record[key] !== undefined) {
       const value = Array.isArray(record[key]) ? Object.freeze([...record[key]]) : record[key];
       supplied[key] = value;
@@ -37,6 +37,9 @@ export function prepareImageRequest(
     .map((url, index) => Object.freeze({ url, role: 'image' as const, index }));
   if (typeof effective.mask === 'string') {
     references.push(Object.freeze({ url: effective.mask, role: 'mask', index: 0 }));
+  }
+  if (typeof effective.markup === 'string') {
+    references.push(Object.freeze({ url: effective.markup, role: 'markup', index: 0 }));
   }
   return Object.freeze({
     route: snapshot,

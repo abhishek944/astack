@@ -1,0 +1,67 @@
+{
+  "name": "@abhishek944/pi-langfuse",
+  "version": "0.1.0",
+  "description": "Tracing-only Pi extension and SDK factory that records Pi-visible agent, generation, tool and compaction activity to Langfuse.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "langfuse",
+    "tracing",
+    "opentelemetry"
+  ],
+  "files": [
+    "dist/",
+    "README.md",
+    "STANDALONE.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "dependencies": {
+    "@langfuse/otel": "6.1.1",
+    "@langfuse/tracing": "6.1.1",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/sdk-trace-base": "2.12.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
+    "@earendil-works/pi-coding-agent": "1.1.0",
+    "@types/node": "^26.1.2",
+    "typescript": "^7.0.2"
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "check": "npm pack --dry-run"
+  },
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abhishek944/astack.git",
+    "directory": "packages/pi-langfuse"
+  }
+}

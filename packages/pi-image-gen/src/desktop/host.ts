@@ -1,6 +1,6 @@
 import { safeFetch, trustedHostsFromUrls } from '@amaster.ai/pi-shared';
 import { describeDownloadError, ImageGenError, throwDownloadHttpError } from '../errors.js';
-import { MAX_IMAGE_BYTES, sniffMime } from '../image-input.js';
+import { MAX_IMAGE_BYTES, sniffOutputMime } from '../image-input.js';
 import { resolveImageInputValue } from '../node/inputs.js';
 import { getAdapter } from '../providers/index.js';
 import { readResponseBytes } from '../core/response.js';
@@ -27,8 +27,9 @@ export function desktopHost(
     adapter: getAdapter(request.route.provider.api),
     ...(options.modelRegistry ? { providerRuntime: { modelRegistry: options.modelRegistry } } : {}),
     loadOriginal: (reference, signal) => resolveImageInputValue(reference.url,
-      reference.role === 'image' && (request.effective.image?.length ?? 0) > 1
-        ? `Image input #${reference.index + 1}` : 'Image input', options.cwd, safeFetch, signal),
+      reference.role === 'markup' ? 'Markup annotation'
+        : reference.role === 'image' && (request.effective.image?.length ?? 0) > 1
+          ? `Image input #${reference.index + 1}` : 'Image input', options.cwd, safeFetch, signal),
     async loadOutput(url, signal): Promise<Original> {
       let response: Response;
       try { response = await safeFetch(url, { signal: signal ?? null }, { trustedHosts }); }
@@ -47,7 +48,7 @@ export function desktopHost(
         }
         throw describeDownloadError('generated image', url, { rejected: error });
       }
-      const mimeType = sniffMime(bytes);
+      const mimeType = sniffOutputMime(bytes);
       if (!mimeType) throw new ImageGenError('Provider returned a file that is not a supported image.', 'invalid image output');
       return { bytes, mimeType };
     },

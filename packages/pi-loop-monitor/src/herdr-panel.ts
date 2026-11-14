@@ -56,8 +56,13 @@ function blocks(value: unknown): Record<string, unknown>[] {
   return [...(node.type === "block" ? [node] : []), ...(Array.isArray(node.children) ? node.children.flatMap(blocks) : [])];
 }
 
+export interface HerdrActivityPaneOptions {
+  /** Close this terminal's activity pane from an earlier session/runtime before opening the current one. */
+  replaceStale?: boolean;
+}
+
 /** Show beside this terminal, or hide only its same-session activity mod panes. */
-export async function setHerdrActivityPaneVisible(ctx: ExtensionContext, visible: boolean, snapshot: string | undefined): Promise<void> {
+export async function setHerdrActivityPaneVisible(ctx: ExtensionContext, visible: boolean, snapshot: string | undefined, options: HerdrActivityPaneOptions = {}): Promise<void> {
   const sessionId = ctx.sessionManager.getSessionId();
   const terminal = process.env.HC_TERMINAL_ID;
   if (!terminal || !/^t[0-9a-z]+$/.test(terminal)) throw new Error("Open this Pi session in local Herdr Core first.");
@@ -92,12 +97,23 @@ export async function setHerdrActivityPaneVisible(ctx: ExtensionContext, visible
   if (!snapshot || !isAbsolute(snapshot)) throw new Error("Activity display is unavailable. Restart/resume this Pi session and try again.");
   const projection = object(JSON.parse(await readFile(snapshot, "utf8")));
   if (projection?.source !== "pi-loop-monitor" || projection.sessionId !== sessionId || projection.terminal !== terminal || !projection.live || typeof projection.runtimeId !== "string") throw new Error("The activity projection does not match this live Pi runtime.");
-  const tasks = paneBlocks.filter((block) => {
+  const closed = new Set<string>();
+  if (options.replaceStale) {
+    for (const block of paneBlocks) {
+      const content = object(block.content); const binding = object(content?.props);
+      if (typeof block.id !== "string" || content?.terminal != null || content?.mod !== "pi-loop-monitor" || binding?.terminal !== terminal) continue;
+      if (binding.sessionId === sessionId && binding.runtimeId === projection.runtimeId) continue;
+      await app(["do", "pane.close", JSON.stringify({ pane: block.id })], ctx);
+      closed.add(block.id);
+    }
+  }
+  const currentBlocks = closed.size ? paneBlocks.filter((block) => typeof block.id !== "string" || !closed.has(block.id)) : paneBlocks;
+  const tasks = currentBlocks.filter((block) => {
     const content = object(block.content); const binding = object(content?.props);
     return content?.mod === "pi-tasks" && binding?.sessionId === sessionId && binding.terminal === terminal;
   });
-  const anchor = tasks[0] ?? paneBlocks.find((block) => object(block.content)?.terminal === terminal)!;
-  const existing = paneBlocks.filter((block) => object(block.content)?.mod === "pi-loop-monitor");
+  const anchor = tasks[0] ?? currentBlocks.find((block) => object(block.content)?.terminal === terminal)!;
+  const existing = currentBlocks.filter((block) => object(block.content)?.mod === "pi-loop-monitor");
   if (existing.length) {
     const binding = object(object(existing[0]?.content)?.props);
     if (existing.length !== 1 || binding?.sessionId !== sessionId || binding.runtimeId !== projection.runtimeId || binding.terminal !== terminal) throw new Error("This tab already has an activity view from another runtime. Close only that view, then reopen it from the intended Pi session.");

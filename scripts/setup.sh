@@ -27,6 +27,11 @@ SKIP_GROUPS=""
 KEEP_PACKAGE_PATHS=0
 NO_CONFIG=0
 ALLOW_ROOT=0
+BROWSER=browser-use
+BROWSER_EXPLICIT=0
+BROWSER_SELECTION_NOTE="default"
+BROWSER_SKIPPED=0
+BROWSER_SKILL_RECONCILED=0
 NODE_MIN=22.19.0
 NPM_MIN=10.0.0
 PI_MIN=1.4.0
@@ -44,6 +49,11 @@ It is non-interactive and rerunnable.
   --agent-dir DIR          Pi agent config directory (default: $PI_CODING_AGENT_DIR or ~/.pi/agent).
   --report-dir DIR         Write setup-report.md, setup-report.json and logs there.
   --skip LIST              Skip groups: runtimes,packages,skills,desktop,chrome,browser,herdr,cua,slack.
+  --browser BACKEND        Browser backend for this host: browser-use (default), aside or none.
+                           browser-use installs the uv/Python CLI and its managed skill. aside
+                           installs the bundled managed aside-browser skill and never launches,
+                           logs in or updates Aside. none skips both. The choice is explicit; it
+                           is never inferred from the OS.
   --desktop                Opt in to the private Ubuntu/Debian virtual desktop for Cua:
                            Xvfb + full XFCE + session D-Bus + AT-SPI + ffmpeg, started through
                            a systemd user unit. Not installed on the default path.
@@ -73,6 +83,9 @@ while [ $# -gt 0 ]; do
     --skip)
       [ $# -ge 2 ] || { echo "ERROR: --skip needs a value" >&2; exit 2; }
       SKIP_GROUPS=$2; shift ;;
+    --browser)
+      [ $# -ge 2 ] || { echo "ERROR: --browser needs a value" >&2; exit 2; }
+      BROWSER=$2; BROWSER_EXPLICIT=1; BROWSER_SELECTION_NOTE="explicit --browser"; shift ;;
     --desktop) ASTACK_DESKTOP=1 ;;
     --no-desktop-start) NO_DESKTOP_START=1 ;;
     --keep-package-paths) KEEP_PACKAGE_PATHS=1 ;;
@@ -84,6 +97,14 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+case "$BROWSER" in
+  browser-use|aside|none) ;;
+  *)
+    echo "ERROR: unknown --browser value: $BROWSER (expected browser-use, aside or none)" >&2
+    exit 2
+    ;;
+esac
 
 # shellcheck source=lib/setup/common.sh
 . "$COMMON"
@@ -114,6 +135,28 @@ USER_HOME=$(effective_home)
 ASTACK_HOME=${ASTACK_HOME:-"$USER_HOME/.local/share/astack"}
 ASTACK_BIN="$ASTACK_HOME/bin"
 SETUP_STAMP=$(date -u '+%Y%m%dT%H%M%SZ')
+
+# Resolve the browser selection before any side effect, so the skill phase and
+# report rows use the selection this run actually uses.
+# Without an explicit --browser, reuse the choice this installation recorded in
+# env.sh so reruns stay idempotent. It is never inferred from the OS.
+if [ "$BROWSER_EXPLICIT" -eq 0 ]; then
+  RECORDED_BROWSER=""
+  if [ -n "${ASTACK_BROWSER:-}" ]; then
+    RECORDED_BROWSER=$ASTACK_BROWSER
+    BROWSER_SELECTION_NOTE="from ASTACK_BROWSER"
+  elif [ -r "$ASTACK_HOME/env.sh" ]; then
+    RECORDED_BROWSER=$(sed -n 's/^export ASTACK_BROWSER="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$ASTACK_HOME/env.sh" 2>/dev/null | head -n 1)
+    if [ -n "$RECORDED_BROWSER" ]; then
+      BROWSER_SELECTION_NOTE="recorded in $ASTACK_HOME/env.sh"
+    fi
+  fi
+  case "$RECORDED_BROWSER" in
+    browser-use|aside|none) BROWSER=$RECORDED_BROWSER ;;
+    *) BROWSER_SELECTION_NOTE="default" ;;
+  esac
+fi
+
 if [ -n "$REPORT_DIR" ]; then
   LOG_DIR=$REPORT_DIR
   mkdir -p "$REPORT_DIR"
@@ -147,6 +190,7 @@ printf '  arch:        %s\n' "$ARCH"
 printf '  package mgr: %s\n' "$PKG_MANAGER"
 printf '  desktop:     %s\n' "$DESKTOP"
 printf '  agent dir:   %s\n' "$AGENT_DIR"
+printf '  browser:     %s\n' "$BROWSER"
 printf '  ASTACK_HOME: %s\n' "$ASTACK_HOME"
 [ -n "$REPORT_DIR" ] && printf '  report dir:  %s\n' "$REPORT_DIR"
 
@@ -164,6 +208,12 @@ skip_group() {
   esac
 }
 
+# A skipped browser group must not change browser skills at all: the shared-skill
+# phase still syncs the non-browser set and verifies with browser skills skipped.
+if skip_group browser; then
+  BROWSER_SKIPPED=1
+fi
+
 if skip_group runtimes; then
   record_cap runtimes manual "skipped by --skip runtimes"
 else
@@ -177,10 +227,32 @@ else
   register_packages || true
 fi
 
+if skip_group chrome; then
+  record_cap chrome manual "skipped by --skip chrome"
+else
+  ensure_chrome || true
+fi
+
+# The shared-skill sync installs exactly the selected managed browser skill, so
+# the browser phase runs after it: it can reconcile the previous browser skill
+# only once the selected one is present.
 if skip_group skills; then
   record_cap shared-skills manual "skipped by --skip skills"
 else
   install_skills || true
+fi
+
+if [ "$BROWSER_SKIPPED" -eq 1 ]; then
+  record_cap browser manual "skipped by --skip browser (selected backend: $BROWSER, $BROWSER_SELECTION_NOTE)"
+  record_cap browser-skill manual "skipped by --skip browser"
+  if [ "$BROWSER" = browser-use ]; then
+    record_cap browser-use manual "skipped by --skip browser"
+  fi
+else
+  ensure_browser_skill || true
+  if [ "$BROWSER" = browser-use ]; then
+    ensure_browser_use || true
+  fi
 fi
 
 if [ "$ASTACK_DESKTOP" -eq 1 ]; then
@@ -191,18 +263,6 @@ if [ "$ASTACK_DESKTOP" -eq 1 ]; then
   fi
 else
   desktop_note_not_requested
-fi
-
-if skip_group chrome; then
-  record_cap chrome manual "skipped by --skip chrome"
-else
-  ensure_chrome || true
-fi
-
-if skip_group browser; then
-  record_cap browser-use manual "skipped by --skip browser"
-else
-  ensure_browser_use || true
 fi
 
 if skip_group herdr; then
@@ -231,6 +291,8 @@ fi
 if [ "$ASTACK_DESKTOP" -eq 1 ] && ! skip_group desktop; then
   desktop_report || true
 fi
+
+write_env_file
 
 report_manual_items
 write_reports

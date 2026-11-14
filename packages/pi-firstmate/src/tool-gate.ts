@@ -24,14 +24,19 @@ export const APPROVED_PACKAGES = new Set([
 	"@abhishek944/pi-loop-monitor",
 	"@abhishek944/pi-decisions",
 	"@abhishek944/pi-herdr",
+	"@abhishek944/pi-schedulers",
 ]);
 
+const COORDINATOR_ONLY_PACKAGES = new Set(["@abhishek944/pi-schedulers"]);
+
 export const COORDINATOR_TOOLS_DESCRIPTION =
-	"read, grep, find, ls and installed pi-tasks, pi-loop-monitor, pi-decisions and pi-herdr tools";
+	"read, grep, find, ls and installed pi-tasks, pi-loop-monitor, pi-decisions, pi-herdr and coordinator-only pi-schedulers tools";
 
 type ToolHost = Pick<ExtensionAPI, "getActiveTools" | "getAllTools" | "setActiveTools">;
 
 export interface ToolGate {
+	/** Actual installed registrations that must never enter the ordinary-tool baseline. */
+	coordinatorOnlyNames(): Set<string>;
 	/** Whether coordinator mode may call this tool. */
 	permits(toolName: string): boolean;
 	/** Hide every active tool outside the allowlist and return the hidden names. */
@@ -51,26 +56,25 @@ function sourceBaseDir(sourceInfo: SourceInfo): string | undefined {
 }
 
 export function createToolGate(pi: ToolHost): ToolGate {
-	const packageApproval = new Map<string, boolean>();
+	const sourcePackages = new Map<string, string | null>();
 
 	// Package identity comes from the registration's installed package root, not
 	// from a tool name list or self-declared annotations. The extension entry can
 	// live in `dist/` (explicit extension paths) or the package root (discovered
 	// packages), so walk to the nearest manifest. A missing or unreadable manifest
 	// stays unapproved so new or unexpected tools fail closed.
-	function approvedSource(sourceInfo: SourceInfo): boolean {
+	function sourcePackage(sourceInfo: SourceInfo): string | null {
 		const baseDir = sourceBaseDir(sourceInfo);
-		if (baseDir === undefined) return false;
-		const cached = packageApproval.get(baseDir);
+		if (baseDir === undefined) return null;
+		const cached = sourcePackages.get(baseDir);
 		if (cached !== undefined) return cached;
 
-		let approved = false;
+		let packageName: string | null = null;
 		let directory = baseDir;
 		while (true) {
 			try {
 				const manifest: unknown = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
-				approved =
-					isRecord(manifest) && typeof manifest.name === "string" && APPROVED_PACKAGES.has(manifest.name);
+				packageName = isRecord(manifest) && typeof manifest.name === "string" ? manifest.name : null;
 				break;
 			} catch {
 				const parent = dirname(directory);
@@ -78,8 +82,8 @@ export function createToolGate(pi: ToolHost): ToolGate {
 				directory = parent;
 			}
 		}
-		packageApproval.set(baseDir, approved);
-		return approved;
+		sourcePackages.set(baseDir, packageName);
+		return packageName;
 	}
 
 	// Rebuild from the live registry so tools registered after session start are
@@ -87,12 +91,18 @@ export function createToolGate(pi: ToolHost): ToolGate {
 	function allowedNames(): Set<string> {
 		const allowed = new Set(INSPECTION_TOOLS);
 		for (const tool of pi.getAllTools()) {
-			if (approvedSource(tool.sourceInfo)) allowed.add(tool.name);
+			if (APPROVED_PACKAGES.has(sourcePackage(tool.sourceInfo) ?? "")) allowed.add(tool.name);
 		}
 		return allowed;
 	}
 
 	return {
+		coordinatorOnlyNames() {
+			return new Set(pi.getAllTools()
+				.filter((tool) => COORDINATOR_ONLY_PACKAGES.has(sourcePackage(tool.sourceInfo) ?? ""))
+				.map((tool) => tool.name));
+		},
+
 		permits(toolName) {
 			if (INSPECTION_TOOLS.has(toolName)) return true;
 			try {

@@ -6,7 +6,7 @@ import { registerDelegatedTimeTools } from "./delegated-time.js";
 import { GitStatusCache } from "./git-status.js";
 import { setHerdrTasksPaneVisible } from "./herdr-panel.js";
 import { openRepository, openSession, readOpenCommand } from "./open-repository.js";
-import { readPanelSettings } from "./panel-settings.js";
+import { readHerdrPanelSettings, readPanelSettings } from "./panel-settings.js";
 import { TaskState } from "./state.js";
 import { safeSingleLine } from "./text.js";
 import { registerTaskTiming } from "./timing.js";
@@ -21,6 +21,26 @@ export default function tasksExtension(pi) {
     const getOpenCommand = () => readOpenCommand(getSettings());
     let visibleMode = "floating";
     panel = new TasksPanelHost(state, git, getOpenCommand);
+    async function openHerdrTasksPaneOnStart(ctx) {
+        if (!process.env.HC_TERMINAL_ID)
+            return;
+        let enabled;
+        try {
+            enabled = readHerdrPanelSettings(getSettings()).enabled;
+        }
+        catch (error) {
+            ctx.ui.notify(error instanceof Error ? error.message : "Invalid Herdr panel settings.", "error");
+            return;
+        }
+        if (!enabled)
+            return;
+        try {
+            await setHerdrTasksPaneVisible(ctx, true, state.snapshotPath, getOpenCommand(), { replaceStale: true });
+        }
+        catch {
+            // The native pane is an optional display; /works herdr-on reports the reason.
+        }
+    }
     registerTaskTools(pi, state);
     registerDelegatedTimeTools(pi, state);
     registerTaskTiming(pi, state);
@@ -87,7 +107,7 @@ export default function tasksExtension(pi) {
         panel?.setMode(mode);
         ctx.ui.notify(`Works compact display: ${mode}`, "info");
     });
-    pi.on("session_start", (event, ctx) => {
+    pi.on("session_start", async (event, ctx) => {
         state.restore(ctx, event.reason === "fork");
         git.setCwd(ctx.cwd);
         try {
@@ -99,8 +119,10 @@ export default function tasksExtension(pi) {
             panel?.setMode("off");
             ctx.ui.notify(error instanceof Error ? error.message : "Invalid task panel settings.", "error");
         }
-        if (ctx.mode === "tui")
+        if (ctx.mode === "tui") {
             panel?.attach(ctx.ui, ctx.cwd, ctx.sessionManager.getSessionId());
+            await openHerdrTasksPaneOnStart(ctx);
+        }
     });
     pi.on("tool_result", (event) => {
         if (event.toolName === "write" || event.toolName === "edit" || event.toolName === "bash")

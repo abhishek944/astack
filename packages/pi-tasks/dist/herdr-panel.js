@@ -77,7 +77,7 @@ function blocks(value) {
     return [...(node.type === "block" ? [node] : []), ...(Array.isArray(node.children) ? node.children.flatMap(blocks) : [])];
 }
 /** Show beside this terminal, or hide only its same-session Tasks mod panes. */
-export async function setHerdrTasksPaneVisible(ctx, visible, snapshot, openCommand = ["cursor"]) {
+export async function setHerdrTasksPaneVisible(ctx, visible, snapshot, openCommand = ["cursor"], options = {}) {
     if (visible && (typeof snapshot !== "string" || !isAbsolute(snapshot))) {
         throw new Error("This Pi instance has no session task snapshot binding. Restart Pi, resume this session, then run /works herdr-on again.");
     }
@@ -124,6 +124,16 @@ export async function setHerdrTasksPaneVisible(ctx, visible, snapshot, openComma
                 if (existing.length) {
                     await app(["do", "pane.focus", JSON.stringify({ pane: existing[0].id })], ctx.cwd, ctx.signal);
                     return;
+                }
+                if (options.replaceStale) {
+                    for (const pane of panes) {
+                        const content = object(pane.content);
+                        const binding = object(content?.props);
+                        if (typeof pane.id === "string" && content?.terminal == null && content?.mod === "pi-tasks"
+                            && binding?.terminal === terminal && binding.sessionId !== sessionId) {
+                            await app(["do", "pane.close", JSON.stringify({ pane: pane.id })], ctx.cwd, ctx.signal);
+                        }
+                    }
                 }
                 const activity = panes.find((pane) => matches(pane, "pi-loop-monitor"));
                 await installBundledMod(appHome);
