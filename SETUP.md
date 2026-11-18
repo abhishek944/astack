@@ -20,7 +20,7 @@ npm run setup:check               # same as --check, after Node exists
 | Packages | Runs each package's own `npm ci`/`npm install` and `build` where defined. No workspaces, hoisting, or shared lockfile. |
 | Pi registration | Merges the 11 local package paths into the Pi agent `settings.json`, replacing same-name entries from older checkouts/npm/git, and verifies with `pi list`. |
 | Shared skills | Runs `skills/pi-herdr-skills/scripts/install.sh`. Modified global skills are preserved and reported, never force-replaced. |
-| Browser | Explicit `--browser browser-use|aside|none` selection. `browser-use` (default) installs/repairs uv + the Python CLI and verifies `browser_harness`. `aside` installs the bundled managed `aside-browser` skill and never launches, logs in, updates or registers anything for Aside. `none` provisions no browser backend or browser skill. |
+| Browser | Explicit `--browser browser-use|aside|both|none` selection. `browser-use` (default) installs/repairs uv + the Python CLI and verifies `browser_harness`. `aside` installs the bundled managed `aside-browser` skill and never launches, logs in, updates or registers anything for Aside. `both` keeps that skill and the `browser-use` skill installed side by side and also provisions the CLI. `none` provisions no browser backend or browser skill. |
 | Herdr | Reuses `hc`/`herdr-app` or runs the official installers. GUI capability is reported separately from binary presence and is informational: `AgentCreate` defaults to Core-only and needs a window only when the caller passes `present: true`. |
 | Cua | Reuses/installs the local Cua Driver on desktop hosts, reports macOS permission status read-only, and adds `cua-driver mcp` to `mcp.json` when absent. |
 | Desktop | Opt-in only (`--desktop`): Xvfb + full XFCE + session D-Bus + AT-SPI + ffmpeg, wired through a systemd user unit. The default path never installs a GUI. |
@@ -44,9 +44,10 @@ A version command never proves GUI readiness. Herdr app, Cua, and desktop use ar
 --agent-dir DIR          Pi agent config directory (default $PI_CODING_AGENT_DIR or ~/.pi/agent).
 --report-dir DIR         Write setup-report.md, setup-report.json and logs there.
 --skip LIST              Skip groups: runtimes,packages,skills,desktop,chrome,browser,herdr,cua,slack.
---browser BACKEND        Browser backend: browser-use (default), aside, or none. Explicit; never
-                         inferred from the OS. Reused from the recorded env.sh on rerun. aside
-                         installs the bundled managed aside-browser skill.
+--browser BACKEND        Browser backend: browser-use (default), aside, both, or none. Explicit;
+                         never inferred from the OS. Reused from the recorded env.sh on
+                         rerun. aside installs the bundled managed aside-browser skill;
+                         both installs it alongside browser-use.
 --desktop                Opt in to the private Ubuntu/Debian virtual desktop (Xvfb, full XFCE,
                          session D-Bus, AT-SPI, ffmpeg) and its systemd user unit.
 --no-desktop-start       Install and enable the desktop unit without starting it now.
@@ -66,26 +67,28 @@ The backend is declared, never inferred. Nothing about the host OS, the architec
 |---|---|---|
 | `browser-use` (default) | installs/repairs uv + the Python `browser-use` CLI, verifies `browser_harness` | managed `browser-use` skill, the isolated-Chrome workflow |
 | `aside` | none. Setup only reports the Aside CLI version; it never launches Aside, logs in, updates it or registers its MCP server | managed `aside-browser` skill bundled from the vendor v4 entry point; the conflicting broad `browser-use` skill is removed |
+| `both` | installs/repairs uv + the Python `browser-use` CLI, verifies `browser_harness` | both managed skills, installed and kept side by side. Aside serves sites the user is already signed in to; `browser-use` stays the isolated headless testing browser, and no cookies, storage or profile are transferred between them |
 | `none` | none | no browser skill installed or removed; an existing copy is neither changed nor verified |
 
 ```bash
 bash scripts/setup.sh --check --browser aside
 bash scripts/setup.sh --browser aside
 bash scripts/setup.sh --browser browser-use
+bash scripts/setup.sh --browser both
 bash scripts/setup.sh --browser none
 ```
 
 `--browser aside` installs the vendored `aside-browser` entry point from `skills/pi-herdr-skills/skills/aside-browser/SKILL.md`. That file keeps the vendor skill supplied for this repository unchanged and appends a labeled Astack notes section, is listed in `skills-manifest.json`, and is mirrored to `~/.agents/skills/aside-browser/` by the shared installer. Setup never runs `aside skills install`, because the bundled copy is the reviewed source. The Aside CLI still supplies the live instructions through `aside guide`.
 
-Switching a host to `aside` moves a **content-identical** managed `~/.agents/skills/browser-use` copy to `<agent-dir>/skills-backups/browser-use.<stamp>` and reports the backup path. A locally modified copy is preserved and reported `manual`, and `browser-use` is kept when `aside-browser` is not installed, so a host never ends up with no browser skill. A locally modified installed `aside-browser` is likewise preserved; setup reports the shared-skill conflict and leaves the edit in place.
+Switching a host to `aside` moves a **content-identical** managed `~/.agents/skills/browser-use` copy to `<agent-dir>/skills-backups/browser-use.<stamp>` and reports the backup path. A locally modified copy is preserved and reported `manual`, and `browser-use` is kept when `aside-browser` is not installed, so a host never ends up with no browser skill. A locally modified installed `aside-browser` is likewise preserved; setup reports the shared-skill conflict and leaves the edit in place. `--browser both` is the explicit way to keep both managed skills without moving either; it installs the missing one and reconciles nothing.
 
 `--skip browser` leaves browser skills exactly as they are: the shared-skill phase syncs and verifies only the non-browser set, installs no browser skill, and does not move or remove an existing one. The backend check is reported as skipped.
 
-The selection is written to `env.sh` as `ASTACK_BROWSER` and reused by later runs that omit `--browser`, so a rerun cannot silently switch a host back. `skills/pi-herdr-skills/scripts/check-repo.sh` (and therefore `npm run check:skills`) reads the same value: `--browser`, then `$ASTACK_BROWSER`, then `env.sh`, then the `browser-use` default. On an `aside` host it requires the managed `aside-browser` skill, requires `browser-use` to be absent, and fails with the exact path when a preserved copy contradicts the selection.
+The selection is written to `env.sh` as `ASTACK_BROWSER` and reused by later runs that omit `--browser`, so a rerun cannot silently switch a host back. `skills/pi-herdr-skills/scripts/check-repo.sh` (and therefore `npm run check:skills`) reads the same value: `--browser`, then `$ASTACK_BROWSER`, then `env.sh`, then the `browser-use` default. On an `aside` host it requires the managed `aside-browser` skill, requires `browser-use` to be absent, and fails with the exact path when a preserved copy contradicts the selection. On a `both` host it requires both managed skills to match the repository and has no absence rule.
 
-Going the other way is reported, not deleted: with the `browser-use` default, an installed `aside-browser` skill makes the run report `aside-browser-skill` `manual`, because both would claim the browser default. Setup leaves the installed copy untouched, and `check-repo.sh` does not verify a browser skill that is not selected, so this state does not red the shared-skill check. Reconcile it manually if only one browser default should load.
+Going the other way is reported, not deleted: with the `browser-use` default, an installed `aside-browser` skill makes the run report `aside-browser-skill` `manual`, because one selection was recorded without it. Setup leaves the installed copy untouched, and `check-repo.sh` does not verify a browser skill that is not selected, so this state does not red the shared-skill check. Record `--browser both` if both should stay and be verified.
 
-Selecting `aside` or `none` also means the `browser-use` **CLI** is not provisioned by that selection; an existing CLI is left in place. `packages/pi-grill-me`'s viewport capture and any `ui-ux-testing` browser route that needs that CLI therefore still require a host that selects and provides `browser-use`.
+Selecting `aside` or `none` also means the `browser-use` **CLI** is not provisioned by that selection; an existing CLI is left in place. `both` does provision the CLI. `packages/pi-grill-me`'s viewport capture and any `ui-ux-testing` browser route that needs that CLI therefore require a host that selects `browser-use` or `both`.
 
 ## Config preservation
 
@@ -100,7 +103,7 @@ Object-form package entries keep their `extensions`, `skills`, `prompts`, and `t
 
 The shared-skill installer is conflict-safe: if a global skill was modified, the setup reports `manual` with the conflict names and still installs missing/non-conflicting skills using its additive `--skip-conflicts` mode. Conflicting same-name skills are left untouched. Review the diff, then rerun `skills/pi-herdr-skills/scripts/install.sh --force` only if replacement is intended; it backs up first. The default installer still refuses conflicts.
 
-`~/.agents/skills` is also where the browser selection lands: `--browser aside` installs the managed `aside-browser` skill and moves a content-identical managed `browser-use` copy into the skill backups. `skills/pi-herdr-skills/scripts/install.sh --browser aside|browser-use|none` selects the same managed pair directly, and its default resolves the same recorded value; `--without NAME` marks a managed skill as not selected for a host: it is never installed, never reported as a conflict, and never removed.
+`~/.agents/skills` is also where the browser selection lands: `--browser aside` installs the managed `aside-browser` skill and moves a content-identical managed `browser-use` copy into the skill backups, while `--browser both` installs and keeps both. `skills/pi-herdr-skills/scripts/install.sh --browser aside|browser-use|both|none` selects the same managed set directly, and its default resolves the same recorded value; `--without NAME` marks a managed skill as not selected for a host: it is never installed, never reported as a conflict, and never removed.
 
 ## Reload
 
@@ -334,10 +337,10 @@ bash scripts/setup.sh --report-dir /tmp/astack-setup-report
 pi list
 pi mcp list                 # inspect, do not paste secrets
 npm run check               # package typecheck/build/pack + service build
-npm run check:skills        # shared skills match the global install for this host's selection
+npm run check:skills        # skill manifest and shared skills match the global install for this host's selection
 ```
 
-`npm run check:skills` verifies exactly the selected managed set. It reads `--browser`, then `ASTACK_BROWSER`, then the recorded `env.sh`, then defaults to `browser-use`; source `"$HOME/.local/share/astack/env.sh"` (or export `ASTACK_BROWSER`) before running it outside the recorded shell. On an `aside` host it requires the managed `aside-browser` skill and rejects a still-installed `browser-use`.
+`npm run check:skills` verifies the checksums and executable modes in `skills/pi-herdr-skills/skills-manifest.json`, then verifies exactly the selected managed set. It reads `--browser`, then `ASTACK_BROWSER`, then the recorded `env.sh`, then defaults to `browser-use`; source `"$HOME/.local/share/astack/env.sh"` (or export `ASTACK_BROWSER`) before running it outside the recorded shell. On an `aside` host it requires the managed `aside-browser` skill and rejects a still-installed `browser-use`; on a `both` host it requires both managed skills and rejects neither.
 
 `--check` never installs, builds, writes stamps, or changes `settings.json`/`mcp.json`; it only reads and writes the requested report. Package checks report `ready` for current dependencies with an existing build output, and `manual` when a build is missing.
 

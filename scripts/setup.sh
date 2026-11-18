@@ -49,11 +49,13 @@ It is non-interactive and rerunnable.
   --agent-dir DIR          Pi agent config directory (default: $PI_CODING_AGENT_DIR or ~/.pi/agent).
   --report-dir DIR         Write setup-report.md, setup-report.json and logs there.
   --skip LIST              Skip groups: runtimes,packages,skills,desktop,chrome,browser,herdr,cua,slack.
-  --browser BACKEND        Browser backend for this host: browser-use (default), aside or none.
-                           browser-use installs the uv/Python CLI and its managed skill. aside
-                           installs the bundled managed aside-browser skill and never launches,
-                           logs in or updates Aside. none skips both. The choice is explicit; it
-                           is never inferred from the OS.
+  --browser BACKEND        Browser backend for this host: browser-use (default), aside, both
+                           or none. browser-use installs the uv/Python CLI and its managed
+                           skill. aside installs the bundled managed aside-browser skill and
+                           never launches, logs in or updates Aside. both installs both skills
+                           and the CLI, keeps them side by side, and never transfers cookies
+                           between them. none skips both. The choice is explicit; it is never
+                           inferred from the OS.
   --desktop                Opt in to the private Ubuntu/Debian virtual desktop for Cua:
                            Xvfb + full XFCE + session D-Bus + AT-SPI + ffmpeg, started through
                            a systemd user unit. Not installed on the default path.
@@ -99,9 +101,9 @@ while [ $# -gt 0 ]; do
 done
 
 case "$BROWSER" in
-  browser-use|aside|none) ;;
+  browser-use|aside|both|none) ;;
   *)
-    echo "ERROR: unknown --browser value: $BROWSER (expected browser-use, aside or none)" >&2
+    echo "ERROR: unknown --browser value: $BROWSER (expected browser-use, aside, both or none)" >&2
     exit 2
     ;;
 esac
@@ -152,7 +154,7 @@ if [ "$BROWSER_EXPLICIT" -eq 0 ]; then
     fi
   fi
   case "$RECORDED_BROWSER" in
-    browser-use|aside|none) BROWSER=$RECORDED_BROWSER ;;
+    browser-use|aside|both|none) BROWSER=$RECORDED_BROWSER ;;
     *) BROWSER_SELECTION_NOTE="default" ;;
   esac
 fi
@@ -245,12 +247,12 @@ fi
 if [ "$BROWSER_SKIPPED" -eq 1 ]; then
   record_cap browser manual "skipped by --skip browser (selected backend: $BROWSER, $BROWSER_SELECTION_NOTE)"
   record_cap browser-skill manual "skipped by --skip browser"
-  if [ "$BROWSER" = browser-use ]; then
+  if [ "$BROWSER" = browser-use ] || [ "$BROWSER" = both ]; then
     record_cap browser-use manual "skipped by --skip browser"
   fi
 else
   ensure_browser_skill || true
-  if [ "$BROWSER" = browser-use ]; then
+  if [ "$BROWSER" = browser-use ] || [ "$BROWSER" = both ]; then
     ensure_browser_use || true
   fi
 fi

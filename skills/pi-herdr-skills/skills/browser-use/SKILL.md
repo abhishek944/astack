@@ -7,7 +7,13 @@ compatibility: Requires Python 3, installed Chrome/Chromium, and the browser-use
 
 # Browser Use
 
-Use Browser Use when a task needs a real browser: JavaScript rendering, clicks, forms, screenshots, downloads, or an existing signed-in session. Use normal web fetching for public pages that do not need interaction.
+Use Browser Use when a task needs a real browser: JavaScript rendering, clicks, forms, screenshots, downloads, or repeatable testing with a fresh profile. Use normal web fetching for public pages that do not need interaction.
+
+## Standalone browser owner
+
+This skill is a self-contained browser capability. It requires no other browser skill, routes no task to one, and keeps working on a host that has none installed. Isolated headless Chrome on a fresh private profile is its default for testing, screenshots, forms and extraction that must not touch the user's sessions; the separate personal-session mode below is its own explicit path for an existing signed-in session.
+
+Never copy cookies, storage, profiles or credentials from another browser tool or the user's own Chrome, and never attach Browser Use to a signed-in personal Chrome to reuse a session it does not own. If a task needs an authenticated session in the isolated browser, sign in there as a separate, explicit action or ask the user.
 
 Before replying to the user, follow the global `talk-human` skill.
 

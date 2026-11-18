@@ -25,11 +25,12 @@ Installs skills into ~/.agents/skills. No permission extension is required or in
                     missing/non-conflicting managed skills.
   --without NAME    NAME is not in this host's selected managed set: never install
                     it, never report it as a conflict, and never remove it. Repeatable.
-  --browser BACKEND Managed browser skill to select: browser-use (default), aside or
-                    none. The default resolves from $ASTACK_BROWSER, then the
+  --browser BACKEND Managed browser skill selection: browser-use (default), aside, both
+                    or none. The default resolves from $ASTACK_BROWSER, then the
                     ASTACK_BROWSER line in $ASTACK_HOME/env.sh, then browser-use.
-                    Exactly one browser skill is selected; the other is never
-                    installed, never reported as a conflict, and never removed.
+                    browser-use and aside each select one skill; both selects both
+                    skills side by side; the unselected skill is never installed,
+                    never reported as a conflict, and never removed.
   --uninstall       Remove matching installed skills. Modified files require
                     --force and are backed up before removal.
 
@@ -86,16 +87,17 @@ if [[ -z $browser_selection ]]; then
 fi
 browser_selection=${browser_selection:-browser-use}
 
-# The browser pair is one selection, never two broad defaults. The default is
+# The browser pair is one selection, never an accident. The default is
 # browser-use on a host with no recorded selection; --browser aside swaps the
-# pair, and --browser none selects neither. --without still excludes any named
-# managed skill on top.
+# pair, --browser both selects both skills side by side, and --browser none
+# selects neither. --without still excludes any named managed skill on top.
 case "$browser_selection" in
   browser-use) without+=(aside-browser) ;;
   aside) without+=(browser-use) ;;
+  both) : ;;
   none) without+=(browser-use aside-browser) ;;
   *)
-    echo "Unknown --browser value: $browser_selection (expected browser-use, aside or none)." >&2
+    echo "Unknown --browser value: $browser_selection (expected browser-use, aside, both or none)." >&2
     usage >&2
     exit 2
     ;;

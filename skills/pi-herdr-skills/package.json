@@ -14,6 +14,7 @@
     "url": "https://github.com/abhishek944/pi-herdr-skills.git"
   },
   "scripts": {
-    "check": "bash scripts/check-repo.sh"
+    "check": "npm run check:manifest && bash scripts/check-repo.sh",
+    "check:manifest": "python3 scripts/check-manifest.py"
   }
 }

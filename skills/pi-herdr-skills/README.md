@@ -26,17 +26,28 @@ The installer copies this repository's skills into the shared global `~/.agents/
 
 Use `./scripts/install.sh --skip-conflicts` when some managed skills are locally modified but you still want missing/non-conflicting managed skills installed. It leaves every conflicting directory untouched, installs only missing or already-compatible skills, and reports the preserved conflicts. The default still refuses to overwrite conflicts; `--force` remains the only replacement route, and `--force`/`--skip-conflicts` are mutually exclusive.
 
-The two broad browser skills are one selection, never two defaults. `./scripts/install.sh` resolves the selection from `--browser`, then `$ASTACK_BROWSER`, then the recorded `$ASTACK_HOME/env.sh`, then `browser-use`. A fresh no-argument install therefore never adds `aside-browser` alongside `browser-use`, and an Aside host's recorded choice is reused. Pass `--browser aside` to select it directly, or `--browser none` for no browser skill:
+The two broad browser skills are one explicit selection. `./scripts/install.sh` resolves it from `--browser`, then `$ASTACK_BROWSER`, then the recorded `$ASTACK_HOME/env.sh`, then `browser-use`. A fresh no-argument install therefore never adds `aside-browser` beside `browser-use`, and an Aside host's recorded choice is reused. Pass `--browser aside` to select Aside, `--browser both` to keep both skills installed side by side, or `--browser none` for no browser skill:
 
 ```bash
 ./scripts/install.sh --browser aside
 ./scripts/install.sh --browser browser-use
+./scripts/install.sh --browser both
 ./scripts/install.sh --browser none
 ```
 
 `--without NAME` remains the generic explicit exclusion for any managed skill: the name is never installed, never reported as a conflict, and never removed implicitly. For example, `--without browser-use` excludes that skill even though it is the default selection.
 
-`scripts/check-repo.sh` verifies exactly one declared selection, so a deliberate omission is still checked instead of silently skipped. It reads `--browser aside|browser-use|none`, then `$ASTACK_BROWSER`, then the `ASTACK_BROWSER` line in `$ASTACK_HOME/env.sh`, then the `browser-use` default. With `aside` it verifies the managed `aside-browser` skill and requires `browser-use` to be absent. With `browser-use` it verifies `browser-use` and leaves an installed `aside-browser` untouched. With `none` it does not verify browser skills at all.
+`scripts/check-repo.sh` verifies the declared selection, so a deliberate omission is still checked instead of silently skipped. It reads `--browser aside|browser-use|both|none`, then `$ASTACK_BROWSER`, then the `ASTACK_BROWSER` line in `$ASTACK_HOME/env.sh`, then the `browser-use` default. With `aside` it verifies the managed `aside-browser` skill and requires `browser-use` to be absent. With `browser-use` it verifies `browser-use` and leaves an installed `aside-browser` untouched. With `both` it verifies both managed skills and requires neither to be absent. With `none` it does not verify browser skills at all.
+
+By default it checks every managed skill and reports every mismatch before exiting 1. Each mismatch lists its differing relative paths with the reason (missing entry, content, executable mode, type or symlink target), using the same tree comparison as the installer. Pass repeatable `--skill NAME` options to check only named skills; the browser selection is still validated, and an `aside` host still requires `browser-use` to be absent even when it is outside the named scope. A named skill must exist in the repository and must be selected by the browser backend when it is a browser skill. Usage errors exit 2, a clean check exits 0, and any mismatch or missing installed skill exits 1. The check requires `python3` for the shared tree comparison. This script checks installed/global equality only; `npm run check` runs the manifest verification first.
+
+```bash
+# Fast check of the skills changed in this task.
+./scripts/check-repo.sh --skill implement --skill talk-human
+
+# The browser selection still has to agree with the named scope.
+./scripts/check-repo.sh --browser aside --skill aside-browser
+```
 
 Astack's own `bash scripts/setup.sh --browser ...` selects the same way and records the choice in `env.sh`.
 
@@ -77,20 +88,22 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 
 | Skill | Purpose |
 | --- | --- |
-| `aside-browser` | Bundles the vendor Aside entry point as a managed skill, selected with `--browser aside`. The file directs the agent to run `aside guide` for the live vendor instructions. |
-| `browser-use` | Automates browser navigation, forms, screenshots, testing, and extraction. Selection-scoped: an Aside host installs the bundled `aside-browser` skill instead. |
+| `aside-browser` | Bundles the vendor Aside entry point as a managed skill, selected with `--browser aside` or `--browser both`. The file directs the agent to run `aside guide` for the live vendor instructions. |
+| `browser-use` | Automates browser navigation, forms, screenshots, testing, and extraction. Selected by default, or beside Aside with `--browser both` (isolated testing only). |
 | `commit-and-merge` | Commits real changes and merges into the default branch when explicitly requested. |
 | `computer-use` | Operates desktop apps through local Cua Driver MCP with grounded input, screenshot forwarding, and verified outcomes. |
-| `implement` | Coordinates every tracked Work with session/Work/Task artifact paths, self-versus-delegate decisions, checks, and proportionate review while preserving specialized scope. |
+| `implement` | Coordinates every tracked Work with session/Work/Task artifact paths, self-versus-delegate decisions, checks, and proportionate review while preserving specialized scope. A UI-changing implementation also hands its changed surface to `ui-ux-followthrough` after functional verification, unless the user opted out or asked for read-only review. |
 | `retro` | Reviews a coding session for ways to improve the agent's working environment; invoke explicitly with `/skill:retro`. |
 | `talk-human` | Writes clear, friendly, concise replies with plain language and exact technical detail. |
+| `ui-conventions` | Finds the UI components, tokens and interaction patterns a repository already has before creating or restyling a control; respects project instructions and existing design systems without forcing migrations. |
+| `ui-copy` | Writes and reviews interface text: cuts filler and restated labels while keeping required warnings, error text, labels and accessibility instructions. |
 | `typescript-best-practices` | Applies type-system rules to TypeScript work: discriminated unions, branded types, boundary validation, exhaustive variants, and schema-derived types. |
 
-These eight skills are the complete set this installer owns. Exactly one of the two browser skills is selected per host, so the default install is seven skills; every non-browser skill is always installed. Some of them depend on other installed skills by name. Install the complete set rather than copying only `implement`, unless a host deliberately selects another browser backend with `--browser aside` or `--browser none`.
+These ten skills are the complete set this installer owns. Exactly one of the two browser skills is installed by default, so the default install is nine skills; `--browser both` installs all ten, and every non-browser skill is always installed. Some of them depend on other installed skills by name. Install the complete set rather than copying only `implement`, unless a host deliberately selects another browser backend with `--browser aside` or `--browser none`.
 
 ### Package-owned skills
 
-The diagram, review and policy skills moved out of this repository into skill-only Astack packages. Names, helpers and licenses are preserved; `ui-ux-testing` now has a read-only audit contract. They are not part of this installer or its checksum manifest. Install each package and reload Pi:
+The diagram, review and policy skills moved out of this repository into skill-only Astack packages. Names, helpers and licenses are preserved; `ui-ux-testing` now has a read-only audit contract, and its post-implementation repair owner ships beside it in `pi-review` rather than here. They are not part of this installer or its checksum manifest. Install each package and reload Pi:
 
 ```bash
 pi install /path/to/astack/packages/pi-visuals
@@ -104,7 +117,7 @@ pi install git:github.com/abhishek944/pi-herdr
 | Package | Skills | Notes |
 | --- | --- | --- |
 | `pi-visuals` | `archify`, `visual-explainer` | Bundles the complete pinned Archify runtime, assets and notices. `visual-explainer` routes standalone technical diagrams to `archify`. |
-| `pi-review` | `agent-review`, `awesome-logging-standards`, `codebase-design`, `no-arbitrary-limits`, `no-unit-tests`, `security-audit`, `ui-ux-testing` | `codebase-design` is the design reference for `design-council`, `implement` and `agent-review`. `security-audit` keeps Cloudflare's MIT-licensed guidance, schema, validators, license and pinned provenance. `no-unit-tests` and `no-arbitrary-limits` stay general task policies, not review-only rules. `ui-ux-testing` is a read-only audit that reports findings and suggested fixes; the caller owns fixes and delegation. |
+| `pi-review` | `agent-review`, `awesome-logging-standards`, `codebase-design`, `no-arbitrary-limits`, `no-unit-tests`, `security-audit`, `ui-ux-testing`, `ui-ux-followthrough` | `codebase-design` is the design reference for `design-council`, `implement` and `agent-review`. `security-audit` keeps Cloudflare's MIT-licensed guidance, schema, validators, license and pinned provenance. `no-unit-tests` and `no-arbitrary-limits` stay general task policies, not review-only rules. `ui-ux-testing` is a read-only audit that reports findings and suggested fixes; the caller owns fixes and delegation. `ui-ux-followthrough` owns the authorized post-implementation disposition of those findings, and flag-mode review of a named UI surface with no prior implementation, adding no permission. |
 | `pi-herdr` | `herdr`, `model-routing-policy` | Eight `Agent*` tools plus the editable routing defaults, described under [Herdr Core setup](#herdr-core-setup). |
 | `pi-research` | `research`, `read-flows`, `design-council` | Also provides the one-shot `/ask` command and its reusable read-only guard. |
 | `pi-grill-me` | `grill-me`, `ui-ux-grill-me` | Browser-based plan and UI/UX interviews with recorded answers. |
@@ -112,7 +125,7 @@ pi install git:github.com/abhishek944/pi-herdr
 
 Before migrating, inspect and back up the matching `~/.agents/skills/<name>/` directories, then remove them after verifying the package-owned skills load. The installer cannot remove directories that are no longer in its source tree. Pi keeps the first discovered skill and warns about a duplicate name, so do not keep both copies.
 
-The `ui-ux-testing` skill moved into `pi-review` on 2026-11-04 and is now read-only: it reports verified defects and suggested fixes, while the caller owns scope, fixes and delegation. Remove its old global copy with the other package-owned skills.
+The `ui-ux-testing` skill moved into `pi-review` on 2026-11-04 and is now read-only: it reports verified defects and suggested fixes, while the caller owns scope, fixes and delegation. Remove its old global copy with the other package-owned skills. On 2026-11-17 the post-implementation workflow moved into that package as `ui-ux-followthrough`, which owns the repair decision without changing the audit's read-only contract.
 
 `here-now` is retired. Its skill and provenance files were removed from this repository and from active global installs. The independent here.now delivery backend inside `pi-decisions` is a separate component: it keeps its own configuration, credentials and documented behavior.
 
@@ -190,6 +203,27 @@ Pi-herdr workers are recognized by Core labels. Other launchers should pass `--f
 
 When upgrading from the embedded version, remove its old direct extension-path registration if present. Inspect and back up `~/.agents/skills/firstmate/`, then remove that duplicate only after verifying the package-owned skill loads. The installer does not automatically remove retired skill directories. Keep unrelated global skills and configuration.
 
+## Skill ownership map
+
+These skills apply across tasks, so each shared concern needs one owner. The owner sets the rule; the boundary says what it does not authorize. Package-owned skills are included because they are installed with this set. Project instructions and explicit user requests still override every skill.
+
+| Concern | Owner | Boundary |
+| --- | --- | --- |
+| Tracked work, artifact paths, self-or-delegate choice, review decision, final report | `implement` | Does not select models or perform independent review; `herdr` and `model-routing-policy` own delegation mechanics. |
+| User-facing replies | `talk-human` | Messages only, not repository docs, code comments or interface text. |
+| TypeScript files | `typescript-best-practices` | Type-system rules only; module design and product behavior stay with their owners. |
+| Module responsibilities, interfaces, abstractions | `codebase-design` | Design reference; advice does not authorize implementation, tests or dependencies. |
+| Existing UI controls, tokens and interaction patterns | `ui-conventions` | Discovery and reuse; no restyle, migration, consolidation or refactor permission. |
+| Text inside a product UI | `ui-copy` | Not chat replies, documentation, release notes or marketing pages. |
+| UI audit and evidence | `ui-ux-testing` | Read-only for production source; reports findings, never fixes them. |
+| Post-implementation UI disposition | `ui-ux-followthrough` | Fixes only clear in-scope defects against the existing design system; anything subjective needs the user. |
+| Independent review of changes | `agent-review` | Read-only, and used when risk, breadth, uncertainty or the user warrants it, not by default. |
+| Subagent lifecycle and presentation | `herdr` | Starts, monitors and cleans up Core workers; Work/Todo records stay in `implement`. |
+| Subagent model, thinking level and Fast mode | `model-routing-policy` | Subagents only; explicit user choices override its defaults. |
+| Read-only investigation and design options | `research`, `read-flows`, `design-council` | No production edits; planning does not authorize implementation. |
+| Unit tests and capacity limits | `no-unit-tests`, `no-arbitrary-limits` | Only the latest explicit user request permits unit tests; only verified platform/SDK constraints or explicit requests justify limits. |
+| Browser and desktop automation | `aside-browser`, `browser-use`, `computer-use` | `aside-browser` owns the user's signed-in browser, `browser-use` isolated testing, `computer-use` desktop apps. |
+
 ## Permission gates
 
 This repository no longer installs or requires tool-permission gates. If you installed the previously required extension, remove it globally and reload or restart every running Pi session, including Herdr agents:
@@ -254,7 +288,8 @@ Package-provided skills, such as the image-generation skill, remain owned and up
 
 ## Maintenance and safety
 
-- Run `npm run check` before installing, committing, or publishing.
+- Run `npm run check` before installing, committing, or publishing. It verifies the manifest, then the installed/global equality. `npm run check -- --skill NAME` narrows only the installed/global part; the manifest step still runs. Running `scripts/check-repo.sh --skill NAME` directly performs only the global comparison.
+- `npm run check:manifest` verifies `skills-manifest.json` alone: every recorded SHA-256 and executable mode must match the repository, and `skills/` may not contain a missing, stale or unlisted file. It needs no global install.
 - Keep credentials in environment variables or provider login stores, never in skills or examples.
 - Do not commit Pi settings, sessions, Herdr configuration, generated `var/` evidence, package caches, or `node_modules/`.
 - Review upstream extension release notes before updating pinned versions.
@@ -265,12 +300,14 @@ Package-provided skills, such as the image-generation skill, remain owned and up
 ## Repository layout
 
 ```text
-skills/                 Shared Agent Skills directories (Pi, Codex, OpenCode)
-skills-manifest.json    Exact skill file checksums and executable modes
-scripts/install.sh      Conflict-safe additive global installer and uninstaller
-scripts/check-repo.sh   Repository/global skill equality check
-third_party/licenses/   Required upstream license texts
-package.json            Repository metadata and check command
+skills/                       Shared Agent Skills directories (Pi, Codex, OpenCode)
+skills-manifest.json          Exact skill file checksums and executable modes
+scripts/install.sh            Conflict-safe additive global installer and uninstaller
+scripts/check-manifest.py     Manifest checksum and executable-mode verification
+scripts/check-repo.sh         Repository/global skill equality check
+scripts/trees-equal.py        Shared exact tree comparison and mismatch report
+third_party/licenses/         Required upstream license texts
+package.json                  Repository metadata and check command
 ```
 
 ## License

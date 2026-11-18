@@ -5,7 +5,7 @@ Astack is a container repository. Treat each unit as independent unless a task e
 ## Unit boundaries
 
 - `packages/<name>` — one publishable Pi package per directory. Keep its `package.json` identity (`name`, `version`, `exports`, `bin`, `files`, `pi`, dependency fields) and its own lockfile, build output, and scripts. Publish from the package directory.
-- `skills/pi-herdr-skills` — shared skill source and checksum manifest. Follow its `AGENTS.md`: edits must be mirrored to `~/.agents/skills/` and reflected in `skills-manifest.json` in the same change, verified with `bash scripts/check-repo.sh`.
+- `skills/pi-herdr-skills` — shared skill source and checksum manifest. Follow its `AGENTS.md`: edits must be mirrored to `~/.agents/skills/` and reflected in `skills-manifest.json` in the same change, verified with `npm run check:skills` (manifest checksums and modes, then global equality).
 - `services/pi-slack` — private service. Never add real tokens, env files, config state, or launchd plists with machine paths. Track only placeholder examples.
 
 ## Engineering rules

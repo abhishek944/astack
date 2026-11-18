@@ -1,6 +1,6 @@
 ---
 name: ui-ux-testing
-description: "Read-only UI/UX audit with dedicated parallel subagents for workflows, overlays, responsive layout, accessibility, forms/search/navigation, themes and cross-screen component reuse. Use for UI/UX audits, visual regression checks, or screenshots showing defects or inconsistent controls. Reports verified defects with exact reproduction, evidence, severity and suggested fixes; never edits production source or implements fixes. The caller owns which findings are in scope and owns fixes and delegation."
+description: "Read-only UI/UX audit phase for post-implementation work, using dedicated parallel subagents for workflows, overlays, responsive layout, spacing, accessibility, forms/search/navigation, themes, interface copy via ui-copy and cross-directory component reuse via ui-conventions. Use for UI/UX audits, visual regression checks, post-implementation verification, or screenshots showing defects or inconsistent controls. Reports verified defects with exact reproduction, evidence, severity, suggested fixes and a fix class per finding. It never edits production source or implements fixes; the caller owns scope, fixes, delegation and final verification, applying authorized repairs through ui-ux-followthrough or another owner."
 compatibility: Requires Herdr Core and continuous monitoring for delegated Pi auditors, a dedicated visible Herdr app tab only when app presentation is requested, an accessible application, and authorized browser or desktop automation for runtime verification.
 ---
 
@@ -8,6 +8,22 @@ compatibility: Requires Herdr Core and continuous monitoring for delegated Pi au
 
 Find what breaks when someone actually uses the interface, then report each verified defect with exact reproduction and evidence—not just the first render. This skill is read-only for production source: the caller decides which findings are in scope and owns fixes, delegation and final verification.
 Before replying, follow `talk-human`. Follow `no-unit-tests`; UI testing does not authorize unit tests.
+
+## Where this fits
+
+This is the audit and recheck phase of a larger workflow, and it stays read-only in every phase:
+
+```
+implementation (implement) → functional verification (implement) → UI audit (this skill)
+  → disposition (ui-ux-followthrough) → read-only recheck (this skill)
+```
+
+- `implement` owns the implementation and its end-to-end functional verification. After a UI-changing change it hands the surface to `ui-ux-followthrough`, which runs this audit in auto-fix mode, unless the user opted out or asked for read-only review.
+- This skill owns inspection, evidence, the coverage verdict and the per-finding fix class. It never owns application changes.
+- `ui-ux-followthrough` owns what happens to the findings: auto-fixing clear in-scope defects, or resolving a user-specified UI scope through `ui-ux-grill-me`. It runs inside the same `implement` task and adds no permission.
+- Standalone audits stay valid. When no authorized repair owner exists, the report is the deliverable and the caller decides everything else.
+- A progressive caller changes nothing here. When `ui-ux-followthrough` runs this audit in flag mode, hand each lane's verified findings to the caller as soon as that lane's evidence can ground a decision, and keep auditing the remaining lanes. Synthesis and the aggregate report stay this skill's own deliverables; they never become a gate on the caller's per-branch decisions, and this skill still edits nothing.
+- A user may also name a UI surface to review with no implementation behind it. That starts at this audit and goes to the flag-mode interview, still read-only until the user selects or authorizes something.
 
 ## Scope and safety
 
@@ -17,7 +33,9 @@ Before replying, follow `talk-human`. Follow `no-unit-tests`; UI testing does no
 - Do not submit forms, send messages, make paid calls, enable microphone/camera, upload files, delete data or change persistent settings without authorization.
 - Do not bypass authentication. Stop for passwords, MFA, permission prompts or unclear account choice. Do not extract cookies or credentials.
 - Do not install browsers/dependencies, restart services, rebuild live assets or deploy without the required authority. Preserve unrelated work and user-owned resources.
-- Running this skill is authorization to audit, not authorization to fix. Do not edit production source, implement findings, commit, deploy or delegate implementation. Report findings and suggested fixes to the caller, who decides scope and owns fixes through `implement`. Captures, reports and other evidence writes stay inside the task artifact directory.
+- UI evidence never outranks functional verification. When the implementation's functional verification is blocked, incomplete or **NOT RUN**, behavior-dependent cases stay **BLOCKED** and are reported that way. A successful render does not prove the behavior behind it, and a UI check is never a substitute for the unverified flow.
+- Judge against what the repository already owns. Read global `ui-conventions` before calling a control or token wrong: the design system, wrapper layer and existing components define correctness, not this skill's taste. Judge interface text with global `ui-copy`, which protects warnings, limits, error text and accessibility instructions from casual trimming.
+- Running this skill is authorization to audit, not authorization to fix. Do not edit production source, implement findings, commit, deploy or delegate implementation. Report findings, evidence and fix class to the caller, who decides scope and owns repairs through `implement`, applying `ui-ux-followthrough` when that workflow fits. Auditing inside that workflow changes nothing: the auditor still never edits source, and each fix is a separately owned step. Captures, reports and other evidence writes stay inside the task artifact directory.
 
 ## Coordination and tools
 
@@ -73,7 +91,7 @@ Assign a different visual-content auditor for supported palettes, contrast, dens
 
 ### Component reuse and visual consistency agent
 
-Always assign a dedicated consistency auditor for changed UI controls. Inventory existing shared components and equivalent uses across screens, including components outside `components/ui/`. Compare Files versus Settings dropdowns and Files versus Chats search fields when present, plus buttons, tabs, notices and menus. Flag raw controls, copied markup, divergent icons, spacing, borders, typography and interaction states that bypass the shared component without a documented requirement. Record each location, canonical component, evidence and smallest reuse fix; distinguish justified variants. Recommend that validated fixes reuse the common component rather than copy its CSS or create another lookalike. Report shared-file impact and affected callers; the caller assigns the implementation owner. Recheck consistency at every affected use only when the caller requests a read-only verification.
+Always assign a dedicated consistency auditor for changed UI controls. Start from global `ui-conventions` to locate the design system, tokens, wrapper layer and shared package, then inventory existing components and equivalent uses across screens and directories, including components outside `components/ui/`. Compare Files versus Settings dropdowns and Files versus Chats search fields when present, plus buttons, tabs, notices and menus. Flag raw controls, copied markup, divergent icons, spacing, borders, typography and interaction states that bypass the shared component without a documented requirement. Record each location, canonical component, evidence and smallest reuse fix; distinguish justified variants. Recommend that validated fixes reuse the common component rather than copy its CSS or create another lookalike. Report shared-file impact and affected callers; the caller assigns the implementation owner. Recheck consistency at every affected use only when the caller requests a read-only verification.
 
 ### Source investigation agent
 
@@ -85,7 +103,7 @@ Assign a different synthesis reviewer once area reports are ready. Reconcile dup
 
 ### Recheck verification agent
 
-When the caller explicitly asks for a read-only recheck after fixes are integrated, assign a verification subagent independent of the fix author. Repeat the original failing cases and adjacent keyboard, responsive and theme states; recheck all consumers of changed shared components. Keep unavailable live checks blocked rather than replacing them with fixture/static passes. The recheck reports evidence only; the caller still owns fixes, integration and final verification.
+When the caller explicitly asks for a read-only recheck after fixes are integrated, assign a verification subagent independent of the fix author, and never let an auto-fix or flag-mode change verify itself. Repeat the original failing cases and adjacent keyboard, responsive and theme states; recheck all consumers of changed shared components; confirm the functional flow the fixes touched still behaves. Keep unavailable live checks blocked rather than replacing them with fixture/static passes. The recheck reports evidence only; the caller still owns fixes, integration and final verification.
 
 Keep area owners distinct for the audit pass. Run ready independent work in parallel; order synthesis and shared-state checks instead of racing them. Rechecks requested by the caller come after their fixes are integrated.
 
@@ -98,7 +116,7 @@ Keep area owners distinct for the audit pass. Run ready independent work in para
 5. Each worker writes `<workerTaskDir>/report.md` and `<workerTaskDir>/screenshots/` inside its own canonical nested task directory from global `implement`. Pass the exact parent task directory; require the worker's real local session/Work/Task IDs and returned artifact root. Lane names are metadata, not directory ownership keys. Require exact case results, reproduction steps, screenshots, environment, blockers and action limits. Workers inherit all safety gates; delegation grants no additional permission. No recursive subagents unless the parent explicitly authorizes them.
 6. Keep each owned monitor across working/blocked/idle/done and follow-up states. Inspect real worker status and the complete result, not status signals alone. Resolve blockers or reassign safe cases; do not recreate subscriptions for stale signals or monitor unrelated sibling parents.
 7. The parent reads every complete worker report, opens finding screenshots, reconciles unique case IDs and deduplicates findings without hiding different triggers. Reproduce material defects when authorized; otherwise label them worker-reproduced or not independently reproduced. Source-only and fixture checks remain separate from live results. A worker's done signal is not an acceptance gate.
-8. Run the synthesis lane once evidence is ready, resolve conflicting findings and publish the audit baseline with per-lane coverage. Stop at the report. The caller decides which findings are in scope and owns fixes and any further delegation; this skill does not implement them. Retire or retask completed roles according to model-routing policy. Close only owned monitors/tabs/contexts after their verified work and any caller-requested read-only rechecks.
+8. Run the synthesis lane once evidence is ready, resolve conflicting findings and publish the audit baseline with per-lane coverage. Stop at the report. A caller running a progressive decision workflow receives each lane's verified findings before synthesis; synthesis still reconciles the aggregate baseline and re-authorizes nothing. The caller decides which findings are in scope and owns fixes and any further delegation; this skill does not implement them. Retire or retask completed roles according to model-routing policy. Close only owned monitors/tabs/contexts after their verified work and any caller-requested read-only rechecks.
 
 ## 1. Establish the real baseline
 
@@ -119,6 +137,9 @@ List each distinct trigger/state before running checks. Do not count two buttons
 | Viewport | Actual user size; if unspecified, add 1280×800, 1280×600 and 360×800 CSS pixels, labeling assumptions |
 | Scroll | Top and bottom; middle when sticky/fixed elements or long content can affect placement |
 | Content | Empty/short and realistically long labels/details; loading/error/disabled states when safely available |
+| Design system | Existing component, token and wrapper for every changed control; equivalent uses in other directories; justified variants |
+| Spacing | Gaps, padding and alignment against the repository's spacing scale and the equivalent shared component |
+| Copy | Labels, hints, empty and error states checked with `ui-copy`; required warnings, limits and formats still present |
 | Accessibility | Tab/Shift+Tab, activation, Escape, focus return, 200% browser zoom or equivalent reflow check |
 | Theme | Current and supported light/dark alternatives; inspect other supported palettes for contrast/state regressions |
 
@@ -141,7 +162,17 @@ For popovers, menus, tooltips, dialogs, dropdowns, inspectors and expanded panel
 
 **Required regression example:** open Context and Cost separately above a chat composer at short height and a narrow pane. Verify the middle and bottom of each details panel are not behind the composer, even when the entire panel rectangle lies inside the viewport.
 
-## 4. Check everyday usability
+## 4. Check spacing, shared components and copy
+
+Spacing and consistency are defects only when they contradict something the repository already defines. Establish that contract first with global `ui-conventions`: the design-system package or token file, the wrapper layer, the shared primitive, and every existing use of the same control, including call sites outside `components/ui/` and in sibling apps or directories.
+
+- Measure the real gaps, padding and alignment of the changed surface, then compare them with the equivalent shared component and the spacing scale or tokens. Report a mismatch only when both the measurement and the existing contract are recorded.
+- Compare one control across screens: trigger, popover, menu item, button, tab, notice and empty state. Divergent borders, radii, icons, typography, hover/focus treatment or dismissal behavior, and hand-rolled markup that bypasses a shared component, are findings when they contradict the shared component's own contract; a documented variant is not.
+- Record the canonical component and the smallest reuse-based correction instead of a restyle. Copying a component's CSS or adding a second lookalike is not a fix.
+- Judge interface text with global `ui-copy`. Classify per claim, not per string, and verify a stated consequence in the source before calling a line filler. Warnings, limits, required formats, error text and screen-reader instructions stay unless replaced by something equally clear.
+- Personal preference is not a defect. A deliberate density, brand treatment or justified variant belongs in the report as an observation, not a FAIL, unless it breaks the repository's own contract.
+
+## 5. Check everyday usability
 
 - Search: click, type, clear, no-results, Escape and keyboard navigation; inspect unexpected rings, underlines, jumps or text clipping.
 - Forms: labels, caret/focus discoverability, error text, disabled/busy distinction and stable geometry; do not submit without authorization.
@@ -154,26 +185,38 @@ For popovers, menus, tooltips, dialogs, dropdowns, inspectors and expanded panel
 
 Do not replace a user-rejected decoration with another invented one. Preserve approved interaction and visual decisions unless explicitly changed.
 
-## 5. Report evidence, not confidence theatre
+## 6. Report evidence, not confidence theatre
 
 Create `report.md` with:
 
 1. **Scope/environment:** target build and exact tested layouts/states; live page versus fixture evidence; worker/lane allocation and concurrency limits.
-2. **Findings:** severity, affected control/route, reproducible steps, expected versus observed behavior, screenshot path and supporting measurements.
+2. **Findings:** severity, affected control/route, reproducible steps, expected versus observed behavior, screenshot path, supporting measurements and the repository contract the behavior violates.
 3. **Cause:** confirmed owning selector/component when source evidence establishes it; otherwise label the cause a hypothesis. Record the smallest scoped correction as a suggested fix; do not treat an unconfirmed cause as an implementation requirement.
-4. **Coverage:** one row per actual case with PASS/FAIL/BLOCKED/NOT RUN and linked evidence. A reproducible defect is FAIL, not BLOCKED. No silent skips or blanket "all UI passed" claims.
-5. **Suggested next steps and limits:** each finding's suggested fix, affected owner/component and next step; recheck results only when the caller requested a read-only recheck; unavailable auth/device/data/browser states; risky steps not attempted; and exact rechecks. Keep the original failing evidence intact.
+4. **Fix class:** one per finding, from the handoff vocabulary below. A finding without a fix class is an unfinished audit.
+5. **Coverage:** one row per actual case with PASS/FAIL/BLOCKED/NOT RUN and linked evidence. A reproducible defect is FAIL, not BLOCKED. No silent skips or blanket "all UI passed" claims.
+6. **Suggested next steps and limits:** each finding's suggested fix, affected owner/component and next step; recheck results only when the caller requested a read-only recheck; unavailable auth/device/data/browser states; risky steps not attempted; and exact rechecks. Keep the original failing evidence intact.
+
+### Fix classes for the repair handoff
+
+The fix class is the auditor's judgement about authorization and evidence, not a restatement of severity. It tells the owner what a finding is allowed to become.
+
+- **auto-fixable** — reproduced live; violates a contract the repository already owns (design-system component or token, `ui-conventions` interaction rule, `ui-copy` rule, accessibility requirement, clipping or overlap of content or controls, spacing that contradicts the shared component or scale); correctable inside the implementation's own surface with the smallest reuse-based change; no change to visual direction, hierarchy, navigation, copy intent, component API or dependency.
+- **needs-user-decision** — subjective, or it changes visual direction, hierarchy or copy intent, introduces a pattern, component or dependency, or spans directories and shared components enough to be a consolidation decision.
+- **out-of-scope** — real but outside the authorized surface or task; report it without proposing an unrequested change.
+- **not-reproduced** — evidence did not establish a defect; keep it in the report as an observation with the missing state.
+
+When in doubt, choose `needs-user-decision`. Misclassifying a taste change as `auto-fixable` is the failure this classification exists to prevent.
 
 Severity follows user impact: blocked essential action or serious access failure is high; obscured recoverable content is medium; purely cosmetic issues are low. Explain the impact rather than guessing a priority from appearance alone.
 
 Each finding needs its natural failing state. Screenshots plus reproduction steps are required; DOM measurements alone are insufficient. Include a wider context capture when a crop hides the occluding layer. Redact sensitive content without hiding the defect.
 
-## 6. Stop at the read-only report
+## 7. Stop at the read-only report
 
-The report is the final deliverable. This skill does not edit production source, implement findings, commit, deploy or delegate implementation. Running the audit does not authorize fixing.
+The report is this skill's final deliverable. It does not edit production source, implement findings, commit, deploy or delegate implementation. Running the audit does not authorize fixing.
 
-1. Give the caller the report with each finding's reproduction, evidence, severity, affected component/owner, suggested fix and exact recheck steps. Do not claim a fix or implementation status.
-2. The caller decides which findings are in scope and owns fixes, their sequencing, implementation delegation and final verification through `implement`. Do not start that work or treat the report as a handoff that authorizes it.
+1. Give the caller the report with each finding's reproduction, evidence, severity, fix class, affected component/owner, suggested fix and exact recheck steps. When the caller is running a progressive decision workflow, release verified per-lane findings as each lane closes instead of withholding everything until the aggregate report is assembled. Do not claim a fix or implementation status.
+2. The caller decides which findings are in scope and owns fixes, their sequencing, implementation delegation and final verification through `implement`. When the caller applies `ui-ux-followthrough`, that workflow owns the disposition and any repair; the report does not authorize it by itself, and the auditor never performs it. Do not start that work from inside the audit.
 3. If the caller later asks for a read-only recheck, verify the integrated fixes against the original failing states and adjacent cases, capture new evidence, and update the report with **recheck passed**, **recheck failed**, **still blocked**, or **not run**. Do not edit source or implement corrections.
 4. If no actionable defects were found, report **no issues found in the tested scope** and do not invent changes.
 

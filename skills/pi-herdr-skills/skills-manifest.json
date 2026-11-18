@@ -1,15 +1,15 @@
 {
-  "snapshot": "2026-11-14",
-  "skills": 8,
+  "snapshot": "2026-11-17",
+  "skills": 10,
   "files": [
     {
       "path": "skills/aside-browser/SKILL.md",
-      "sha256": "0692bc7abbd58fb7f2b8ed0d17bb687528ea9043044451cd9464262a510324af",
+      "sha256": "bba791c53181d11d8ca265510146b43fc24556e68f91a0df0134ef260d74d7a4",
       "executable": false
     },
     {
       "path": "skills/browser-use/SKILL.md",
-      "sha256": "e82a1f2dc66a5317677a2928efd056edb129f19f9621a9e61f9f4696aa22c8c9",
+      "sha256": "effb775a77a76b0614204099e6cb6883ac1fe9057a7e054595a1a1522e023ab0",
       "executable": false
     },
     {
@@ -29,7 +29,7 @@
     },
     {
       "path": "skills/implement/SKILL.md",
-      "sha256": "19d16cf6bf9c69884efb00df3d9a63001e7d45167d094e4daccfce96e9556c95",
+      "sha256": "a4b576ea7a957708745aeba84eeeebe906a5e291d17e952e3c1e011ed0cad5f7",
       "executable": false
     },
     {
@@ -39,7 +39,7 @@
     },
     {
       "path": "skills/talk-human/SKILL.md",
-      "sha256": "c302db3db14f735a4928b098478984363e264488bb51328641719c3c1a30d0e8",
+      "sha256": "fe7b08b650043c4b9e35f58c43cd5eedba596daa1ce3acb2ee24647e7a77da4b",
       "executable": false
     },
     {
@@ -60,6 +60,16 @@
     {
       "path": "skills/typescript-best-practices/references/principle-type-system-discipline.md",
       "sha256": "173067a940bc6f87e424b492bc1e1c9da62df92387bf7253d1db32cba16dfbb8",
+      "executable": false
+    },
+    {
+      "path": "skills/ui-conventions/SKILL.md",
+      "sha256": "63aaa2d8d557698f53d1c2e666dde85315d10b95536d0157336c536163fa6121",
+      "executable": false
+    },
+    {
+      "path": "skills/ui-copy/SKILL.md",
+      "sha256": "0518c99231a9b4b7fd858de2ff4295df2456cfd87e03a4a50b8a0e3355ab4408",
       "executable": false
     }
   ]

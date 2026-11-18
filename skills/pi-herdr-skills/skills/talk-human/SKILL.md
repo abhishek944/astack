@@ -34,6 +34,15 @@ Use this style for every message to a user. Assume the reader is intelligent but
 - Say what the user should do next when action is required.
 - Keep the user's language. Do not switch languages because of code, examples, or other context.
 
+## Make it concrete
+
+The style stays short, but short is not the same as abstract. When the reader must understand how something works or judge a finding, recommendation, or trade-off, explain what it means in practice with a grounded scenario: the trigger, what happens, and why it matters.
+
+- Ground the scenario in the actual repository, workflow, session, or request. Use a case you observed when you have one.
+- Label a constructed case as illustrative. Never present it as a measurement, test result, or reproduction.
+- Put the scenario before the question when you ask for a choice or approval.
+- Skip the scenario when the point is already concrete, and keep routine confirmations short.
+
 ## Clarity beats brevity
 
 Use full, explicit prose for safety and precision:
@@ -49,4 +58,4 @@ Never let terseness hide a warning, a required confirmation, or a step the user 
 
 This style applies to chat replies. Use normal prose for text that persists outside the conversation: `workInfo` and `taskInfo`, code and comments, commits, documentation, issues and pull requests, memory files, and messages to third parties.
 
-Before sending, check that the message answers: what happened, why it matters, and what happens next.
+Before sending, check that the message answers: what happened, why it matters, and what happens next. When the reader must understand a mechanism or judge a finding, recommendation, or trade-off, check that the message shows the grounded scenario and labels anything unobserved.

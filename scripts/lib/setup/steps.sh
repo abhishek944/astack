@@ -615,6 +615,7 @@ skill_without_list() {
   case "${BROWSER:-browser-use}" in
     browser-use) printf 'aside-browser' ;;
     aside) printf 'browser-use' ;;
+    both) : ;;
     none) printf 'browser-use\naside-browser' ;;
   esac
 }
@@ -934,6 +935,10 @@ aside_browser_skill_present() {
   [ -s "$HOME/.agents/skills/aside-browser/SKILL.md" ]
 }
 
+browser_use_skill_present() {
+  [ -s "$HOME/.agents/skills/browser-use/SKILL.md" ]
+}
+
 # Exact tree equivalence shared with the skill installer (path set, file types,
 # executable bits, regular-file SHA-256, symlink targets). Exit 2 means "cannot
 # verify", which is treated as not identical so nothing is ever moved unverified.
@@ -944,7 +949,7 @@ managed_skill_tree_equal() {
   python3 "$helper" "$1" "$2"
 }
 
-# aside-browser is the selected browser skill, so the broad managed browser-use
+# aside-browser is selected without browser-use, so the broad managed browser-use
 # skill must not stay installed. Only a copy that is identical under the
 # installer's own tree semantics is moved to a backup; a modified copy -- bytes,
 # file type, executable bit or symlink target -- is preserved and reported.
@@ -959,7 +964,7 @@ remove_conflicting_browser_use_skill() {
   case "$equality" in
     0) : ;;
     1)
-      record_cap browser-use-skill manual "preserved modified $dest; it differs from the repository copy (content, file type, executable bit or symlink target), so remove or reconcile it manually to leave one browser default" ""
+      record_cap browser-use-skill manual "preserved modified $dest; it differs from the repository copy (content, file type, executable bit or symlink target), so remove it, reconcile it, or select --browser both to keep both" ""
       return 0
       ;;
     *)
@@ -999,7 +1004,25 @@ ensure_browser_skill() {
     browser-use)
       record_cap browser-skill ready "managed browser-use skill installs with the selected shared skills" ""
       if [ -e "$HOME/.agents/skills/aside-browser" ] || [ -L "$HOME/.agents/skills/aside-browser" ]; then
-        record_cap aside-browser-skill manual "installed $HOME/.agents/skills/aside-browser is not selected for --browser browser-use; setup leaves it in place, so remove it or select --browser aside to load one browser default" ""
+        record_cap aside-browser-skill manual "installed $HOME/.agents/skills/aside-browser is not selected for --browser browser-use; setup leaves it in place, so remove it or select --browser both to keep both" ""
+      fi
+      ;;
+    both)
+      aside_cli_note
+      if aside_browser_skill_present; then
+        record_cap aside-browser-skill ready "managed aside-browser skill present" ""
+      else
+        record_cap aside-browser-skill manual "aside-browser is selected by --browser both but not installed; rerun setup so the shared-skill phase installs it" ""
+      fi
+      if browser_use_skill_present; then
+        record_cap browser-use-skill ready "managed browser-use skill present" ""
+      else
+        record_cap browser-use-skill manual "browser-use is selected by --browser both but not installed; rerun setup so the shared-skill phase installs it" ""
+      fi
+      if aside_browser_skill_present && browser_use_skill_present; then
+        record_cap browser-skill ready "both managed browser skills present; Aside for signed-in sites, browser-use for isolated testing" ""
+      else
+        record_cap browser-skill manual "both browser skills are selected; one is missing until the shared-skill phase installs it" ""
       fi
       ;;
     none)
@@ -1015,7 +1038,7 @@ ensure_browser_skill() {
       else
         record_cap browser-skill manual "aside-browser is selected but not installed; rerun setup so the shared-skill phase installs the bundled skill" ""
         if [ -e "$HOME/.agents/skills/browser-use" ] || [ -L "$HOME/.agents/skills/browser-use" ]; then
-          record_cap browser-use-skill manual "kept the installed browser-use skill because aside-browser is not installed" ""
+          record_cap browser-use-skill manual "kept the installed browser-use skill because aside-browser is not installed; rerun setup or select --browser both to keep both" ""
         else
           record_cap browser-use-skill ready "not installed" ""
         fi

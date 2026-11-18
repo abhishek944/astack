@@ -42,7 +42,7 @@ The tables below list the current source-of-record surface: registered tool name
 | `@abhishek944/pi-image-gen` | Extension + skills | `image_generate`, `image_compare`, `sprite_generate`, `image_search`, `image_search_compare` | `/image-gen`, `/image-search` | `image-gen`, `sprite-gen` | `sprite_generate` is active only when `pi-image-gen.spriteGeneration.enabled` is true; it is registered unconditionally and the setting gates active-tool visibility. Image search uses separate `pi-image-search` routes and credentials. |
 | `@abhishek944/pi-loop-monitor` | Extension | `LoopCreate`, `LoopList`, `LoopUpdate`, `LoopDelete`, `MonitorCreate`, `MonitorList`, `MonitorUpdate`, `MonitorStop` | `/loop`, `/monitors` | — | — |
 | `@abhishek944/pi-research` | Extension + prompt + skills | — | `/ask` | `design-council`, `read-flows`, `research` | `/ask <question>` is a prompt template; the extension adds `/ask on`, `off`, `status`, and `tools` and applies a read-only tool policy. |
-| `@abhishek944/pi-review` | Skill-only | — | — | `agent-review`, `awesome-logging-standards`, `codebase-design`, `no-arbitrary-limits`, `no-unit-tests`, `security-audit`, `ui-ux-testing` | No extension code or runtime tools. `ui-ux-testing` is a read-only audit; the caller owns fixes and delegation. |
+| `@abhishek944/pi-review` | Skill-only | — | — | `agent-review`, `awesome-logging-standards`, `codebase-design`, `no-arbitrary-limits`, `no-unit-tests`, `security-audit`, `ui-ux-testing`, `ui-ux-followthrough` | No extension code or runtime tools. `ui-ux-testing` is a read-only audit; the caller owns fixes and delegation. `ui-ux-followthrough` owns post-implementation UI disposition inside an authorized task and adds no permission. |
 | `@abhishek944/pi-schedulers` | Extension + Herdr mod | — | `/schedulers` | — | The scheduler clock lives in a Herdr mod's always-shown bar, so runs happen only while the Herdr app is running: no service, login item or supervisor. On macOS the red close button hides the app and Herdr 0.1.12 exposes no visibility signal, so closing the window does not stop scheduling; quitting does. Runs adopt one tab per run in a Schedulers space; unattended runs need Pi 1.0.4+ and use an explicit tool allowlist with `--no-mcp --no-approve`. |
 | `@abhishek944/pi-tasks` | Extension | `WorkCreate`, `WorkList`, `WorkUpdate`, `WorkDelete`, `TodoCreate`, `TodoList`, `TodoUpdate`, `TodoDelete`, `TaskTimeExport`, `TaskTimeImport` | `/works` | — | `/works` opens the task dashboard and accepts `delegate T<number>`. |
 | `@abhishek944/pi-visuals` | Skill-only | — | — | `archify`, `visual-explainer` | No extension code or runtime tools. |
@@ -60,12 +60,12 @@ The tables below list the current source-of-record surface: registered tool name
 
 ### Standalone global skills
 
-`skills/pi-herdr-skills` owns these eight standalone skills. Exactly one of the two browser skills is selected per host; none is bundled by a package.
+`skills/pi-herdr-skills` owns these eight standalone skills. Each host selects `browser-use` (default), `aside-browser`, both, or neither; none is bundled by a package.
 
 | Skill | Purpose | Invocation |
 |---|---|---|
-| `aside-browser` | Bundled vendor Aside entry point, selected with `--browser aside`; it directs the agent to `aside guide` for the live instructions. | `/skill:aside-browser` |
-| `browser-use` | Browser testing, screenshots, forms, and extraction with isolated local Chrome. Selected by default. | `/skill:browser-use` |
+| `aside-browser` | Bundled vendor Aside entry point, selected with `--browser aside` or `--browser both`; it directs the agent to `aside guide` for the live instructions. | `/skill:aside-browser` |
+| `browser-use` | Browser testing, screenshots, forms, and extraction with isolated local Chrome. Selected by default, and alongside Aside with `--browser both`. | `/skill:browser-use` |
 | `commit-and-merge` | Commit requested repository changes and merge into the default branch using repository conventions. | Manual only: `/skill:commit-and-merge` (`disable-model-invocation: true`). |
 | `computer-use` | Operate desktop apps through the local Cua Driver with accessibility elements and verified outcomes. | `/skill:computer-use` |
 | `implement` | Coordinate tracked work with artifact paths, ownership decisions, and verification. | `/skill:implement` |
@@ -75,7 +75,7 @@ The tables below list the current source-of-record surface: registered tool name
 
 All skills, including package-bundled skills, use Pi's generic `/skill:<name>` command when skill commands are enabled. That is separate from extension-registered commands such as `/classifier` and from prompt-template commands such as `/ask`.
 
-`browser-use` is the default browser backend and skill. A host can instead declare `--browser aside` to install the bundled managed `aside-browser` skill and drop the conflicting `browser-use` default, or `--browser none` to install no browser skill. `browser-use` remains installed and current on hosts that keep the default. See [SETUP.md](SETUP.md#browser-backend-selection).
+`browser-use` is the default browser backend and skill. A host can instead declare `--browser aside` to install the bundled managed `aside-browser` skill and drop the conflicting `browser-use` default, `--browser both` to keep both skills side by side (Aside for already-signed-in sites, `browser-use` for isolated headless testing, with no cookie transfer), or `--browser none` to install no browser skill. `browser-use` remains installed and current on hosts that keep the default. See [SETUP.md](SETUP.md#browser-backend-selection).
 
 ## Requirements
 
@@ -92,7 +92,7 @@ bash scripts/setup.sh           # install missing runtimes/capabilities, build, 
 npm run setup                   # same entry after Node exists
 ```
 
-It prepares every package independently, registers the 11 local packages, syncs the selected shared skills, and reports each capability as ready/installed/manual/unsupported/failed. The browser backend is an explicit choice: `--browser browser-use` (default), `--browser aside`, or `--browser none`. Existing tools, auth, package entries, modified skills, sessions, and user services are preserved; by default only `settings.json` packages and an absent `cua-driver` MCP entry can change, with backups. See [SETUP.md](SETUP.md) for options, platform notes, and the Slack delegation boundary.
+It prepares every package independently, registers the 11 local packages, syncs the selected shared skills, and reports each capability as ready/installed/manual/unsupported/failed. The browser backend is an explicit choice: `--browser browser-use` (default), `--browser aside`, `--browser both`, or `--browser none`. Existing tools, auth, package entries, modified skills, sessions, and user services are preserved; by default only `settings.json` packages and an absent `cua-driver` MCP entry can change, with backups. See [SETUP.md](SETUP.md) for options, platform notes, and the Slack delegation boundary.
 
 A headless Ubuntu/Debian host can additionally opt in to a private desktop for the local Cua Driver. It is never installed by default:
 
@@ -123,13 +123,13 @@ Install, upgrade, and publish behavior is unchanged: `package.json` names, versi
 ```bash
 npm run check           # package typecheck/build/pack dry-run (where defined) + service typecheck/build
 npm run verify          # install each directory first, then run npm run check
-npm run check:skills    # run skills/pi-herdr-skills/scripts/check-repo.sh
+npm run check:skills    # verify the skill manifest, then the global skill copies
 node scripts/check.mjs --all   # npm run check plus the skills check
 ```
 
 - `npm run check` never installs or edits package metadata. It requires each directory's `node_modules` to exist and fails with the underlying tool error when dependencies are missing.
 - `npm run verify` runs `npm ci` in directories that have a lockfile and `npm install --no-package-lock` in `pi-firstmate` (the only unit without one), then runs the same checks.
-- `npm run check:skills` compares the selected `skills/*` entries with `~/.agents/skills/*`; it requires those global installs and does not touch package builds. The selection comes from `--browser`, then `$ASTACK_BROWSER`, then `~/.local/share/astack/env.sh`, then `browser-use`.
+- `npm run check:skills` verifies `skills/pi-herdr-skills/skills-manifest.json` against the repository, then compares the selected `skills/*` entries with `~/.agents/skills/*`. It requires those global installs and does not touch package builds. The selection comes from `--browser`, then `$ASTACK_BROWSER`, then `~/.local/share/astack/env.sh`, then `browser-use`. For a scoped global check, run `bash skills/pi-herdr-skills/scripts/check-repo.sh --skill NAME`; `--skill` narrows only the global comparison, still enforces the browser selection, and does not replace the manifest check.
 - None of these commands creates or runs unit tests.
 
 ## Install and cutover
@@ -158,13 +158,13 @@ Then run `/reload`. The git-installed `pi-herdr` remains tied to `github.com/abh
 
 - every `skills/<name>` must match `~/.agents/skills/<name>`;
 - skill edits must be synchronized to the global install and their manifest hashes updated in the same change;
-- `scripts/check-repo.sh` verifies the global equality from the repository root.
+- `scripts/check-manifest.py` verifies the recorded checksums and executable modes, and `scripts/check-repo.sh` verifies the global equality from the repository root; `npm run check:skills` runs both.
 
 The package-owned `grill-me` and `ui-ux-grill-me` skills live in `packages/pi-grill-me` instead. They are not part of the shared installer or its manifest. Install the package, then remove the old global copies of those two skills so Pi does not discover both sources under the same names. Other shared skills remain global and follow the contract above.
 
 The package-owned `research`, `read-flows`, and `design-council` skills live in `packages/pi-research` instead, next to the `/ask` extension and its reusable read-only guard. They are not part of the shared installer or its manifest. Install the package, then remove the old global copies of those three skills so Pi does not discover both sources under the same names.
 
-The package-owned `archify` and `visual-explainer` skills live in `packages/pi-visuals`; `agent-review`, `awesome-logging-standards`, `codebase-design`, `no-arbitrary-limits`, `no-unit-tests`, `security-audit`, and `ui-ux-testing` live in `packages/pi-review`. Both packages are skill-only and are not part of the shared installer or its manifest. `ui-ux-testing` is a read-only audit: it reports verified findings and suggested fixes, while the caller owns scope, fixes, and delegation. Install each package, then remove the old global copies of those nine skills so Pi does not discover both sources under the same names.
+The package-owned `archify` and `visual-explainer` skills live in `packages/pi-visuals`; `agent-review`, `awesome-logging-standards`, `codebase-design`, `no-arbitrary-limits`, `no-unit-tests`, `security-audit`, `ui-ux-testing`, and `ui-ux-followthrough` live in `packages/pi-review`. Both packages are skill-only and are not part of the shared installer or its manifest. `ui-ux-testing` is a read-only audit: it reports verified findings and suggested fixes, while the caller owns scope, fixes, and delegation. `ui-ux-followthrough` is the separate owner for post-implementation disposition and flag-mode review of a named UI surface: it auto-fixes only clear in-scope defects after an implementation or flags a user-specified UI scope through `ui-ux-grill-me`, a named review without prior implementation starts read-only, and the audit itself never gains repair permission. Install each package, then remove the old global copies of those ten skills so Pi does not discover both sources under the same names.
 
 The package-owned `herdr` and `model-routing-policy` skills ship with `packages/pi-herdr` and its configured git checkout; `model-routing-policy` moved there from the shared installer. The editable provider, model, thinking, and Fast choices remain only in `skills/model-routing-policy/SKILL.md`, never in extension code. Remove the old global `model-routing-policy` copy after the package loads so Pi does not discover both sources under the same name.
 

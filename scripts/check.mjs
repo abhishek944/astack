@@ -89,13 +89,23 @@ function checkDirectory(dir, kind) {
 }
 
 function checkSkills() {
-  const script = join(root, "skills/pi-herdr-skills/scripts/check-repo.sh");
-  if (!existsSync(script)) {
+  const scripts = join(root, "skills/pi-herdr-skills/scripts");
+  const manifest = join(scripts, "check-manifest.py");
+  const sync = join(scripts, "check-repo.sh");
+
+  console.log("\n### skills/pi-herdr-skills: manifest and global synchronization");
+  if (existsSync(manifest)) {
+    const out = spawnSync("python3", [manifest], { stdio: "inherit", env: process.env });
+    record("skills manifest", out.status === 0);
+  } else {
+    record("skills manifest", false, "check-manifest.py missing");
+  }
+
+  if (!existsSync(sync)) {
     record("skills global sync", false, "check-repo.sh missing");
     return;
   }
-  console.log("\n### skills/pi-herdr-skills: global synchronization");
-  const out = spawnSync("bash", [script], { stdio: "inherit", env: process.env });
+  const out = spawnSync("bash", [sync], { stdio: "inherit", env: process.env });
   record("skills global sync", out.status === 0);
 }
 
