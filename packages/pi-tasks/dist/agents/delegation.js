@@ -1,4 +1,4 @@
-import { createTimingReport } from "../delegated-time.js";
+import { createTimingReport, inspectTimingReport } from "../delegated-time.js";
 import { taskOwner } from "../ownership.js";
 import { areTrackingToolsActive } from "../tracking.js";
 import { TERMINAL_ID } from "./herdr.js";
@@ -32,6 +32,12 @@ export function registerDelegationBridge(pi, state) {
                 const reportPath = await createTimingReport(ctx, input.taskDir, input.workId, input.taskId);
                 assignment(ctx, input);
                 return { reportPath };
+            },
+            async inspect(ctx, input) {
+                assignment(ctx, input);
+                const inspected = await inspectTimingReport(ctx, input.taskDir, input.workId, input.taskId, input.reportPath);
+                assignment(ctx, input);
+                return inspected;
             },
             attach(ctx, input) {
                 const todo = assignment(ctx, input);

@@ -19,6 +19,7 @@
     "dist/",
     "herdr/",
     "skills/firstmate/",
+    "skills/close/",
     "config.example.json",
     "README.md",
     "LICENSE"

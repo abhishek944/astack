@@ -1,5 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { createTimingReport } from "../delegated-time.js";
+import { createTimingReport, inspectTimingReport, type TimingInspection } from "../delegated-time.js";
 import { taskOwner } from "../ownership.js";
 import type { TaskState } from "../state.js";
 import { areTrackingToolsActive } from "../tracking.js";
@@ -10,6 +10,7 @@ import { delegateLink, withTerminalLink } from "./links.js";
 interface Assignment { workId: string; taskId: string }
 interface DelegationAPI {
   prepare(ctx: ExtensionContext, input: Assignment & { taskDir: string }): Promise<{ reportPath: string }>;
+  inspect(ctx: ExtensionContext, input: Assignment & { taskDir: string; reportPath: string }): Promise<TimingInspection>;
   attach(ctx: ExtensionContext, input: Assignment & { terminalId: string; monitorId: string; reportPath: string }): void;
   detach(ctx: ExtensionContext, input: { terminalId: string }): void;
 }
@@ -40,6 +41,12 @@ export function registerDelegationBridge(pi: ExtensionAPI, state: TaskState): vo
         const reportPath = await createTimingReport(ctx, input.taskDir, input.workId, input.taskId);
         assignment(ctx, input);
         return { reportPath };
+      },
+      async inspect(ctx, input) {
+        assignment(ctx, input);
+        const inspected = await inspectTimingReport(ctx, input.taskDir, input.workId, input.taskId, input.reportPath);
+        assignment(ctx, input);
+        return inspected;
       },
       attach(ctx, input) {
         const todo = assignment(ctx, input);

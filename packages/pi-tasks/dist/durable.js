@@ -9,7 +9,7 @@
  * invocation-bound `api` is never retained.
  *
  * Desktop-only surfaces are intentionally absent here, not stubbed:
- * - AgentCreate/List/Status/Output/Send/Interrupt/Close/Focus need the Herdr CLI
+ * - AgentCreate/Resume/List/Status/Output/Send/Interrupt/Close/Focus need the Herdr CLI
  *   plus Pi nested `executeTool`, which Durable 1.1 `ToolExecutionApi` does not expose.
  * - TaskTimeExport/Import need repository `var/` timing files plus a parent Pi session.
  * - Auto-continuation needs Pi's `agent_before_settle` boundary; the `/works`

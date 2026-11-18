@@ -15,6 +15,7 @@ import { applySkillAllowlist } from "./skill-allowlist.js";
 import { COORDINATOR_TOOLS_DESCRIPTION, createToolGate } from "./tool-gate.js";
 import { classifyCoreWorker } from "./worker.js";
 const COMMAND_NAME = "firstmate";
+const CLOSE_COMMAND_NAME = "close";
 const ENTRY_TYPE = "pi-firstmate.mode";
 const TOOL_ENTRY_TYPE = "pi-firstmate.tools";
 const SECTION_KEY = "first_mate";
@@ -26,12 +27,20 @@ const MODE_CHANGED_EVENT = "pi-firstmate:mode:changed";
 const SCHEDULER_TOOLS_CHANGED_EVENT = "pi-schedulers:tools:changed";
 const POLICY_DISPLAY_PATH = "skills/firstmate/SKILL.md";
 const POLICY_URL = new URL("../skills/firstmate/SKILL.md", import.meta.url);
+const CLOSE_SKILL_DISPLAY_PATH = "skills/close/SKILL.md";
+const CLOSE_SKILL_URL = new URL("../skills/close/SKILL.md", import.meta.url);
 const BANNER_ASSETS = new URL("../herdr/firstmate-banner/", import.meta.url);
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 const SKILL_REMINDER = "Read the installed First Mate skill before acting.";
 const ON_GUIDELINE = `First Mate coordinator mode is active for this session. ${SKILL_REMINDER} Follow the <first_mate> section: keep conversation, decisions, quick inspection and coordination local, and delegate project execution to workers through an available, authorized orchestration backend following its actual instructions. If delegation is unavailable, report the blocker instead of silently doing substantial work locally.`;
 const OFF_GUIDELINE = "First Mate coordinator mode is off. Supersede any earlier First Mate coordinator guidance in this session and resume ordinary project and host instructions for project work.";
 const USAGE = "Usage: /firstmate on | off | default | status. With no argument, shows status.";
+const CLOSE_USAGE = "Usage: /close. Records the worker close retrospective; the coordinator verifies the record and closes the terminal.";
+const CLOSE_COORDINATOR_NOTE = "/close records a worker close retrospective, so it does not start one for a coordinator session. Once a worker's result is verified and it needs no follow-up, send this command to that live worker with AgentSend, wait for its record and final report, then close its terminal.";
+// A coordinator sends the command through the backend's send tool, which wraps
+// the text in an `hc` envelope. Pi dispatches a slash command only when the
+// submitted text starts with `/`, so the wrapped request is recognized here.
+const CLOSE_INPUT_REQUEST = /^(?:\s*<hc\b[^>]*>)?\s*\/close\s*(?:<\/hc>)?\s*$/i;
 function stripFrontmatter(markdown) {
     const match = /^---[ \t]*\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/.exec(markdown);
     return match ? markdown.slice(match[0].length) : markdown;
@@ -83,6 +92,8 @@ export default function firstMateExtension(pi) {
     let worker;
     let policyText;
     let policyError;
+    let closeWorkflow;
+    let closeWorkflowError;
     const toolGate = createToolGate(pi);
     let savedActiveTools = null;
     let savedBaselineKey = null;
@@ -205,6 +216,39 @@ export default function firstMateExtension(pi) {
             policyError = error instanceof Error ? error.message : String(error);
             return undefined;
         }
+    }
+    function loadCloseWorkflow() {
+        if (closeWorkflow !== undefined)
+            return closeWorkflow;
+        try {
+            const text = stripFrontmatter(readFileSync(fileURLToPath(CLOSE_SKILL_URL), "utf8")).trim();
+            if (text === "")
+                throw new Error("the skill file is empty");
+            closeWorkflow = text;
+            closeWorkflowError = undefined;
+            return closeWorkflow;
+        }
+        catch (error) {
+            closeWorkflowError = error instanceof Error ? error.message : String(error);
+            return undefined;
+        }
+    }
+    function closeRunText(ctx, mode) {
+        const workflow = loadCloseWorkflow();
+        if (workflow === undefined) {
+            return {
+                error: `The close workflow could not be read from ${CLOSE_SKILL_DISPLAY_PATH}: ${closeWorkflowError}. Nothing was recorded and no run was started.`,
+            };
+        }
+        const sessionId = ctx.sessionManager.getSessionId();
+        const role = mode.worker.kind === "worker"
+            ? `verified Core worker for parent task ${mode.worker.task} in parent session ${mode.worker.parentSessionId}; the coordinator still verifies the result and closes this terminal`
+            : mode.worker.kind === "explicit-worker"
+                ? "explicit worker process; the coordinator still verifies the result and closes this terminal"
+                : "ordinary session";
+        return {
+            text: `Run the close retrospective now. Session ${sessionId}; ${role}; repository working directory ${ctx.cwd}.\n\n${workflow}`,
+        };
     }
     function resolveMode() {
         const configuredDefault = config.kind === "valid" ? config.enabled : false;
@@ -570,6 +614,49 @@ export default function firstMateExtension(pi) {
                         : "off";
             report(ctx, `First Mate now follows the configured default: ${state}.`, mode.suppressed || mode.uncertain ? "warning" : "info");
         },
+    });
+    pi.registerCommand(CLOSE_COMMAND_NAME, {
+        description: "Record the worker close retrospective before final handoff",
+        handler: async (args, ctx) => {
+            refreshConfig();
+            await ensureWorkerKnown();
+            if (args.trim() !== "") {
+                report(ctx, CLOSE_USAGE, "warning");
+                return;
+            }
+            const mode = resolveMode();
+            if (mode.effective) {
+                report(ctx, CLOSE_COORDINATOR_NOTE, "warning");
+                return;
+            }
+            const run = closeRunText(ctx, mode);
+            if ("error" in run) {
+                report(ctx, run.error, "error");
+                return;
+            }
+            pi.sendUserMessage(run.text, { deliverAs: "followUp" });
+            report(ctx, `Close retrospective started for session ${ctx.sessionManager.getSessionId()}. It records findings only: no skills, code, tasks or terminals are changed.`, "info");
+        },
+    });
+    // A coordinator triggers this lifecycle with the backend's send tool. The
+    // wrapped request would otherwise reach the model as plain text and be
+    // improvised, so replace it with the same workflow the command starts.
+    pi.on("input", async (event, ctx) => {
+        if (!CLOSE_INPUT_REQUEST.test(event.text))
+            return undefined;
+        refreshConfig();
+        await ensureWorkerKnown();
+        const mode = resolveMode();
+        if (mode.effective) {
+            report(ctx, CLOSE_COORDINATOR_NOTE, "warning");
+            return { action: "handled" };
+        }
+        const run = closeRunText(ctx, mode);
+        if ("error" in run) {
+            report(ctx, run.error, "error");
+            return { action: "handled" };
+        }
+        return { action: "transform", text: run.text };
     });
     pi.on("session_start", async (_event, ctx) => {
         sessionCtx = ctx;

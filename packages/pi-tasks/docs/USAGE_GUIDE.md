@@ -200,6 +200,8 @@ The compact panel and `/works` show reserved Done and Time columns; `▶` beside
 
 AgentCreate derives and creates the canonical parent task directory, then creates a unique `delegated-time-<id>.json` descriptor below it and returns its `reportPath`. Its prepared worker assignment includes export instructions; its monitor callback includes import instructions. Herdr still runs the worker and pi-loop-monitor still reports state changes. The timing file, not the notification or chat response, carries the measured values. Both agents need this version of pi-tasks loaded.
 
+If startup fails after the worker exists, AgentCreate returns the same descriptor and handles with `status: partial`. AgentResume validates that descriptor through the delegation bridge before registering it: a fresh file with no worker session or tasks is a placeholder, not a measurement, and stays unknown until the worker's TaskTimeExport writes measured effort. A descriptor outside the canonical task directory or belonging to another parent assignment is rejected. Resume never writes or calculates elapsed time.
+
 Before returning, the worker pauses or completes its assignment tasks and exports their timing:
 
 ```text
@@ -242,20 +244,21 @@ A linked `[delegate]` badge uses `hc-terminal: <terminalId>` and `hc-monitor: <m
 
 ## Agent tools
 
-These tools are owned and registered by the separate [pi-herdr](https://github.com/abhishek944/pi-herdr) package, not pi-tasks. They are bounded, shell-free Core CLI wrappers; no legacy TUI fallback or pi-herdr-agents dependency. Creation/closure require modern Pi nested tool calls and updated pi-loop-monitor.
+These tools are owned and registered by the separate [pi-herdr](https://github.com/abhishek944/pi-herdr) package, not pi-tasks. They are bounded, shell-free Core CLI wrappers; no legacy TUI fallback or pi-herdr-agents dependency. Creation/resume/closure require modern Pi nested tool calls and updated pi-loop-monitor.
 
 | Tool | Purpose |
 | --- | --- |
-| `AgentCreate` | Verify the Core parent, start interactive Pi through hc, verify native idle status, register monitoring, and return terminalId/monitorId/reportPath plus a prepared assignment. `present: true` additionally adopts and verifies a dedicated visible task-named app tab and returns tabId. No assignment is sent. |
+| `AgentCreate` | Verify the Core parent, start interactive Pi through hc, verify native idle status, register monitoring, and return terminalId/monitorId/reportPath plus a prepared assignment. `present: true` additionally adopts and verifies a dedicated visible task-named app tab and returns tabId. No assignment is sent. A post-launch failure returns `status: partial` with the same handles and an AgentResume next step. |
+| `AgentResume` | Finish the same partial worker: validate the timing descriptor and task directory, prove Core parent plus `pi.task`/`pi.session` ownership, require idle Pi, reuse one ready subscription or replace a non-ready one, then attach timing/linkage. Never relaunches, duplicates monitoring, bypasses prompts or fabricates timing. |
 | `AgentList` | `hc ls --json`, including unrelated live terminals. |
 | `AgentStatus` | `hc get <terminalId> --json`. |
 | `AgentOutput` | `hc read <terminalId> --lines <n>`, screen plus 50 history lines by default, up to 200. |
 | `AgentSend` | `hc send <terminalId> <message>`, without --wait or --force. |
 | `AgentInterrupt` | `hc keys <terminalId> esc`. |
-| `AgentClose` | Stop the supplied monitor, kill the owned terminal if live, then remove its finished Core record. If the worker was presented, the app removes its ended pane/tab. |
+| `AgentClose` | Stop the supplied monitor when present, kill the owned terminal if live, then remove its finished Core record. A partial worker with no monitor can be closed with only terminalId. If the worker was presented, the app removes its ended pane/tab. |
 | `AgentFocus` | Shows an existing Core agent through herdr-app. A pane owner or another machine's terminal uses `agent.focus`; a pane-less sub-agent uses `terminal.peek` to open its own screen overlay over the current tab. Also used by delegate links. Reports `focused: false` with a reason when no app is available or the agent cannot be shown. |
 
-pi-herdr 0.1.0 requires the compatible local pi-tasks source with the version-1 prepare/attach/detach event-bus bridge. Published pi-tasks 0.15.0 lacks this bridge and owns legacy Agent tools; replace that source, do not load it alongside the updated local package. Reload or restart Pi after installing the coordinated pair. pi-tasks keeps timing, records, delegate links and task UI helpers. pi-herdr rejects duplicate Agent names with migration instructions rather than overriding them.
+pi-herdr 0.1.0 requires the compatible local pi-tasks source with the version-1 prepare/inspect/attach/detach event-bus bridge. Published pi-tasks 0.15.0 lacks this bridge and owns legacy Agent tools; replace that source, do not load it alongside the updated local package. Reload or restart Pi after installing the coordinated pair. pi-tasks keeps timing, records, delegate links and task UI helpers. pi-herdr rejects duplicate Agent names with migration instructions rather than overriding them.
 
 For an existing active Work/Todo with owner: delegate:
 

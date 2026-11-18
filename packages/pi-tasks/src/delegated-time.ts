@@ -103,6 +103,29 @@ async function readReport(path: string): Promise<TimingReport> {
   return data as unknown as TimingReport;
 }
 
+export interface TimingInspection {
+  reportPath: string;
+  timing: "placeholder" | "measured";
+  workerSessionId: string | null;
+}
+
+/**
+ * Validate an existing timing descriptor for a delegated assignment before registration.
+ * A fresh descriptor has no worker session or tasks yet; that is a placeholder, not a
+ * measurement. Callers must report it as unknown until the worker exports real effort.
+ */
+export async function inspectTimingReport(ctx: ExtensionContext, taskDir: string, workId: string, taskId: string, reportPath: string): Promise<TimingInspection> {
+  const sessionId = ctx.sessionManager.getSessionId();
+  const directory = await reportDirectory(ctx.cwd, resolve(ctx.cwd, taskDir));
+  const actual = await reportFile(ctx.cwd, reportPath);
+  if (dirname(actual) !== directory) throw new Error("Timing report is not in the delegated task directory.");
+  const report = await readReport(actual);
+  if (report.parentSessionId !== sessionId || report.parentWorkId !== workId || report.parentTaskId !== taskId) {
+    throw new Error("Timing report belongs to another parent assignment.");
+  }
+  return { reportPath: actual, timing: report.workerSessionId === null ? "placeholder" : "measured", workerSessionId: report.workerSessionId };
+}
+
 export async function createTimingReport(ctx: ExtensionContext, taskDir: string, workId: string, taskId: string): Promise<string> {
   const sessionId = ctx.sessionManager.getSessionId();
   if (!SESSION_ID.test(sessionId)) throw new Error("Invalid parent session ID for timing handoff.");

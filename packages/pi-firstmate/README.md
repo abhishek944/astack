@@ -27,8 +27,20 @@ First Mate does not install an orchestration backend. Install and authorize pi-h
 | `/firstmate on` | Enable coordinator guidance for this session. |
 | `/firstmate off` | Disable it and supersede earlier coordinator guidance. |
 | `/firstmate default` | Clear the session override and follow settings. |
+| `/close` | Record the worker close retrospective in `improvements.md` in the worker's canonical task directory; changes nothing and never closes a terminal. |
 
 Overrides survive reload and resume of the same session. Navigating branches does not roll them back. Forks have a new session ID and do not inherit the override. Commands never write your settings.
+
+## Worker close retrospective
+
+When a worker's assignment is complete, the coordinator verifies the result and decides whether the worker needs anything further. Only when it does not, the coordinator sends the real `/close` command to that still-live worker with the orchestration backend's send tool (`AgentSend`), waits for the resulting run, reads the `improvements.md` record, and then closes the worker terminal with the backend's close tool (`AgentClose`).
+
+- Records stay local in the canonical task artifact directory: `<parentTaskDir>/<sessionId>/<workId>/<taskId>/improvements.md` for a delegated worker, or `var/<sessionId>/<workId>/<taskId>/improvements.md` in a root session. Without a work or task record, the file is `var/<sessionId>/improvements.md`. `var/` is not committed.
+- Nothing is applied. No skills, code, settings, tasks, terminals or monitors are changed, and no commits, deployments or follow-up tasks are created.
+- Repeated runs merge into the existing file instead of duplicating findings, and blocked or interrupted work is recorded honestly instead of as complete.
+- The command itself never closes a terminal and never runs automatically on a final or interim worker report. The coordinator owns both the decision and the close, so the retrospective cannot run before verification or while follow-up work is still possible.
+
+`/close` runs the same bundled `close` skill workflow in any session. A model cannot type slash commands, which is why the coordinator sends the command through the backend. A typed `/close` is dispatched by Pi as a command; the backend-wrapped request (`<hc …>/close</hc>`) is recognized by the worker's `input` hook and rewritten into the same workflow run, so it is not sent to the model as plain text to improvise. In a coordinator session the command reports this lifecycle instead of starting a coordinator retrospective, because the coordinator has no project-edit tools.
 
 ## Default configuration
 
