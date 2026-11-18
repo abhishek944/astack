@@ -38,6 +38,16 @@ Owner task directory: `var/<sessionId>/<workId>/<taskId>/` or the nested delegat
 - Constraints stated by user: …
 - Success criteria: …
 
+## Reference baseline
+
+<Only when replicating a reference; omit otherwise.>
+
+- Reference and version/date: …
+- Access used: real interface / source / public docs / recorded output
+- Verified behavior: … — evidence: <path or URL>
+- Unverified or inaccessible: … — why: …
+- License or attribution constraints: …
+
 ## Open branches
 
 | Qualified ID | Branch | Level | Owner label | Owner task directory | Status | Depends on |
@@ -77,6 +87,7 @@ Owner task directory: `var/<sessionId>/<workId>/<taskId>/` or the nested delegat
 
 ## Traversal rules
 
+0. **Reference baseline before branches** — when the user asks to replicate a reference, ground the actual reference and complete the reference baseline first. Its verified behavior is the starting proposal. Optional improvements and required deviations are separate branches, never hidden defaults; an unverified memory of the reference is not evidence.
 1. **Level-based between owners, depth-first within an owner** — dispatch independent ready branches concurrently; resolve local parents before children and integrate the whole level before advancing.
 2. **One question per owner** — separate visible browser interviews may run concurrently. Each owner calls WaitForAnswer, yields while pending, records the archived browser answer on wake, and advances its own follow-ups automatically.
 3. **Ground before ask** — if the answer might live in the repository, logs, data store, runtime, or documentation, gather that evidence first; only ask the user what remains unknown. When using any independent agent, follow the parent skill's Herdr-first runtime policy.
@@ -91,7 +102,8 @@ Each branch question must use the browser interview page. A blocked browser flow
 Each browser question should:
 
 - Use local branch ID `B<n>` and a safe session-unique tool question ID such as `<owner-label>-B1`; show level and owner/decision in the title. After consuming the validated answer, copy it unchanged from the returned `responsePath` into the owner's `response-B<n>.json` evidence file.
-- State why the branch matters and include the evidence-backed recommendation.
+- State why the branch matters, include the evidence-backed recommendation, and apply one concrete scenario to every meaningful option so the difference and each option's tradeoff are visible. Label an unobserved scenario as illustrative.
+- In reference replication, make the baseline option state the verified reference behavior and its evidence. Present improvements and required deviations as explicit changes with their tradeoff, never as if they were part of the reference.
 - Provide **2–6 options** plus a free-form response; comments-only rejection is valid. Choose required `mode: "multiple"` for compatible additive options and `"single"` for mutually exclusive alternatives.
 - Record all `selectedIds`/`selectedLabels` and the user's `response`; use `submissionType` and empty arrays for comments-only rejection. There are no scalar-answer fallbacks. Resolve conflicting selections through follow-up questions.
 - Add a Mermaid or image content block when it materially clarifies a core concept. Use complete absolute paths for media and pass content directly, not an options file.

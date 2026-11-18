@@ -1,6 +1,6 @@
 ---
 name: grill-me
-description: Browser-based visual interview that stress-tests a plan or design in dependency levels with parallel browser branch owners, explains core concepts with diagrams when useful, records each submitted response automatically, and continues without asking the user to type "continue". Use when the user says "grill me", wants plan decisions challenged, or wants shared understanding before implementation.
+description: Browser-based visual interview that stress-tests a plan or design in dependency levels with parallel browser branch owners, explains core concepts with diagrams when useful, records each submitted response automatically, and continues without asking the user to type "continue". Use when the user says "grill me", wants plan decisions challenged, wants to replicate an existing reference, or wants shared understanding before implementation.
 compatibility: Requires Pi 1.4-compatible pi-decisions and pi-loop-monitor extensions, Node.js, a browser, Herdr Core (hc), and Core-hosted Pi agents; the Herdr app is needed only for requested visible-tab presentation.
 ---
 
@@ -54,14 +54,26 @@ Use a browser interview page for every branch. Keep the interaction model consis
 - **Configured backend** — global Pi settings select `"pi-decisions": {"backend":"local"}` (the default) or explicitly `"here.now"`. Local mode assigns a loopback port automatically. Do not override the user's choice or silently fall back between local and hosted delivery. Hosted pages must contain only the intended non-sensitive interview assets, never the whole task directory.
 - **Automatic recording** — the tool archives the answer at its returned `responsePath`. After collecting it, archive an unchanged skill-owned copy as `response-B<n>.json` in the owner artifact directory and record it in the local decision tree before the next question; the parent verifies these copies at the level gate.
 - **Recommended answer required** — put the evidence-backed recommendation first and mark it recommended.
+- **Explain options in a comparable scenario** — before asking, apply one realistic scenario from this repository or workflow to every meaningful option: what the user does or what happens, how each option behaves, and the consequence or tradeoff. The scenario, the recommendation, and its evidence belong on the page itself, not only in chat. Use an observed case when you have one; label a constructed case as illustrative and never present it as a measurement, test result, or reproduction.
 - **Visualize core concepts** — when relationships, state, sequence, hierarchy, or tradeoffs are materially clearer visually, include a Mermaid diagram or image content block on the question page. Skip decoration-only visuals.
 - **Ground before asking** — use evidence from the repository, schema, logs, runtime, and official external sources. Ask the user only for judgment calls or unresolved choices.
+- **Reference-first when replicating** — when the request is to replicate, match, or rebuild a named reference, ground the actual reference before asking design questions, present its verified behavior as the starting proposal, and keep optional improvements and required deviations in separate labeled lists. Never let an unverified memory of the reference, or a proposed improvement, become an implicit requirement.
 - **Canonical owner directory** — write skill-owned interview evidence only inside your own owner task directory (see [Owner task directory](#owner-task-directory)). Do not pass it to the question tools. Referenced media uses complete absolute paths. Feature names, owner labels and branch labels are metadata only.
 - **No implicit legacy resume** — never reopen or write into `var/grill-me/` or any feature-first session folder; treat existing ones as historical evidence and migrate a session only after explicit approval and only when the destination is absent.
 - **No fake consensus** — keep unresolved branches open or explicitly defer them.
 - **Separate concept visuals from UI variants** — Mermaid and image content blocks in this skill explain a plan; they are not implementation candidates. Send visual UI decisions to the globally installed `ui-ux-grill-me` skill.
 - **Global handoffs only** — global skill handoffs are allowed, but do not hard-code or require repository-only skill names or agent role names.
 - **Automatic implementation handoff** — invoking this skill authorizes the parent to continue into implementation of the resolved scope after every branch is verified resolved or explicitly deferred and final integration is complete. Do not ask for another plan approval, implementation permission, or `continue`. Start global `ui-ux-grill-me` first when visual decisions are needed; otherwise start global `implement` in the same turn. Honor explicit planning-only or stop instructions, keep real blockers open, and do not implement deferred scope. Interview owners remain read-only on production code; the parent exits interview mode before implementation. Other action permissions remain unchanged.
+
+## Reference-first replication
+
+When the user asks to replicate, match, or rebuild a reference, establish the reference baseline before branching. A reference can be a product, page, workflow, API, repository, screenshot, document, or recorded behavior.
+
+1. **Ground the actual reference** — inspect the real accessible artifact or behavior. Prefer the running product, source repository, public documentation, or recorded output over the user's summary or an agent's memory. Read files completely where applicable. For third-party claims, use the globally installed `research` skill and official sources. Keep access read-only: never bypass authentication, paywalls, access controls, licenses, or rate limits, and never expose private data. If part of the reference is inaccessible, record it as unverified instead of filling the gap from imagination.
+2. **Record the verified baseline** — in `decision-tree.md`, list each observed behavior with its evidence path or URL, what remains unverified, and the reference version or date when it matters. Mark unverified assumptions explicitly.
+3. **Start from the baseline** — the verified reference behavior is the recommended starting proposal in the first relevant branch. Do not ask the user to choose between the reference and invented alternatives before showing what the reference actually does. Ask only about inaccessible parts, desired improvements, and deviations the user must accept.
+4. **Separate the three lists** — keep `Reference behavior`, `Optional improvements`, and `Required deviations` distinct in the decision tree and final report. An improvement is never a default requirement. A required deviation names the concrete constraint (platform, library, accessibility, security, license, or performance) and needs the user's acceptance. If no improvement or deviation is wanted, the baseline is the plan.
+5. **Preserve the evidence** — link the reference baseline in the final report and handoff so implementation can compare against it. Do not copy protected assets or code beyond the user's rights; record license or attribution constraints as required deviations.
 
 ## Browser question page
 
@@ -74,17 +86,19 @@ For each branch `B<n>`, submit the content directly. Use a session-unique safe q
   "question": "Which boundary should own this behavior?",
   "label": "<owner-label>",
   "content": [
-    { "type": "text", "text": "Why this choice matters, grounded in evidence." },
+    { "type": "text", "text": "One realistic scenario applied to every option, each option's consequence or tradeoff, and the evidence-backed recommendation." },
     { "type": "mermaid", "code": "flowchart LR\nA[Current state] --> B{Decision}\nB --> C[Option A]\nB --> D[Option B]" }
   ],
   "recommended": "A",
   "options": [
-    { "id": "A", "label": "Recommended direction", "content": [{ "type": "text", "text": "Main benefit and tradeoff." }] },
-    { "id": "B", "label": "Alternative", "content": [{ "type": "text", "text": "When this is preferable." }] },
+    { "id": "A", "label": "Recommended direction", "content": [{ "type": "text", "text": "What the recommended option does in that scenario, and why the evidence favors it." }] },
+    { "id": "B", "label": "Alternative", "content": [{ "type": "text", "text": "What this option does in the same scenario, and when its tradeoff is preferable." }] },
     { "id": "D", "label": "Defer", "content": [{ "type": "text", "text": "Dependency required before deciding." }] }
   ]
 }
 ```
+
+The example above shows the block structure, not acceptable final wording. The page content must carry the comparable scenario, and each meaningful option's content must state what that option does in the same scenario with its consequence or tradeoff. Do not submit generic phrases such as "Why this choice matters" or "Main benefit and tradeoff" as the explanation.
 
 Use 2–6 options as this skill's interview policy, not a tool quota. Set `mode: "single"` for mutually exclusive alternatives and `"multiple"` for compatible choices that can coexist; it is required, not inferred. Keep incompatible alternatives or a mutually exclusive Defer choice in a separate single-choice question. Use `mode: "review"` without options/recommendation only when open-ended feedback is the intended interaction.
 
@@ -154,16 +168,16 @@ If options still need a multi-perspective debate after the interview, hand off t
 
 ### 0. Intake
 
-Capture the plan, scope, constraints, and success criteria. Create `<taskDir>/dag.md` and `decision-tree.md` from [references/decision-tree.md](references/decision-tree.md) before opening questions.
+Capture the plan, scope, constraints, and success criteria. If the user is replicating a reference, complete the reference baseline in [Reference-first replication](#reference-first-replication) before seeding branches. Create `<taskDir>/dag.md` and `decision-tree.md` from [references/decision-tree.md](references/decision-tree.md) before opening questions.
 
 ### 1. Seed the tree
 
-Break the plan into branches such as product scope, user model, capability boundary, data flow, failure modes, rollout, and ownership. Record dependencies, levels, closure criteria and owner boundaries in the DAG; run the smallest useful grounding pass before dispatch.
+Break the plan into branches such as product scope, user model, capability boundary, data flow, failure modes, rollout, and ownership. For reference replication, seed the verified baseline first, then add branches only for optional improvements, required deviations, and genuinely unresolved gaps. Record dependencies, levels, closure criteria and owner boundaries in the DAG; run the smallest useful grounding pass before dispatch.
 
 ### 2. Interview loop
 
 1. Select the current ready level and dispatch independent owners concurrently.
-2. Each owner grounds facts, adds useful concept visuals, and runs its own browser question/Submit/wait loop.
+2. Each owner grounds facts, adds useful concept visuals, explains every meaningful option in the same realistic scenario with its consequence, and runs its own browser question/Submit/wait loop.
 3. Each owner records answers, follows answer-driven children, and returns a closed tree or explicit blocker.
 4. The parent verifies original responses, merges branch results, and resolves contradictions.
 5. Complete the level integration gate, then continue automatically to the next ready level until the whole DAG is resolved or explicitly deferred.
@@ -199,6 +213,14 @@ For every third-party claim, use official-source research through the required H
 ## Shared understanding
 
 <what was agreed>
+
+## Reference baseline
+
+<when replicating a reference: verified behavior, evidence, and unverified gaps; otherwise omit>
+
+## Improvements and deviations
+
+<when replicating a reference: optional improvements and required deviations with their constraints; otherwise omit>
 
 ## Resolved decisions
 

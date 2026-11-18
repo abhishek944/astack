@@ -39,6 +39,16 @@ Owner task directory: `<taskDir>`.
 - Constraints: …
 - Success criteria: …
 
+## Reference baseline
+
+<Only when replicating an external reference; omit otherwise.>
+
+- Reference and version/date: …
+- Access used and viewport/state: …
+- Verified visible behavior: … — evidence: <path or URL>
+- Unverified or inaccessible: … — why: …
+- License or attribution constraints: …
+
 ## Viewports captured
 
 | Label   | Size     | Path                             |
@@ -80,6 +90,7 @@ Owner task directory: `<taskDir>`.
 - [ ] Every open branch closed or deferred
 - [ ] No contradictory resolved decisions
 - [ ] Current UI captured before variants shown
+- [ ] External reference grounded first when replicating; improvements and deviations labeled separately
 - [ ] Image-generation reference created and inspected before variants shown
 - [ ] Each branch varied one primary axis
 - [ ] Every option has screenshot and source provenance
@@ -93,7 +104,7 @@ Owner task directory: `<taskDir>`.
 
 1. **Level-based between owners, depth-first within an owner** — resolve shared foundations, dispatch ready independent axes concurrently, then integrate the level before advancing.
 2. **One comparison per owner** — each owner opens a separate visible browser interview, waits for feedback, and follows local children automatically. Owners call WaitForAnswer and yield while pending; the watcher resumes the owning session. Browser tabs/windows across owners may compete; task directories, question identities and mutable capture state must not.
-3. **Current first** — option A is always the captured baseline unless user requests otherwise.
+3. **Baseline first** — option A is the captured current baseline unless the user asks to replicate an external reference, in which case the verified reference baseline is option A and the current UI remains a comparison option when it exists.
 4. **One axis per branch** — e.g. layout OR CTA prominence, not both.
 5. **Record feedback JSON** — keep local branch IDs `B<n>`, safe session-unique tool IDs such as `<owner-label>-B1`, and qualified tree IDs `<owner-label>:B<n>`. Consume the validated answer at the returned `responsePath`, archive its unchanged copy as `response-B<n>.json`, and build skill-owned `selection-B<n>.json` with `answer`, `responsePath`, `privateVariantEvidence`, and `visualContracts`. Read selections and rationale from `answer.selectedIds`, `answer.selectedLabels`, and `answer.response`; reconstruct contracts from trusted private variant records, never browser-supplied fields. Preserve all selections and source paths. Multiple selected variants keep the branch open for synthesis: clarify how parts combine and get acceptance of a coherent combined browser-rendered candidate in a single-select follow-up before moving it to Resolved. If `submissionType` is `comments-only`, keep the branch open/rework-needed with variant `none` until a revised choice is accepted or the user explicitly defers it. Only user-approved deferrals enter Deferred; they do not satisfy required decision dependencies.
 6. **Deferral is explicit** — do not skip branches silently.
@@ -103,7 +114,7 @@ Owner task directory: `<taskDir>`.
 Each comparison page should include:
 
 - Clear `[question]` headline matching the branch
-- Exactly 6 views: current baseline, 3 standard variants, and 2 out-of-the-box variants, each with a short label and one-line tradeoff
+- Exactly 6 views: current baseline, 3 standard variants, and 2 out-of-the-box variants, each with a short label and a concrete tradeoff naming the task or state where it helps or hurts. When replicating an external reference, the reference baseline takes the baseline slot and the current UI replaces one standard variant when it exists, so the set stays at six.
 - Embedded or linked visuals — **viewport PNG for every option** (required); iframe-only output is not accepted
 - Private source provenance for every option: `live-route` or `mockup-html`, source path, viewport, route and source artifact/hash when applicable; keep this outside the tool request
 - Expand control for every viewport image

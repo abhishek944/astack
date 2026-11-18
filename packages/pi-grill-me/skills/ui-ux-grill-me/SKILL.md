@@ -1,6 +1,6 @@
 ---
 name: ui-ux-grill-me
-description: "Repository-agnostic visual UX interview: capture the current interface, present grounded design variants in a browser, run dependency-level parallel browser interviews with autonomous branch owners, and produce an implementation-ready visual contract."
+description: "Repository-agnostic visual UX interview: capture the current interface, present grounded design variants in a browser, run dependency-level parallel browser interviews with autonomous branch owners, and produce an implementation-ready visual contract. Grounds an external interface reference first when the user asks to replicate or match one."
 compatibility: Requires Pi 1.4-compatible pi-decisions and pi-loop-monitor extensions, Node.js, browser automation, a renderable target or mockup environment, Herdr Core (hc), and Core-hosted Pi agents; the Herdr app is needed only for requested visible-tab presentation.
 ---
 
@@ -47,6 +47,8 @@ Help the user see and choose interface directions, then automatically implement 
 - Capture the target surface at its real useful size. Do not use a full-page screenshot when the decision concerns a panel, modal, embedded view, mobile screen, or other constrained surface.
 - Use viewport screenshots for comparable options.
 - Ground variants in the current interface, project design tokens, user goal, and accessibility requirements.
+- **Reference-first when replicating** — when the user asks to replicate or match an external interface, ground the actual reference before proposing variants. Inspect the real reference at the same viewport and state, record its source/version and what remains inaccessible, and make its verified visible behavior the baseline starting option. Keep optional improvements and required platform, accessibility, security, or license deviations as separate labeled variants with their consequences. Never infer reference behavior from memory or present an improvement as if it were part of the reference.
+- **Explain variants in a comparable task scenario** — on the comparison page, apply one real task, state, or content case to every meaningful variant: what the user is doing, what each variant shows or requires in that moment, and the consequence or tradeoff. Connect the actual variants to the actual interface content. Use observed content when available, label illustrative content, and never invent usability metrics, measurements, or observed results.
 - Change one primary design axis per decision branch.
 - Include the current UI as a baseline when it exists.
 - Offer enough distinct options to make the decision meaningful, usually three to six. Include at least one conservative and one unconventional direction when appropriate.
@@ -123,6 +125,8 @@ Before proposing variants:
 
 Use independent repository or design reviewers when they add distinct evidence or perspectives. Describe each responsibility in the prompt instead of naming a repository-specific role or skill, and follow the Herdr-first runtime policy above.
 
+When replicating an external reference, also capture the actual reference at the comparison viewport and interaction state, record its version or date, and mark inaccessible parts unverified. Use official sources for third-party claims and keep reference access read-only; never bypass authentication, paywalls, access controls, licenses, or rate limits.
+
 An AI-generated art-direction image is optional. If an image-generation tool is available and useful, treat its output only as inspiration. A selectable UI option must still come from a browser-rendered mockup or live implementation source.
 
 ## Level workflow
@@ -137,8 +141,8 @@ An AI-generated art-direction image is optional. If an image-generation tool is 
 For each branch within its owner's evidence directory:
 
 1. State the user need and one design axis being decided.
-2. Capture the current target surface at the exact comparison viewport.
-3. Create grounded variants as live states or self-contained browser-rendered mockups.
+2. Capture the current target surface at the exact comparison viewport. When replicating an external reference, also capture the reference at that same viewport and interaction state.
+3. Create grounded variants as live states or self-contained browser-rendered mockups. Render one representative variant first and validate that single preview before producing the rest of the batch: check its exact viewport and container geometry, the design tokens it claims (color, spacing, radius, type), and every rendered label, state and interaction affordance. Correct the source and recheck that one preview whenever something is wrong; only then multiply it into the remaining options, so a defect in the shared generator is never repeated across the batch.
 4. Screenshot every option at the same dimensions. The capture helper's `--dir` controls only its retained artifacts:
 
 ```bash
@@ -150,7 +154,7 @@ node <skill-root>/scripts/capture-viewport.mjs \
 ```
 
 5. Before presenting choices, retain a private variant-ID mapping with screenshot, source kind/location, viewport, route and source artifact/hash for every option. Record the shared route, fixture, interaction state, theme, container, required behavior and accessibility contract. `templates/example-options.json` is a private evidence template, not SubmitQuestion input. Keep source HTML, reference-image provenance and contracts private; they are not tool parameters and are not uploaded.
-6. Put the evidence-backed recommendation first and explain its tradeoff.
+6. Put the evidence-backed recommendation first and explain its tradeoff with one comparable task or state from the current interface applied to every variant.
 7. Submit the direct content object below, using complete absolute screenshot paths and a safe session-unique question ID such as `<owner-label>-B1`. Never submit the private evidence file or its provenance fields.
 8. Confirm and share the returned URL; open local URLs in the visible system browser.
 9. Call `WaitForAnswer({questionId})` immediately. If waiting, verify its watcher, block the task on the human answer and yield. Resume on its wake and call again to consume the archived answer. A timeout or monitor exit is not a user selection.
@@ -172,14 +176,14 @@ Call `SubmitQuestion` directly:
   "mode": "single",
   "question": "Which direction best supports this task?",
   "label": "<owner-label>",
-  "content": [{ "type": "text", "text": "Compare the hierarchy and navigation in these variants." }],
+  "content": [{ "type": "text", "text": "One real task applied to every variant: what the user is doing, what each variant shows or requires, and the consequence or tradeoff." }],
   "recommended": "A",
   "options": [
     {
       "id": "A",
       "label": "Current baseline",
       "content": [
-        { "type": "text", "text": "Preserves the existing navigation." },
+        { "type": "text", "text": "What this variant does in that task, and why it is recommended." },
         { "type": "image", "path": "/absolute/path/B1-current.png", "alt": "Current interface" }
       ]
     },
@@ -187,7 +191,7 @@ Call `SubmitQuestion` directly:
       "id": "B",
       "label": "Alternative layout",
       "content": [
-        { "type": "text", "text": "Gives the primary action more prominence." },
+        { "type": "text", "text": "What this variant does in the same task, and when that tradeoff is preferable." },
         { "type": "image", "path": "/absolute/path/B1-variant-B.png", "alt": "Alternative interface" }
       ]
     }
@@ -195,7 +199,7 @@ Call `SubmitQuestion` directly:
 }
 ```
 
-The short example illustrates the input shape; include the full variant set required by this skill's quality bar. The tool accepts only direct question/content fields. It does not receive directories, options files, domain contracts, source provenance or delivery overrides. Media paths are absolute and need not be inside runtime storage. Local/hosted routing follows user configuration internally.
+The short example illustrates the input shape; include the full variant set required by this skill's quality bar. The example text is structural, not final wording: the page itself must carry the comparable task scenario, not only a design axis such as "Compare the hierarchy and navigation". The tool accepts only direct question/content fields. It does not receive directories, options files, domain contracts, source provenance or delivery overrides. Media paths are absolute and need not be inside runtime storage. Local/hosted routing follows user configuration internally.
 
 General and option content use shared ordered text, image, video and Mermaid blocks. Images require `alt`; captions are optional. The tool owns the fixed layout and its media/expansion controls.
 

@@ -4,10 +4,12 @@ Two skill-only Pi workflows for stress-testing a plan or an interface before imp
 
 | Skill | Purpose |
 | --- | --- |
-| `grill-me` | Runs a browser-based design interview in dependency levels with parallel branch owners, recorded answers, and an automatic handoff to implementation. |
-| `ui-ux-grill-me` | Captures the current interface, presents grounded visual variants in a browser, resolves independent UX branches, and produces an implementation-ready visual contract. |
+| `grill-me` | Runs a browser-based design interview in dependency levels with parallel branch owners, recorded answers, and an automatic handoff to implementation. When the user asks to replicate a reference, it grounds the actual reference first and starts from its verified behavior. |
+| `ui-ux-grill-me` | Captures the current interface, presents grounded visual variants in a browser, resolves independent UX branches, and produces an implementation-ready visual contract. External reference interfaces are grounded before variants are proposed. |
 
 This package contains only skill instructions and their helper scripts, references, and templates. It registers no extension code, custom tools, question server, or delivery backend.
+
+Both interviews are reference-first when the user asks to replicate or match an existing reference. They inspect the actual reference instead of relying on memory, use its verified behavior as the starting proposal, and keep optional improvements and required deviations separate so neither becomes an implicit requirement.
 
 ## Install
 
