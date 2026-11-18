@@ -56,6 +56,18 @@ function deliveryGroupOf(data: LoopFireEvent): NotificationDeliveryGroup | undef
   if ((source === "monitor:done" || source === "monitor:timeout") && data.monitorOutcome && data.recurring === false) return "monitor-terminal";
   return undefined;
 }
+/**
+ * A Core subscription reports the worker's own status word on every root
+ * status change. `working` is routine progress, not news: MonitorManager still
+ * stores it, so MonitorList, the dashboard and the activity pane stay current,
+ * but the supervisor does not need a turn to learn that a worker is still
+ * working. Every other word - blocked/error, done/idle, finished, removed,
+ * lost, restarted and unknown - keeps its immediate wake, and a non-Core
+ * command's own `working` report is unchanged.
+ */
+function isRoutineCoreWorkerProgress(monitor: MonitorEntry | undefined, outcome: MonitorOutcome | undefined): boolean {
+  return monitor?.hcTerminalId !== undefined && outcome?.reportedOutcome?.status === "working";
+}
 function isDynamicWake(data: LoopFireEvent): boolean {
   return data.dynamic !== undefined || (typeof data.trigger !== "string" && data.trigger.type === "dynamic");
 }
@@ -127,10 +139,13 @@ export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle
     const monitor = notification.monitorId ? getMonitor(notification.monitorId) : undefined;
     const loop = getLoop(notification.loopId);
     const changedAt = notification.changedAt ?? notification.timestamp;
-    const reported = monitor?.reportedOutcome ?? notification.monitorOutcome?.reportedOutcome;
+    // A queued notice keeps the outcome that raised it. A later routine working
+    // state no longer rewrites this text; the entry itself still shows the
+    // monitor's current state.
+    const reported = notification.monitorOutcome?.reportedOutcome ?? monitor?.reportedOutcome;
     return [
       `[pi-loop-monitor] Monitor #${notification.monitorId ?? "?"} latest state`,
-      `Latest reported state (untrusted): ${reportedLabel(reported)}.`,
+      `Reported state at this signal (untrusted): ${reportedLabel(reported)}.`,
       `Latest meaningful change: ${ageLabel(changedAt)} (${new Date(changedAt).toISOString()}).`,
       `Lifecycle: ${lifecycleLabel(monitor)}.`,
       `Loop #${notification.loopId} remains active and the monitor subscription is still running. Do not recreate the monitor for this update; stop it with MonitorStop when it is no longer needed.`,
@@ -145,10 +160,10 @@ export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle
       const monitor = notification.monitorId ? getMonitor(notification.monitorId) : undefined;
       const loop = getLoop(notification.loopId);
       const changedAt = notification.changedAt ?? notification.timestamp;
-      const reported = monitor?.reportedOutcome ?? notification.monitorOutcome?.reportedOutcome;
+      const reported = notification.monitorOutcome?.reportedOutcome ?? monitor?.reportedOutcome;
       return [
         `${index + 1}. Monitor #${notification.monitorId ?? "?"} (loop #${notification.loopId})`,
-        `   Latest reported state (untrusted): ${reportedLabel(reported)}`,
+        `   Reported state at this signal (untrusted): ${reportedLabel(reported)}`,
         `   Latest meaningful change: ${ageLabel(changedAt)} (${new Date(changedAt).toISOString()})`,
         `   Lifecycle: ${lifecycleLabel(monitor)}`,
         "   Instruction:",
@@ -197,6 +212,37 @@ export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle
       return { ...base, key: `loop:${data.loopId}:terminal`, deliveryGroup, changedAt: data.timestamp, message: fireMessage(data) };
     }
     return { ...base, key: data.recurring ? `loop:${data.loopId}` : `loop:${data.loopId}:${data.timestamp}`, message: fireMessage(data) };
+  }
+  /**
+   * A routine Core `working` word must not start a turn, but it cannot simply be
+   * dropped: skipping the mailbox would leave an older substantive notice
+   * (blocked/done/idle) queued, and that notice would flush later re-rendered
+   * from the monitor's now-current `working` outcome. Advance the per-loop
+   * signal state instead. A queued substantive notification is kept and pinned
+   * to the new revision so it still delivers the condition that raised it; only
+   * a queued routine working notice is superseded. Later identical substantive
+   * reports are therefore new states again rather than stale duplicates.
+   */
+  function suppressRoutineCoreWorkerProgress(data: LoopFireEvent, monitorId: string): boolean {
+    if (!isRoutineCoreWorkerProgress(getMonitor(monitorId), data.monitorOutcome)) return false;
+    const generation = data.sessionGeneration ?? sessionGeneration;
+    if (cancelledMonitorSignals.has(`${generation}:${monitorId}`)) return true;
+    const key = `loop:${data.loopId}:state`;
+    const reported = data.monitorOutcome?.reportedOutcome;
+    const stateKey = `${reported?.status ?? "unknown"}\u0000${reported?.message ?? ""}`;
+    const previous = signalStates.get(key);
+    if (previous?.stateKey === stateKey) return true;
+    const revision = (previous?.revision ?? 0) + 1;
+    const changedAt = data.timestamp;
+    signalStates.set(key, { revision, stateKey, monitorId, loopId: data.loopId, changedAt });
+    const queued = state.notificationsByKey[key] as PendingNotification | undefined;
+    if (!queued) return true;
+    if (queued.monitorOutcome?.reportedOutcome?.status === "working") {
+      apply({ type: "NOTIFICATION_DROPPED", at: changedAt, source: "system", entityType: "notification", entityId: key, payload: { key, reason: "superseded" } });
+      return true;
+    }
+    apply({ type: "NOTIFICATION_QUEUED", at: changedAt, source: "system", entityType: "notification", entityId: key, payload: { notification: { ...queued, revision } } });
+    return true;
   }
   function expired(data: LoopExpiredPayload & { sessionGeneration?: number }): PendingNotification {
     const stale = data.reason === "resume_event_stale";
@@ -332,7 +378,13 @@ export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle
     if (data.sessionGeneration !== undefined && data.sessionGeneration !== sessionGeneration) { debug?.("dropping stale loop wake"); return; }
     const deliveryGroup = deliveryGroupOf(data);
     const monitorId = data.monitorOutcome?.monitorId;
-    if (monitorId && deliveryGroup === "monitor-state") discardMonitorStarted(monitorId);
+    if (monitorId && deliveryGroup === "monitor-state") {
+      discardMonitorStarted(monitorId);
+      if (suppressRoutineCoreWorkerProgress(data, monitorId)) {
+        debug?.(`routine Core working state for monitor #${monitorId} updated without a wake`);
+        return;
+      }
+    }
     if (monitorId && deliveryGroup === "monitor-terminal") discardMonitorSignals(monitorId);
     const notification = pending(data);
     if (!notification) return;

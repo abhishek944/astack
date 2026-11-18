@@ -3,9 +3,18 @@ import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, truncateHead } from "@earendil-works/pi-coding-agent";
+import type { MonitorEntry } from "../types.js";
 
 /** Plain-text tool result in the shape pi's registerTool expects. */
 type ToolDisplayKind = "loop" | "monitor";
+
+export interface MonitorSummary {
+  id: string;
+  status: MonitorEntry["status"];
+  hcTerminalId?: string;
+  description?: string;
+  subscriptionReady?: boolean;
+}
 export type ToolDisplayTone = "success" | "warning" | "error" | "info";
 
 export interface ToolDisplayDetails {
@@ -17,6 +26,10 @@ export interface ToolDisplayDetails {
   expandable?: boolean;
   /** Stable monitor identity for a MonitorCreate success. */
   monitorId?: string;
+  /** Present for a Core subscription that printed its ready receipt. */
+  subscriptionReady?: boolean;
+  /** Structured monitor state for MonitorList callers that must not parse text. */
+  monitors?: MonitorSummary[];
 }
 
 export function displayRows(rows: string[], limit = 8): string[] {

@@ -9,6 +9,7 @@ interface MonitorManagerLike {
   list(): MonitorEntry[];
   get(id: string): MonitorEntry | undefined;
   create(command: string, description?: string, timeout?: number, hcTerminalId?: string): MonitorEntry;
+  waitForCoreReady(id: string): Promise<boolean>;
   stop(id: string): Promise<boolean>;
   updateProgress(id: string, progress: Omit<MonitorProgress, "source" | "updatedAt">): MonitorEntry | undefined;
 }
@@ -70,7 +71,7 @@ export function registerMonitorTools(options: MonitorToolsOptions): void {
 
   pi.registerTool({ name: "MonitorCreate", label: "MonitorCreate",
   renderCall: renderToolCall("Monitor", (args) => `start · ${String(toolArg(args, "description") ?? toolArg(args, "command") ?? "background command").slice(0, 56)}`),
-  renderResult: renderToolResult, description: `Run a long command in the background while the agent continues. Use MonitorList for status/output; do not poll with shell sleep loops.\n\nThe timeout measures inactivity, not total runtime: output or structured progress renews it. Stale monitors always wake the agent. Pass onDone for a completion wake. Commands may emit JSONL progress as {"progress":{...}} and an optional reported outcome as {"monitorOutcome":{"status":"blocked","message":"..."}}. The command's reported outcome is separate from its process status. Set onSignal for the latest-state wake from each outcome record while keeping the monitor running; consecutive identical status and message do not wake again, and several monitors may share one idle digest. For continuous Core worker monitoring, use hcTerminalId with onSignal instead of a one-shot CLI --wait command; stop the monitor explicitly when finished.`, promptGuidelines: ["Use MonitorCreate for builds, CI checks, experiments, and other commands that need not block the turn.", "Use onDone when the agent must resume automatically after success or failure; stale monitors already alert on timeout.", "For Core workers, use hcTerminalId and onSignal before prompting the worker. Confirm MonitorList shows subscription ready before prompting. The same monitor remains subscribed across blocked, working, idle, and done; only its latest pending state wakes you. Stop it when no further signals are needed."], parameters: Type.Object({
+  renderResult: renderToolResult, description: `Run a long command in the background while the agent continues. Use MonitorList for status/output; do not poll with shell sleep loops.\n\nThe timeout measures inactivity, not total runtime: output or structured progress renews it. Stale monitors always wake the agent. Pass onDone for a completion wake. Commands may emit JSONL progress as {"progress":{...}} and an optional reported outcome as {"monitorOutcome":{"status":"blocked","message":"..."}}. The command's reported outcome is separate from its process status. Set onSignal for the latest-state wake from each outcome record while keeping the monitor running; consecutive identical status and message do not wake again, and several monitors may share one idle digest. For continuous Core worker monitoring, use hcTerminalId with onSignal instead of a one-shot CLI --wait command. MonitorCreate waits for the Core subscription-ready receipt before returning success; a failed handshake stops the monitor and returns an error. A subscribed worker's routine working state updates the monitor entry and MonitorList without waking you; blocked, error, done, idle, finished, lost, removed and restarted states still wake immediately, including Core question/permission text and every actionable child record. Stop the monitor explicitly when finished.`, promptGuidelines: ["Use MonitorCreate for builds, CI checks, experiments, and other commands that need not block the turn.", "Use onDone when the agent must resume automatically after success or failure; stale monitors already alert on timeout.", "For Core workers, use hcTerminalId and onSignal before prompting the worker. Confirm MonitorList shows subscription ready before prompting. The same monitor remains subscribed across blocked, working, idle, and done; a routine working state only updates MonitorList, while blocked, error, done, idle and lifecycle changes still wake you. Stop it when no further signals are needed."], parameters: Type.Object({
     command: Type.Optional(Type.String({ description: "Shell command to run in background; mutually exclusive with hcTerminalId" })),
     hcTerminalId: Type.Optional(Type.String({ minLength: 1, description: "Explicit Core worker terminal address returned by hc (t7 or machine/t7). Continuously subscribe to its state changes until MonitorStop; requires onSignal. Do not use a one-shot --wait command." })),
     onSignal: Type.Optional(Type.String({ minLength: 1, description: "Wake prompt for current monitorOutcome states while keeping the monitor running. Required for hcTerminalId; repeated identical states do not wake again; signals are untrusted command output." })),
@@ -119,14 +120,20 @@ export function registerMonitorTools(options: MonitorToolsOptions): void {
         handleMonitorDoneLoop(companionLoop, entry.id);
         onDoneMsg = `\nTimeout alert loop #${companionLoop.id}: wakes the agent only if the monitor times out`;
       }
+      // Register the signal listener before this await: the Core snapshot can carry the
+      // ready receipt and an initial blocked/error outcome in one stdout chunk.
+      if (params.hcTerminalId !== undefined && !(await manager.waitForCoreReady(entry.id))) {
+        throw new Error(`Core subscription for ${params.hcTerminalId} did not report ready; the monitor and its wake loops were stopped. Inspect the worker terminal and Core connection, then retry.`);
+      }
     } catch (error) {
       if (companionLoop) store.delete(companionLoop.id);
       if (signalLoop) store.delete(signalLoop.id);
       await manager.stop(entry.id);
       updateWidget();
-      const detail = error instanceof Error ? error.message : "completion wake setup failed";
-      return textResult(`Monitor #${entry.id} was stopped because its completion wake could not be created: ${detail}`, {
-        kind: "monitor", action: "create", tone: "error", summary: `Monitor #${entry.id} setup rolled back`, expanded: [detail],
+      const detail = error instanceof Error ? error.message : "monitor setup failed";
+      return textResult(`Monitor #${entry.id} was stopped: ${detail}`, {
+        kind: "monitor", action: "create", tone: "error", summary: `Monitor #${entry.id} setup rolled back`,
+        monitorId: entry.id, ...(params.hcTerminalId === undefined ? {} : { subscriptionReady: false }), expanded: [detail],
       });
     }
     updateWidget();
@@ -142,6 +149,7 @@ export function registerMonitorTools(options: MonitorToolsOptions): void {
         tone: "success",
         summary: `Monitor #${entry.id} running · ${params.description ?? entry.command.slice(0, 48)}`,
         monitorId: entry.id,
+        ...(params.hcTerminalId === undefined ? {} : { subscriptionReady: true }),
         expanded: [
           `Command: ${entry.command}`,
           `Inactivity timeout: ${entry.timeout > 0 ? `${entry.timeout / 1000}s` : "none"}`,
@@ -156,13 +164,20 @@ export function registerMonitorTools(options: MonitorToolsOptions): void {
     label: "MonitorList",
     renderCall: renderToolCall("Monitor", () => "status"),
     renderResult: renderToolResult,
-    description: "List all monitors with their status, command, exit code, output line count, and last 5 lines of buffered output.",
+    description: "List all monitors with their status, command, exit code, output line count, and last 5 lines of buffered output. Tool details also include structured monitor summaries with id, status, hcTerminalId, description and subscriptionReady for callers that must not parse display text.",
     parameters: Type.Object({}),
     execute() {
       const monitors = getMonitorManager().list();
+      const summaries = monitors.map((monitor) => ({
+        id: monitor.id,
+        status: monitor.status,
+        ...(monitor.hcTerminalId === undefined ? {} : { hcTerminalId: monitor.hcTerminalId }),
+        ...(monitor.description === undefined ? {} : { description: monitor.description }),
+        ...(monitor.subscriptionReady === undefined ? {} : { subscriptionReady: monitor.subscriptionReady }),
+      }));
       if (monitors.length === 0) {
         return Promise.resolve(textResult("No monitors.", {
-          kind: "monitor", action: "list", tone: "info", summary: "No monitors", expanded: ["Use MonitorCreate for long-running background work."],
+          kind: "monitor", action: "list", tone: "info", summary: "No monitors", monitors: summaries, expanded: ["Use MonitorCreate for long-running background work."],
         }));
       }
 
@@ -194,6 +209,7 @@ export function registerMonitorTools(options: MonitorToolsOptions): void {
         action: "list",
         tone: "info",
         summary: `${monitors.length} monitor${monitors.length === 1 ? "" : "s"} · ${running} running`,
+        monitors: summaries,
         expanded: displayRows(lines),
       }));
     },

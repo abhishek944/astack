@@ -57,6 +57,8 @@ export interface MonitorEntry {
   description?: string;
   /** Present only when created through the explicit Core subscription tool input. */
   hcTerminalId?: string;
+  /** Derived by MonitorManager.list: the Core handshake printed its ready receipt. */
+  subscriptionReady?: boolean;
   timeout: number;
   status: "running" | "completed" | "error" | "stopped";
   startedAt: number;
@@ -99,6 +101,9 @@ export interface MonitorProcess {
   completionCallbacks: Array<(monitor: MonitorEntry) => void>;
   terminalCallbacks: Array<(monitor: MonitorEntry) => void>;
   terminalReady: boolean;
+  coreReady: boolean;
+  coreReadyResolve?: (ready: boolean) => void;
+  coreReadyPromise?: Promise<boolean>;
   lastActivityAt: number;
   lastActivityMonotonic: number;
   lastOutputEventAt: number;

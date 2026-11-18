@@ -36,6 +36,8 @@ Tools:
 - `LoopCreate`, `LoopList`, `LoopUpdate`, `LoopDelete`
 - `MonitorCreate`, `MonitorList`, `MonitorUpdate`, `MonitorStop`
 
+`MonitorCreate` with `hcTerminalId` verifies the Core subscription handshake before succeeding. `MonitorList` returns structured monitor summaries in its tool details for callers that need exact `hcTerminalId`/`subscriptionReady` state.
+
 ## Examples
 
 ```text
@@ -62,7 +64,7 @@ Full stdout/stderr capture uses private temporary files with bounded in-memory r
 
 `MonitorCreate.timeout` is an inactivity timeout. Output, JSONL progress, or `MonitorUpdate` renews it. `onDone` creates a direct one-shot loop wake after completion; it does not require another controller subsystem.
 
-For Core workers, hcTerminalId plus onSignal keeps one monitor subscribed across turns, native program statuses and process lifecycle events. Confirm `Core signal subscription ready` in MonitorList before prompting; stop it explicitly after collecting accepted results. onDone means the subscriber process ended, not worker task completion. Existing latest-state wake coalescing is retained; turn identifiers distinguish repeated outcomes. No old TUI socket or HERDR_ENV is needed. Ordinary commands can still emit JSONL monitorOutcome signals.
+For Core workers, hcTerminalId plus onSignal keeps one monitor subscribed across turns, native program statuses and process lifecycle events. `MonitorCreate` registers the signal wake before it waits for the real `Core signal subscription ready for <terminal>` handshake receipt, so an initial blocked/error outcome in the same Core snapshot is delivered rather than lost. It returns success only after the receipt; if the subscription does not become ready, the loops are rolled back, the monitor is stopped and the call returns an error. `MonitorList` exposes a bounded `details.monitors` summary with `id`, `status`, `hcTerminalId`, `description` and `subscriptionReady` so wrappers can find the existing subscription without parsing text. A subscribed worker's routine `working` state updates the monitor entry and `MonitorList` without starting a supervisor turn; blocked/error, done/idle, finished, removed, lost, restarted and timeout signals still wake immediately. The subscription forwards Core `kind`/`msg`/`title` content and includes every blocked or errored child record in the outcome and its identity, so question/permission content and a change in any child are not deduplicated behind another child. Stop it explicitly after collecting accepted results. onDone means the subscriber process ended, not worker task completion. Existing latest-state wake coalescing is retained; turn identifiers distinguish repeated outcomes. No old TUI socket or HERDR_ENV is needed. Ordinary commands can still emit JSONL monitorOutcome signals.
 
 Recurring loops expire after seven days. Event and hybrid subscriptions from an earlier session are retired during recovery. Dynamic loops must call `LoopUpdate` once per wake.
 

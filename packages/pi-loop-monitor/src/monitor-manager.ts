@@ -251,6 +251,7 @@ export class MonitorManager {
       completionCallbacks: [],
       terminalCallbacks: [],
       terminalReady: false,
+      coreReady: false,
       lastActivityAt: now,
       lastActivityMonotonic: globalThis.performance.now(),
       lastOutputEventAt: 0,
@@ -266,9 +267,14 @@ export class MonitorManager {
     child.stdout?.on("data", (data: Buffer) => this.handleOutput(id, bp, "stdout", data));
     child.stderr?.on("data", (data: Buffer) => this.handleOutput(id, bp, "stderr", data));
 
+    if (hcTerminalId !== undefined) {
+      bp.coreReadyPromise = new Promise((resolve) => { bp.coreReadyResolve = resolve; });
+    }
+
     const finish = (code: number | null, status: "completed" | "error") => {
       if (this.shuttingDown) return;
       this.flushOutput(id, bp);
+      if (!bp.coreReady) this.settleCoreReady(bp, false);
       this.clearDeadline(bp);
       this.emitOutputProgress(id, bp);
       this.applyReducerEvent({
@@ -315,6 +321,7 @@ export class MonitorManager {
     child.on("error", (err) => {
       if (!this.shuttingDown && bp.entry.status === "running") {
         this.flushOutput(id, bp);
+        if (!bp.coreReady) this.settleCoreReady(bp, false);
         this.clearDeadline(bp);
         this.emitOutputProgress(id, bp);
         this.applyReducerEvent({
@@ -371,8 +378,28 @@ export class MonitorManager {
 
   list(): MonitorEntry[] {
     return Array.from(this.processes.values())
-      .map(bp => ({ ...bp.entry, lastActivityAt: bp.lastActivityAt }))
+      .map(bp => ({
+        ...bp.entry,
+        lastActivityAt: bp.lastActivityAt,
+        ...(bp.entry.hcTerminalId === undefined ? {} : { subscriptionReady: bp.coreReady }),
+      }))
       .sort((a, b) => Number(a.id) - Number(b.id));
+  }
+
+  /** Wait for the existing Core subscription handshake to report its ready receipt. */
+  waitForCoreReady(id: string): Promise<boolean> {
+    const bp = this.processes.get(id);
+    if (!bp || bp.entry.hcTerminalId === undefined) return Promise.resolve(false);
+    if (bp.coreReady) return Promise.resolve(true);
+    if (bp.entry.status !== "running") return Promise.resolve(false);
+    return bp.coreReadyPromise ?? Promise.resolve(false);
+  }
+
+  private settleCoreReady(bp: MonitorProcess, ready: boolean): void {
+    if (ready) bp.coreReady = true;
+    const resolve = bp.coreReadyResolve;
+    bp.coreReadyResolve = undefined;
+    resolve?.(ready);
   }
 
   readOutput(id: string, offset?: number): MonitorOutputPage {
@@ -398,6 +425,7 @@ export class MonitorManager {
     const shutdown = Promise.allSettled([...stopping, ...running.map((bp) => this.stop(bp.entry.id))])
       .then(() => {
         for (const bp of processes) {
+          this.settleCoreReady(bp, false);
           if (bp.progressChangeTimer) clearTimeout(bp.progressChangeTimer);
           bp.completionCallbacks = [];
           bp.terminalCallbacks = [];
@@ -427,6 +455,7 @@ export class MonitorManager {
     const bp = this.processes.get(id);
     if (!bp || bp.entry.status !== "running") return false;
 
+    this.settleCoreReady(bp, false);
     this.clearDeadline(bp);
     this.emitOutputProgress(id, bp);
     this.applyReducerEvent({
@@ -572,6 +601,9 @@ export class MonitorManager {
     bp.pendingOutputLines += lines.length;
     bp.latestOutputLine = lines.at(-1);
     for (const line of lines) {
+      if (bp.entry.hcTerminalId !== undefined && line === `Core signal subscription ready for ${bp.entry.hcTerminalId}`) {
+        this.settleCoreReady(bp, true);
+      }
       const progress = parseJsonlProgress(line);
       if (progress) this.applyProgress(id, { ...progress, source: "jsonl" });
       const outcome = parseJsonlOutcome(line);
