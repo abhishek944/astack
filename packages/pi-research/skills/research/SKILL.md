@@ -50,4 +50,4 @@ Suggested files are `evidence.md` and `proposed-fix.md`. Do not create machine s
 
 ## Final response
 
-Give the summary, evidence, root cause confidence, proposed fix, verification plan, related candidates, open questions, and next step.
+Give the summary, evidence, root cause confidence, proposed fix, verification plan, related candidates, open questions, and next step. Explain the leading cause with a concrete trigger sequence (the trigger, the behavior it sets off, and the consequence), then explain how the proposed fix changes that sequence; label an unobserved sequence as illustrative.

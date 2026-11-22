@@ -140,6 +140,7 @@ async function generateSingleImage(params: GenerateImageParams, options: Generat
     metadata: {
       durationMs: metadata.durationMs,
       ...(metadata.requestId ? { requestId: metadata.requestId } : {}),
+      ...(metadata.expiresAt !== undefined ? { expiresAt: metadata.expiresAt } : {}),
       ...(usage ? { usage } : {}),
       ...(metadata.reportedUsage ? { reportedUsage: metadata.reportedUsage } : {}),
       ...(metadata.tokenUsage ? { tokenUsage: metadata.tokenUsage } : {}),

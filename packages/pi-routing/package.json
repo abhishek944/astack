@@ -1,0 +1,49 @@
+{
+  "name": "@abhishek944/pi-routing",
+  "version": "0.1.0",
+  "description": "Herdr's Routing panel: edit the model routing rules and Pi's enabled models in one place.",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "herdr",
+    "routing",
+    "models"
+  ],
+  "files": [
+    "dist/",
+    "bin/",
+    "herdr/",
+    "!herdr/**/*.d.ts",
+    "!herdr/**/jsconfig.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "pi-routing": "./bin/pi-routing.js"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=1.4.0"
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc && node scripts/build-mod-core.mjs",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --fix src/",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm run build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.13",
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@types/node": "^26.1.2",
+    "typescript": "^7.0.2"
+  }
+}

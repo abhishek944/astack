@@ -4,17 +4,29 @@ import type { ImageArgs, ImageDefaults, ResolvedImageRoute } from './protocol.js
 
 export const DEFAULT_KEYS = [
   'n', 'size', 'aspectRatio', 'imageSize', 'quality', 'outputFormat', 'background',
-  'outputCompression', 'complexity', 'frameCount', 'frameDurationMs', 'svgModel',
+  'responseFormat', 'outputCompression', 'complexity', 'frameCount', 'frameDurationMs', 'svgModel',
   'svgReasoningEffort', 'negativePrompt', 'seed', 'promptEnhance', 'enableThinking',
-  'watermark', 'seriesMaxImages',
+  'watermark', 'seriesMaxImages', 'layerDecomposition', 'layerMaxImages', 'layerTextRecognition',
+  'thinkingLevel', 'includeThoughts', 'searchGrounding', 'imageSearchGrounding', 'asyncMode',
+  'sequentialMaxImages', 'resolutionLevel', 'promptReasoner', 'strength', 'operation',
+  'styleId', 'styleReferenceUrls', 'styleMatch', 'textLayout', 'colorControls', 'backgroundColor',
 ] as const satisfies ReadonlyArray<keyof ImageDefaults>;
 const PROVIDER_KEYS = new Set(['prompt', 'image', 'mask', 'markup', 'filename', ...DEFAULT_KEYS]);
-const CATALOG_KEYS = new Set(['prompt', 'image', 'size', 'quality', 'background', 'outputFormat']);
-const STRING_KEYS = new Set([
-  'size', 'aspectRatio', 'imageSize', 'quality', 'outputFormat', 'background', 'complexity',
-  'svgModel', 'svgReasoningEffort', 'negativePrompt', 'filename', 'mask',
+const CATALOG_KEYS = new Set([
+  'prompt', 'image', 'size', 'quality', 'background', 'outputFormat',
+  'complexity', 'frameCount', 'frameDurationMs',
 ]);
-const BOOLEAN_KEYS = new Set(['promptEnhance', 'enableThinking', 'watermark']);
+const STRING_KEYS = new Set([
+  'size', 'aspectRatio', 'imageSize', 'quality', 'outputFormat', 'background', 'responseFormat', 'complexity',
+  'svgModel', 'svgReasoningEffort', 'negativePrompt', 'filename', 'mask',
+  'thinkingLevel', 'resolutionLevel', 'promptReasoner', 'operation', 'styleId', 'styleMatch',
+]);
+const BOOLEAN_KEYS = new Set([
+  'promptEnhance', 'enableThinking', 'watermark', 'layerDecomposition', 'layerTextRecognition',
+  'includeThoughts', 'searchGrounding', 'imageSearchGrounding', 'asyncMode',
+]);
+const ARRAY_KEYS = new Set(['styleReferenceUrls', 'textLayout', 'colorControls']);
+const OBJECT_KEYS = new Set(['backgroundColor']);
 
 export function validateArguments(
   args: ImageArgs,
@@ -54,8 +66,10 @@ export function validateArguments(
 function checkScalar(key: string, value: unknown): void {
   if (STRING_KEYS.has(key) && typeof value !== 'string') fail(`${key} must be a string.`);
   if (BOOLEAN_KEYS.has(key) && typeof value !== 'boolean') fail(`${key} must be boolean.`);
-  if (['n', 'outputCompression', 'seed', 'seriesMaxImages', 'frameCount', 'frameDurationMs'].includes(key) &&
+  if (['n', 'outputCompression', 'seed', 'seriesMaxImages', 'frameCount', 'frameDurationMs', 'layerMaxImages', 'sequentialMaxImages', 'strength'].includes(key) &&
       (typeof value !== 'number' || !Number.isFinite(value))) fail(`${key} must be a finite number.`);
+  if (ARRAY_KEYS.has(key) && !Array.isArray(value)) fail(`${key} must be an array.`);
+  if (OBJECT_KEYS.has(key) && (typeof value !== 'object' || value === null || Array.isArray(value))) fail(`${key} must be an object.`);
 }
 
 function checkReference(value: unknown, requireUrl: boolean): void {

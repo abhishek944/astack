@@ -1,6 +1,7 @@
 import { mkdir, unlink } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
 import { describeWriteError } from '../errors.js';
+import { DEFAULT_IMAGE_OUTPUT_DIR } from '../output-defaults.js';
 import { desktopTimeout } from './configuration.js';
 import { writeUnique } from '../node/output-files.js';
 import { RasterError, resizeRaster } from '../node/raster.js';
@@ -16,7 +17,7 @@ const MIME_TO_EXT: Record<string, string> = {
 export function desktopSink(params: GenerateImageParams, options: GenerateImageOptions, model: string) {
   const configured: unknown = options.settings.outputDir;
   const target = params.outputDir ?? (typeof configured === 'string' ? configured : undefined);
-  const directory = target?.trim() ? target : '.pi/images';
+  const directory = target?.trim() ? target : DEFAULT_IMAGE_OUTPUT_DIR;
   const outDir = isAbsolute(directory) ? directory : resolve(options.cwd, directory);
   const saved: GeneratedImage[] = [];
   const resizeInputs: Uint8Array[] = [];

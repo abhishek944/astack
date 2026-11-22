@@ -76,6 +76,34 @@ PY
 
 Provide a closed UTF-8 heredoc or file on stdin (maximum1 MiB); input collection happens before browser timers, so never leave an interactive producer open. The stdin program uses the usual pre-imported browser-use helpers. Keep related inspect/action/capture steps and multiple pages in one invocation; reuse `current_tab()`, `list_tabs()` and `switch_tab()` inside it. The launcher bounds Chrome/controller startup to30s each and program execution to120s (lower with `--timeout SECONDS`), then cleans only its owned controller/browser/profile on success or failure. Each invocation is a fresh signed-out session; do not assume state survives between invocations or create one invocation per screenshot. Cancellation during startup waits for a safe ownership checkpoint; cleanup is bounded. Hard process/machine death can prevent cleanup; report retained/uncertain ownership rather than deleting or killing unrelated resources.
 
+The owned page can be hidden even when the program can see it. In observed HighSKU UI runs, `document.hidden` was `true` after load, `requestAnimationFrame` advanced about once per second and a probe `ResizeObserver` fired zero times until `cdp("Page.bringToFront")`; afterwards rAF ran at about 52 fps. For layout measurements, hit tests or screenshots, call `cdp("Page.bringToFront")` after load and before each measurement, then verify `document.hidden` is `false` with `js`. Treat a stale layout from a hidden owned page as a tooling failure, not a product defect.
+
+`Page.bringToFront` here acts only on this launcher's owned headless page. It is not desktop or window foregrounding, does not focus or change the user's personal browser, and does not select this tool ahead of a host's browser routing rule. Keep signed-in and personal browsing under the host's Aside-first policy where it applies.
+
+Before recording a case, prove the owned page is settled in the same invocation. Element existence and `wait_for_load()` alone are not enough for a client-rendered app: captures can show `Loading` or a blank shell before hydration. Bring the page forward, require `document.hidden === false` and `document.readyState === "complete"`, then wait for a case-specific settled condition such as the signed-in account label or the final expected value. Keep the wait bounded and treat a page that never settles as a tooling/preflight failure, not an application finding. Do not launch a fresh browser for a blank capture; recheck the existing owned page.
+
+```python
+import time
+
+new_tab(url)
+wait_for_load()
+cdp("Page.bringToFront")
+deadline = time.time() + 30
+settled = False
+while time.time() < deadline:
+    state = js("({ hidden: document.hidden, ready: document.readyState, account: document.querySelector('[data-cx=account-trigger]')?.getAttribute('aria-label') || '' })")
+    if (not state["hidden"] and state["ready"] == "complete"
+            and state["account"].startswith("Account menu for")):
+        settled = True
+        break
+    time.sleep(0.25)
+if not settled:
+    raise RuntimeError("Owned page did not settle; report a tooling/preflight failure")
+press_key("Escape")
+```
+
+Adapt the final predicate to the route under test: use an expected stable label, value, or completed state rather than `Loading`. `press_key` takes a string key such as `"Escape"`; do not pass a key code or enum. Repeat `Page.bringToFront` and this visibility check before screenshots, hit tests, or layout measurements.
+
 Do not use bare `browser-use` for ordinary testing: it may auto-discover personal Chrome and trigger its Allow flow. Do not use unscoped `open -a` or `activate_tab` to make headless mode work. In an authorized owned-window fallback, select/focus only the verified owned target without another permission question. Never run automatic consent helpers or change browser/OS grants. A backgrounded visible browser is not headless; describe the actual mode. If the task really requires an existing signed-in personal session, use that separate mode only when the user explicitly requests it; stop for actual credentials/MFA/native consent and never bypass refusal.
 
 Common helpers include `click_at_xy`, `fill_input`, `press_key`, `js`, `wait_for_element`, `cdp` and `capture_screenshot`. Capture viewport/DPR, fonts and PNG dimensions explicitly; screenshots do not prove backend/provider behavior.

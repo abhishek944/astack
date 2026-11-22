@@ -15,8 +15,10 @@ import { credentialRedirectMode, hasProviderAuthentication, jsonHeaders, parseIm
  *   - OpenAI:     POST /v1/images/generations  (text)  /  /v1/images/edits (multipart)
  *   - OpenRouter: POST /api/v1/images          (text)  /  same path + `input_references` JSON (edits)
  *
- * Response body uses `data[].b64_json` like OpenAI, so we reuse parseImagesResponse.
- * See https://openrouter.ai/blog/announcements/image-api/.
+ * Since the 2026-11-19 schema change, `data[].b64_json` is optional and
+ * `data[].url` plus top-level `expires_at` are valid with `response_format: url`.
+ * The shared parser accepts both forms and records a validated expiry.
+ * See https://openrouter.ai/docs/guides/overview/multimodal/image-generation.
  */
 export const openrouterAdapter: ImageProviderAdapter = {
   async generate(
@@ -36,6 +38,11 @@ export const openrouterAdapter: ImageProviderAdapter = {
       n: params.n ?? 1,
     };
     if (params.size) body.size = params.size;
+    // Built-in OpenRouter explicitly requests the documented default so delivery
+    // never depends on an account-level change. Custom gateways keep their old
+    // wire shape unless the caller asks for a response format explicitly.
+    if (params.responseFormat) body.response_format = params.responseFormat;
+    else if (provider.builtIn && provider.id === 'openrouter') body.response_format = 'b64_json';
     if (params.quality) body.quality = params.quality;
     if (params.outputFormat) body.output_format = params.outputFormat;
     if (params.background) body.background = params.background;

@@ -6,10 +6,13 @@ import { promisify } from "node:util";
 import sharp from "sharp";
 import {
   ClassifierError,
+  isRecord,
   type ClassifyParams,
+  type ExtractParams,
   type PreparedImage,
   type PreparedLocalImage,
   type PreparedInput,
+  type PreparedMedia,
   type ResolvedModel,
 } from "./types.js";
 import { hasBox } from "./validation.js";
@@ -33,8 +36,31 @@ export async function prepareInput(
     throw new ClassifierError("capability", "The selected model does not support images, or experimental Jev images are disabled.");
   if (hasBox(params.questions) && (!route.box || !imageCount))
     throw new ClassifierError("capability", "box requires an enabled Jev 1.14 model, experimentalImages/experimentalBox and an image.");
+  if (params.mode === "web_grounding" && route.api !== "perplexity-decisions")
+    throw new ClassifierError("capability", "Web grounding is supported only by Perplexity Decisions routes.");
+  if (params.maxStaleness !== undefined && params.mode !== "web_grounding")
+    throw new ClassifierError("input", "maxStaleness requires mode: web_grounding on a Perplexity route.");
+  if (route.api === "cloudflare-clairic")
+    throw new ClassifierError("capability", "Clairic extraction uses classify_extract with fields, not classify questions.");
+  const liquidQuestions = ["bool", "choice", "score", "text", "number", "date", "spans", "boxes", "estimate", "multi_choice", "box"];
+  const decisionQuestions = ["bool", "choice", "score", "box", "locate"];
+  const allowed = route.api === "liquid-system-one" ? liquidQuestions : decisionQuestions;
+  const unsupported = Object.values(params.questions).find((question) => !allowed.includes(question.type));
+  if (unsupported)
+    throw new ClassifierError("capability", "The selected route does not support " + unsupported.type + " questions.");
+  const locate = Object.values(params.questions).some((question) => question.type === "locate");
+  if (locate) {
+    const v13 = ["pplx-decider-v1.3", "pplx-decider-flash-v1.3", "pplx-decider-latest", "pplx-decider-flash-latest"];
+    if (route.api !== "perplexity-decisions" || !v13.includes(route.model))
+      throw new ClassifierError("capability", "locate requires a Perplexity v1.3 model or its latest alias.");
+    if (imageCount > 0)
+      throw new ClassifierError("input", "locate requires a string state without images.");
+    if (typeof params.state !== "string")
+      throw new ClassifierError("input", "locate requires a string state. Offsets are defined only for text.");
+  }
   const clef = route.api === "cloudflare-system-one" && route.images;
-  const maxImages = clef ? 4 : route.api === "perplexity-decisions" ? 8 : 5;
+  const liquid = route.api === "liquid-system-one";
+  const maxImages = liquid || route.api === "perplexity-decisions" ? 8 : clef ? 4 : 5;
   if (imageCount > maxImages)
     throw new ClassifierError("input", "The selected route accepts at most " + maxImages + " images in this package.");
   if (imageReferences(params.state).length && !["system-one", "openai-decisions", "perplexity-decisions"].includes(route.api))
@@ -91,11 +117,24 @@ export async function prepareInput(
       if (image.width < 280 || image.width > 1568 || image.height < 280 || image.height > 1568 || pixels < 78_400 || pixels > 2_458_624)
         throw new ClassifierError("input", "Resize or pad Jev images before sending: each side must be 280–1568 pixels and total area 78400–2458624 pixels. Images are not silently resized.");
     }
+    if (liquid) {
+      const patches = Math.ceil(image.width / 32) * Math.ceil(image.height / 32);
+      if (patches > 10_000 || image.width > image.height * 100 || image.height > image.width * 100)
+        throw new ClassifierError("input", "Liquid images must stay within 10000 32×32 patches and a 100:1 aspect ratio. Images are not silently resized.");
+    }
     if (route.api === "perplexity-decisions" && Math.ceil(image.width / 32) * Math.ceil(image.height / 32) > 2048)
       throw new ClassifierError("input", "Resize Perplexity images to at most 2048 tiles of 32×32 pixels before classifying.");
     images.push(id === undefined ? image : { ...image, id });
   }
-  return { state: params.state, questions: params.questions, images };
+  const media = await prepareMedia(params.media ?? [], route, cwd, signal);
+  return {
+    state: params.state,
+    questions: params.questions,
+    images,
+    media,
+    ...(params.mode !== undefined ? { mode: params.mode } : {}),
+    ...(params.maxStaleness !== undefined ? { maxStaleness: params.maxStaleness } : {}),
+  };
 }
 
 /** Bounded, fully decoded local image; shared by uploads and local box rendering. */
@@ -214,4 +253,218 @@ export async function verifyOpenedPath(fd: number, root: string, signal?: AbortS
   } else throw new ClassifierError("capability", "Safe local file loading currently supports macOS and Linux only. Inline text/JSON and hosted-image classification remain available.");
   const inside = relative(root, openedPath);
   if (!inside || inside === ".." || inside.startsWith(".." + sep) || isAbsolute(inside)) throw new Error();
+}
+
+/** Detect container types by magic bytes; duration and codec compatibility remain provider-owned. */
+function mediaMime(bytes: Buffer, type: "audio" | "video"): string {
+  const ascii = (start: number, value: string) =>
+    bytes.subarray(start, start + value.length).toString("ascii") === value;
+  if (type === "audio") {
+    if (ascii(0, "RIFF") && ascii(8, "WAVE")) return "audio/wav";
+    if (ascii(0, "ID3") || (bytes[0] === 0xff && (bytes[1]! & 0xe0) === 0xe0)) return "audio/mpeg";
+    if (ascii(0, "fLaC")) return "audio/flac";
+    if (ascii(0, "OggS")) return "audio/ogg";
+    throw new ClassifierError("input", "Audio must be WAV, MP3, FLAC or OGG with matching container bytes.");
+  }
+  if (ascii(4, "ftyp")) return "video/mp4";
+  if (bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3)
+    return "video/webm";
+  throw new ClassifierError("input", "Video must be MP4 or WebM with matching container bytes.");
+}
+
+async function loadMediaFile(
+  path: string,
+  cwd: string,
+  signal: AbortSignal | undefined,
+  maxBytes: number,
+): Promise<Buffer> {
+  cancelled(signal);
+  try {
+    if (/^[a-z]+:/i.test(path)) throw new Error();
+    const root = await realpath(cwd);
+    const target = resolve(root, path);
+    const inside = relative(root, target);
+    if (!inside || inside === ".." || inside.startsWith(".." + sep) || isAbsolute(inside)) throw new Error();
+    let current = root;
+    for (const part of inside.split(sep)) {
+      cancelled(signal);
+      current = resolve(current, part);
+      const entry = await lstat(current);
+      if (entry.isSymbolicLink() || (current === target ? !entry.isFile() : !entry.isDirectory())) throw new Error();
+    }
+    if (await realpath(target) !== target) throw new Error();
+    const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      await verifyOpenedPath(file.fd, root, signal);
+      const stat = await file.stat();
+      if (!stat.isFile() || stat.size < 1 || stat.size > maxBytes) throw new Error();
+      const buffer = Buffer.alloc(maxBytes + 1);
+      let offset = 0;
+      while (offset < buffer.length) {
+        cancelled(signal);
+        const read = await file.read(buffer, offset, buffer.length - offset, null);
+        if (!read.bytesRead) break;
+        offset += read.bytesRead;
+      }
+      if (offset > maxBytes) throw new Error();
+      return buffer.subarray(0, offset);
+    } finally {
+      await file.close();
+    }
+  } catch (error) {
+    cancelled(signal);
+    if (error instanceof ClassifierError) throw error;
+    throw new ClassifierError("input", "Media must be a regular file inside cwd without symlinks, within the provider's documented byte limit.");
+  }
+}
+
+async function prepareMedia(
+  sources: NonNullable<ClassifyParams["media"]>,
+  route: ResolvedModel,
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<PreparedMedia[]> {
+  const audio = sources.filter((source) => source.type === "audio");
+  const video = sources.filter((source) => source.type === "video");
+  if (audio.length && !route.audio)
+    throw new ClassifierError("capability", "The selected route does not support audio input.");
+  if (video.length && !route.video)
+    throw new ClassifierError("capability", "The selected route does not support video input.");
+  if (audio.length > (route.api === "liquid-system-one" ? 8 : 4))
+    throw new ClassifierError("input", "The selected route accepts at most " + (route.api === "liquid-system-one" ? 8 : 4) + " audio clips.");
+  if (video.length > 2)
+    throw new ClassifierError("input", "Clef-omni accepts at most two videos.");
+  const result: PreparedMedia[] = [];
+  for (const source of [...audio, ...video]) {
+    const maxBytes = source.type === "video" ? 16 * 1024 * 1024 : route.api === "cloudflare-system-one" ? 8 * 1024 * 1024 : 20 * 1024 * 1024;
+    const bytes = await loadMediaFile(source.path, cwd, signal, maxBytes);
+    result.push({
+      type: source.type,
+      mimeType: mediaMime(bytes, source.type),
+      data: bytes.toString("base64"),
+    });
+  }
+  return result;
+}
+
+export type PreparedExtractionInput = {
+  state: string | Record<string, unknown> | unknown[];
+  fields: NonNullable<ExtractParams["fields"]>;
+  images: PreparedLocalImage[];
+  documents: { mimeType: "application/pdf"; data: string }[];
+  referenceDate?: string;
+  options?: ExtractParams["options"];
+};
+
+const EXTRACTION_TYPES = new Set([
+  "text", "number", "compute", "date", "time", "datetime", "duration",
+  "boolean", "enum", "object", "list", "estimate", "forecast",
+]);
+
+function validateExtractionFields(value: unknown): NonNullable<ExtractParams["fields"]> {
+  if (!isRecord(value) || Object.keys(value).length === 0)
+    throw new ClassifierError("input", "fields must be a non-empty map of named field specifications.");
+  for (const [name, field] of Object.entries(value)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(name) || !isRecord(field) || typeof field.type !== "string" || !EXTRACTION_TYPES.has(field.type))
+      throw new ClassifierError("input", "Each field needs a provider field name and a documented Clairic type.");
+    if (field.properties !== undefined) validateExtractionFields(field.properties);
+    if (field.items !== undefined && isRecord(field.items) && field.items.properties !== undefined)
+      validateExtractionFields(field.items.properties);
+  }
+  return value as NonNullable<ExtractParams["fields"]>;
+}
+
+async function loadDocumentFile(
+  path: string,
+  cwd: string,
+  signal: AbortSignal | undefined,
+): Promise<Buffer> {
+  cancelled(signal);
+  try {
+    if (/^[a-z]+:/i.test(path)) throw new Error();
+    const root = await realpath(cwd);
+    const target = resolve(root, path);
+    const inside = relative(root, target);
+    if (!inside || inside === ".." || inside.startsWith(".." + sep) || isAbsolute(inside)) throw new Error();
+    let current = root;
+    for (const part of inside.split(sep)) {
+      cancelled(signal);
+      current = resolve(current, part);
+      const entry = await lstat(current);
+      if (entry.isSymbolicLink() || (current === target ? !entry.isFile() : !entry.isDirectory())) throw new Error();
+    }
+    if (await realpath(target) !== target) throw new Error();
+    const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      await verifyOpenedPath(file.fd, root, signal);
+      const stat = await file.stat();
+      if (!stat.isFile() || stat.size < 5 || stat.size > 4 * 1024 * 1024) throw new Error();
+      const buffer = Buffer.alloc(4 * 1024 * 1024 + 1);
+      let offset = 0;
+      while (offset < buffer.length) {
+        cancelled(signal);
+        const read = await file.read(buffer, offset, buffer.length - offset, null);
+        if (!read.bytesRead) break;
+        offset += read.bytesRead;
+      }
+      if (offset > 4 * 1024 * 1024 || buffer.subarray(0, 5).toString("ascii") !== "%PDF-") throw new Error();
+      return buffer.subarray(0, offset);
+    } finally {
+      await file.close();
+    }
+  } catch (error) {
+    cancelled(signal);
+    if (error instanceof ClassifierError) throw error;
+    throw new ClassifierError("input", "Documents must be unencrypted PDF regular files inside cwd without symlinks, within 4 MiB.");
+  }
+}
+
+export async function prepareExtractionInput(
+  params: ExtractParams,
+  route: ResolvedModel,
+  cwd: string,
+  signal?: AbortSignal,
+): Promise<PreparedExtractionInput> {
+  if (route.api !== "cloudflare-clairic")
+    throw new ClassifierError("capability", "Clairic extraction requires the clairic-api route.");
+  if (params.state !== undefined &&
+      !(typeof params.state === "string" || Array.isArray(params.state) || isRecord(params.state)))
+    throw new ClassifierError("input", "state must be text, a JSON object or an array.");
+  const fields = validateExtractionFields(params.fields);
+  if (params.referenceDate !== undefined &&
+      (typeof params.referenceDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(params.referenceDate)))
+    throw new ClassifierError("input", "referenceDate must use YYYY-MM-DD.");
+  if (params.options !== undefined) {
+    if (!isRecord(params.options) ||
+        Object.keys(params.options).some((key) => !["includeQuantiles", "returnStateText"].includes(key)) ||
+        Object.values(params.options).some((value) => typeof value !== "boolean"))
+      throw new ClassifierError("input", "options may only set includeQuantiles and returnStateText to booleans.");
+  }
+  if (params.images !== undefined && (!Array.isArray(params.images) || params.images.some((image) => typeof image !== "string" || !image.trim() || image.length > 4096)))
+    throw new ClassifierError("input", "images must be local path strings inside cwd.");
+  if (params.documents !== undefined && (!Array.isArray(params.documents) || params.documents.some((document) => typeof document !== "string" || !document.trim() || document.length > 4096)))
+    throw new ClassifierError("input", "documents must be local PDF path strings inside cwd.");
+  const images = await Promise.all((params.images ?? []).map((image) => loadLocalImage(image, cwd, signal, 4 * 1024 * 1024)));
+  const documents = await Promise.all((params.documents ?? []).map(async (document) => ({
+    mimeType: "application/pdf" as const,
+    data: (await loadDocumentFile(document, cwd, signal)).toString("base64"),
+  })));
+  if (images.length > 4 || documents.length > 4 || images.length + documents.length > 4)
+    throw new ClassifierError("input", "Clairic accepts at most four rendered images and PDF pages combined.");
+  let bytes = 0;
+  for (const media of [...images.map((image) => Buffer.from(image.data, "base64")), ...documents.map((document) => Buffer.from(document.data, "base64"))]) {
+    bytes += media.byteLength;
+    if (bytes > 8 * 1024 * 1024)
+      throw new ClassifierError("input", "Clairic media exceeds the provider's 8 MiB combined decoded limit.");
+  }
+  if ((params.state === undefined || params.state === "") && images.length === 0 && documents.length === 0)
+    throw new ClassifierError("input", "Clairic requires a non-empty state or media input.");
+  return {
+    state: params.state ?? "",
+    fields,
+    images,
+    documents,
+    ...(params.referenceDate !== undefined ? { referenceDate: params.referenceDate } : {}),
+    ...(params.options !== undefined ? { options: params.options } : {}),
+  };
 }

@@ -6,6 +6,30 @@ export type ImageOutputFormat = 'png' | 'jpeg' | 'webp' | 'gif' | 'svg';
 export type ImageComplexity = 'low' | 'medium' | 'high';
 /** Reasoning effort of the text/instruct model that authors SVG output. */
 export type SvgReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+/** Gemini 3-family generateContent thinking levels. */
+export type GeminiThinkingLevel = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+/** Provider-native prompt reasoning modes exposed by Firefly Image5. */
+export type PromptReasoner = 'speed' | 'quality';
+/** Recraft operations exposed by its dedicated REST endpoints. */
+export type RecraftOperation =
+  | 'generate'
+  | 'imageToImage'
+  | 'inpaint'
+  | 'outpaint'
+  | 'replaceBackground'
+  | 'generateBackground'
+  | 'vectorize'
+  | 'variateImage'
+  | 'removeBackground'
+  | 'crispUpscale'
+  | 'creativeUpscale'
+  | 'enhance'
+  | 'eraseRegion';
+export type RecraftTextLayout = {
+  text: string;
+  bbox: [[number, number], [number, number], [number, number], [number, number]];
+};
+export type RgbColor = { rgb: [number, number, number]; weight?: number };
 
 export type GenerateImageParams = {
   prompt: string;
@@ -63,6 +87,11 @@ export type GenerateImageParams = {
   svgReasoningEffort?: SvgReasoningEffort;
   /** Provider-supported background behavior. */
   background?: 'auto' | 'transparent' | 'opaque';
+  /**
+   * OpenRouter response delivery. `url` returns a signed, expiring download
+   * link instead of inline bytes; `b64_json` keeps bytes inline.
+   */
+  responseFormat?: 'b64_json' | 'url';
   /** JPEG/WebP compression from 0–100. */
   outputCompression?: number;
   /** Optional edit mask path/URL; exposed only for verified mask-capable models. */
@@ -81,10 +110,48 @@ export type GenerateImageParams = {
   promptEnhance?: boolean;
   /** Enable provider-side thinking where supported. */
   enableThinking?: boolean;
+  /** Gemini generateContent maximum reasoning depth. */
+  thinkingLevel?: GeminiThinkingLevel;
+  /** Ask Gemini to return thought parts in the response. */
+  includeThoughts?: boolean;
+  /** Ground image generation in real-time Google Search results. */
+  searchGrounding?: boolean;
+  /** Also enable Google Image Search inside search grounding. */
+  imageSearchGrounding?: boolean;
+  /** Submit through a provider's documented asynchronous task endpoint. */
+  asyncMode?: boolean;
+  /** Wan image-set mode maximum; distinct from independent n variants. */
+  sequentialMaxImages?: number;
+  /** Firefly resolution level (for example "2.4MP"). */
+  resolutionLevel?: string;
+  /** Firefly prompt reasoning strategy. */
+  promptReasoner?: PromptReasoner;
+  /** Image-to-image influence, where the provider exposes strength/denoising. */
+  strength?: number;
+  /** Dedicated Recraft operation. Defaults to automatic endpoint selection from inputs. */
+  operation?: RecraftOperation;
+  /** Reuse a Recraft style created from reference images. */
+  styleId?: string;
+  /** Recraft style reference URLs or data URLs. */
+  styleReferenceUrls?: string[];
+  /** Recraft style matching mode. */
+  styleMatch?: string;
+  /** Recraft V3 exact text placement. */
+  textLayout?: RecraftTextLayout[];
+  /** Recraft color controls. */
+  colorControls?: RgbColor[];
+  /** Recraft background color control. */
+  backgroundColor?: RgbColor;
   /** Add the provider's visible AI watermark where supported. Default false. */
   watermark?: boolean;
   /** Seedream related-series maximum; distinct from independent `n` variants. */
   seriesMaxImages?: number;
+  /** Seedream 5.x: split one input image into a base image plus editable layers. */
+  layerDecomposition?: boolean;
+  /** Seedream 5.5 total layer output cap, including the base image. */
+  layerMaxImages?: number;
+  /** Seedream 5.5 rich OCR for regular text layers. */
+  layerTextRecognition?: boolean;
   /** Output filename prefix. */
   filename?: string;
   /** Optional desktop-only exact-size PNG copy; provider size controls are unchanged. */
@@ -97,6 +164,8 @@ export type GenerateImageParams = {
 export type ResolvedImageInput = {
   bytes: Uint8Array;
   mimeType: string;
+  /** Original public URL, when the caller supplied one instead of a local file. */
+  sourceUrl?: string;
 };
 
 export type ImageDimensions = { width: number; height: number };
@@ -149,6 +218,8 @@ export type ImageModelCapabilities = {
   /** Planning-effort vocabulary; absence means the model has no `complexity` knob. */
   complexityValues?: ImageComplexity[];
   backgroundValues?: Array<'auto' | 'transparent' | 'opaque'>;
+  /** OpenRouter response delivery modes accepted by the adapter. */
+  responseFormats?: Array<'b64_json' | 'url'>;
   supportsOutputCompression?: boolean;
   supportsMask?: boolean;
   /** Whether the edit path accepts a markup annotation layer. */
@@ -156,9 +227,55 @@ export type ImageModelCapabilities = {
   supportsNegativePrompt?: boolean;
   supportsSeed?: boolean;
   supportsPromptEnhance?: boolean;
+  /** Legacy umbrella flag; mapped to the wire-specific thinking capability. */
   supportsThinking?: boolean;
+  /** DashScope Qwen/Wan enable_thinking or thinking_mode request control. */
+  supportsEnableThinking?: boolean;
+  /** Gemini generationConfig.thinkingConfig.includeThoughts response control. */
+  supportsThoughtOutput?: boolean;
+  /** Gemini thinking levels accepted by generationConfig.thinkingConfig.thinkingLevel. */
+  thinkingLevels?: GeminiThinkingLevel[];
+  /** Gemini generateContent Google Search grounding support. */
+  supportsSearchGrounding?: boolean;
+  /** Gemini image-search grounding support; requires search grounding. */
+  supportsImageSearchGrounding?: boolean;
+  /** Alibaba Wan async task endpoint support. */
+  supportsAsyncMode?: boolean;
+  /** Alibaba Wan image-set mode support. */
+  supportsSequentialSets?: boolean;
+  /** Verified image-set maximum, including the extension ceiling. */
+  sequentialMaxImages?: { min: number; max: number };
+  /** Firefly resolution vocabulary. */
+  resolutionLevels?: string[];
+  /** Firefly prompt reasoner vocabulary. */
+  promptReasonerValues?: PromptReasoner[];
+  /** Image-to-image strength support. */
+  supportsStrength?: boolean;
+  /** Recraft dedicated operations supported by the selected model. */
+  operations?: RecraftOperation[];
   supportsWatermark?: boolean;
   supportsSeries?: boolean;
+  /** Seedream 5.x layer decomposition support. */
+  supportsLayerDecomposition?: boolean;
+  /** Seedream 5.5 rich text-layer OCR support. */
+  supportsLayerTextRecognition?: boolean;
+  /** Recraft style reference support. */
+  supportsStyleReferences?: boolean;
+  styleMatchValues?: string[];
+  /** Recraft V3 text-layout support. */
+  supportsTextLayout?: boolean;
+  /** Recraft color-control support. */
+  supportsColorControls?: boolean;
+  /** Native SVG editing is documented by the selected model. */
+  supportsSvgEdits?: boolean;
+  /** Native SVG models document multiple outputs per request. */
+  supportsSvgVariants?: boolean;
+  /** OpenAI-only SVG author model selection. */
+  supportsSvgAuthor?: boolean;
+  /** Provider-documented request bounds for `layerMaxImages`, including the base image. */
+  layerMaxImages?: { min: number; max: number };
+  /** Provider-documented maximum outputs in layer mode, including the base image. */
+  layerOutputMax?: number;
   /** Max images per request via `n`. 1 = the model has no count knob; `n` is hidden. */
   nMax: number;
   /** Whether nMax comes from provider docs or a conservative extension ceiling. */

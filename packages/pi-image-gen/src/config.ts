@@ -9,6 +9,7 @@ import {
   AZURE_OPENAI_CAPABILITIES,
   BUILT_IN_MODELS,
   DEFAULT_API_STYLE,
+  describeModelLifecycle,
   DEFAULT_BASE_URL,
   ENV_VARS,
   findBuiltInModel,
@@ -232,6 +233,16 @@ function buildBuiltInProvider(
         ? trimCredential(process.env[envVar])
         : undefined;
   const apiKey = configuredApiKey ?? environmentApiKey;
+  const configuredSecret = trimCredential(override.apiSecret);
+  const configuredToken = trimCredential(override.accessToken);
+  const adobeSecret = id === 'adobe-firefly'
+    ? trimCredential(process.env.FIREFLY_SERVICES_CLIENT_SECRET)
+    : undefined;
+  const adobeToken = id === 'adobe-firefly'
+    ? trimCredential(process.env.FIREFLY_SERVICES_ACCESS_TOKEN)
+    : undefined;
+  const apiSecret = configuredSecret ?? adobeSecret;
+  const accessToken = configuredToken ?? adobeToken;
   const provider: ResolvedProvider = {
     id,
     api: DEFAULT_API_STYLE[id],
@@ -242,6 +253,8 @@ function buildBuiltInProvider(
     builtIn: true,
   };
   if (apiKey) provider.apiKey = apiKey;
+  if (apiSecret) provider.apiSecret = apiSecret;
+  if (accessToken) provider.accessToken = accessToken;
   if (isStringRecord(override.headers)) provider.headers = override.headers;
   return provider;
 }
@@ -252,6 +265,8 @@ function buildCustomProvider(name: string, raw: unknown): ResolvedProvider | nul
   }
   if (raw.baseUrl !== undefined && typeof raw.baseUrl !== 'string') return null;
   if (raw.apiKey !== undefined && typeof raw.apiKey !== 'string') return null;
+  if (raw.apiSecret !== undefined && typeof raw.apiSecret !== 'string') return null;
+  if (raw.accessToken !== undefined && typeof raw.accessToken !== 'string') return null;
   const customAuth = parseCustomAuth(raw.auth);
   if (raw.auth !== undefined && !customAuth) return null;
   if (
@@ -280,7 +295,11 @@ function buildCustomProvider(name: string, raw: unknown): ResolvedProvider | nul
     ...(customAuth ? { customAuth } : {}),
   };
   const apiKey = trimCredential(raw.apiKey);
+  const apiSecret = trimCredential(raw.apiSecret);
+  const accessToken = trimCredential(raw.accessToken);
   if (apiKey) provider.apiKey = apiKey;
+  if (apiSecret) provider.apiSecret = apiSecret;
+  if (accessToken) provider.accessToken = accessToken;
   if (raw.headers) provider.headers = raw.headers;
   return provider;
 }
@@ -450,6 +469,8 @@ export type ProviderRoute = {
   providerId: string;
   authentication: 'api-key' | 'subscription' | 'custom';
   modelIds: string[];
+  /** Official lifecycle notes keyed by the displayed model id. */
+  modelLifecycle?: Record<string, string>;
   acceptsAnyModel: boolean;
   configuredBySettings: boolean;
 };
@@ -490,6 +511,10 @@ const BUILT_IN_ROUTES: Array<{
   },
   { id: 'meta-api', label: 'Meta API', providerId: 'meta', authentication: 'api-key' },
   { id: 'mai-api', label: 'Microsoft MAI Azure API', providerId: 'mai', authentication: 'api-key' },
+  { id: 'bfl-api', label: 'Black Forest Labs API', providerId: 'bfl', authentication: 'api-key' },
+  { id: 'adobe-firefly-api', label: 'Adobe Firefly Services API', providerId: 'adobe-firefly', authentication: 'api-key' },
+  { id: 'stability-api', label: 'Stability AI API', providerId: 'stability', authentication: 'api-key' },
+  { id: 'recraft-api', label: 'Recraft API', providerId: 'recraft', authentication: 'api-key' },
 ];
 
 const LEGACY_ROUTE_ALIASES: Partial<Record<BuiltInProviderId, BuiltInProviderRouteId>> = {
@@ -501,6 +526,10 @@ const LEGACY_ROUTE_ALIASES: Partial<Record<BuiltInProviderId, BuiltInProviderRou
   openrouter: 'openrouter-api',
   ark: 'ark-api',
   mai: 'mai-api',
+  bfl: 'bfl-api',
+  'adobe-firefly': 'adobe-firefly-api',
+  stability: 'stability-api',
+  recraft: 'recraft-api',
 };
 
 /** Return the canonical route id, preserving declared custom-provider ids. */
@@ -517,9 +546,17 @@ export function canonicalProviderRouteId(
 
 export function listProviderRoutes(settings: ImageGenSettings): ProviderRoute[] {
   const routes: ProviderRoute[] = BUILT_IN_ROUTES.map((route) => {
-    const models = modelsForProvider(route.providerId).map(
+    const entries = modelsForProvider(route.providerId);
+    const models = entries.map(
       (model) => (route.providerId === 'codex' ? (model.remoteId ?? model.id) : model.id),
     );
+    const lifecycle: Record<string, string> = {};
+    for (const [index, entry] of entries.entries()) {
+      const note = describeModelLifecycle(entry);
+      if (!note) continue;
+      lifecycle[models[index]!] = note;
+      for (const alias of entry.aliases ?? []) lifecycle[alias] = note;
+    }
     const provider = buildBuiltInProvider(route.providerId, settings);
     return {
       id: route.id,
@@ -527,6 +564,7 @@ export function listProviderRoutes(settings: ImageGenSettings): ProviderRoute[] 
       providerId: route.providerId,
       authentication: route.authentication,
       modelIds: [...new Set(models)],
+      ...(Object.keys(lifecycle).length > 0 ? { modelLifecycle: lifecycle } : {}),
       acceptsAnyModel: route.providerId === 'openrouter' || route.providerId === 'mai' || route.providerId === 'azure-openai',
       configuredBySettings: route.authentication === 'api-key' && Boolean(provider?.apiKey),
     };
@@ -745,6 +783,10 @@ export function listConfiguredProviders(settings: ImageGenSettings): ConfiguredP
     'ark',
     'meta',
     'mai',
+    'bfl',
+    'adobe-firefly',
+    'stability',
+    'recraft',
   ] as BuiltInProviderId[]) {
     const provider = buildBuiltInProvider(id, settings);
     if (provider?.apiKey) out.push({ ...provider, catchAll: false, modelCount: 0 });
@@ -855,7 +897,11 @@ function isCustomApiStyle(value: unknown): value is CustomApiStyle {
     value === 'openrouter' ||
     value === 'ark' ||
     value === 'meta' ||
-    value === 'mai'
+    value === 'mai' ||
+    value === 'bfl' ||
+    value === 'adobe-firefly' ||
+    value === 'stability' ||
+    value === 'recraft'
   );
 }
 
@@ -869,6 +915,10 @@ function isBuiltInProviderId(value: string): value is BuiltInProviderId {
     value === 'ark' ||
     value === 'meta' ||
     value === 'mai' ||
-    value === 'codex'
+    value === 'codex' ||
+    value === 'bfl' ||
+    value === 'adobe-firefly' ||
+    value === 'stability' ||
+    value === 'recraft'
   );
 }

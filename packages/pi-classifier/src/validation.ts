@@ -21,8 +21,8 @@ function content(value: unknown, maxLength: number, nonempty = false): boolean {
 }
 
 export function validateParams(value: unknown): ClassifyParams {
-  if (!isRecord(value) || Object.keys(value).some((key) => !["state", "questions", "images"].includes(key)))
-    invalid("Expected state, questions and optional images; provider/model are selected in settings.");
+  if (!isRecord(value) || Object.keys(value).some((key) => !["state", "questions", "images", "media", "mode", "maxStaleness"].includes(key)))
+    invalid("Expected state, questions and optional images, media, mode or maxStaleness; provider/model are selected in settings.");
   if (!(typeof value.state === "string" || Array.isArray(value.state) || isRecord(value.state)))
     invalid("state must be text, a JSON object or an array.");
   validateJson(value.state, 0);
@@ -32,8 +32,13 @@ export function validateParams(value: unknown): ClassifyParams {
   for (const [id, question] of entries) {
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id) || !isRecord(question))
       invalid("Question IDs must be 1–64 letters, digits, underscores or hyphens.");
-    if (Object.keys(question).some((key) => !["type", "instructions", "criteria"].includes(key)))
-      invalid("Unknown question field.");
+    const allowed = question.type === "number" || question.type === "estimate"
+      ? ["type", "instructions", "unit", "range", "step"]
+      : question.type === "spans" || question.type === "boxes"
+        ? ["type", "instructions", "max"]
+        : ["type", "instructions", "criteria"];
+    if (Object.keys(question).some((key) => !allowed.includes(key)))
+      invalid("Unknown question field for " + String(question.type) + ".");
     if (!content(question.instructions, 16_384, true))
       invalid("Each question needs non-empty text or ordered text/image-reference instructions, at most 16384 characters/bytes.");
     if (question.type === "bool") {
@@ -51,8 +56,48 @@ export function validateParams(value: unknown): ClassifyParams {
         invalid("score criteria must contain 2–10 non-empty ordered descriptions or image content.");
     } else if (question.type === "box") {
       if (question.criteria !== undefined) invalid("box does not accept criteria.");
-    } else invalid("Question type must be bool, choice, score or box.");
+    } else if (question.type === "locate" || question.type === "text" || question.type === "date") {
+      if (question.criteria !== undefined) invalid(question.type + " does not accept criteria.");
+    } else if (question.type === "spans" || question.type === "boxes") {
+      if (question.criteria !== undefined) invalid(question.type + " does not accept criteria.");
+      if (question.max !== undefined &&
+          (!Number.isSafeInteger(question.max) || (question.max as number) < 1 || (question.max as number) > 64))
+        invalid(question.type + ".max must be an integer from 1 to 64.");
+    } else if (question.type === "number" || question.type === "estimate") {
+      if (question.unit !== undefined && (typeof question.unit !== "string" || question.unit.length > 128))
+        invalid("unit must be a string of at most 128 characters.");
+      if (question.step !== undefined && (typeof question.step !== "number" || !Number.isFinite(question.step) || question.step <= 0))
+        invalid("step must be a positive finite number.");
+      const range = question.range;
+      if (question.type === "estimate" && !Array.isArray(range))
+        invalid("estimate requires a [low, high] range.");
+      if (range !== undefined && (!Array.isArray(range) || range.length !== 2 ||
+        range.some((entry) => typeof entry !== "number" || !Number.isFinite(entry)) ||
+        (range[0] as number) >= (range[1] as number)))
+        invalid("range must be a finite [low, high] pair with low below high.");
+    } else if (question.type === "multi_choice") {
+      if (!isRecord(question.criteria))
+        invalid("multi_choice criteria must map labels to descriptions.");
+      const criteria = Object.entries(question.criteria);
+      if (criteria.length < 2 || criteria.some(([key, entry]) => !key.trim() || key.length > 128 || !content(entry, 4096)))
+        invalid("multi_choice requires at least two labels with text or image-content descriptions.");
+    } else invalid("Question type must be a supported typed decision or read.");
   }
+  if (value.media !== undefined) {
+    if (!Array.isArray(value.media))
+      invalid("media must be an array of audio/video descriptors.");
+    for (const item of value.media) {
+      if (!isRecord(item) || (item.type !== "audio" && item.type !== "video") ||
+          Object.keys(item).some((key) => key !== "type" && key !== "path") ||
+          typeof item.path !== "string" || !item.path.trim() || item.path.length > 4096)
+        invalid("Each media descriptor needs a type of audio or video and a local path.");
+    }
+  }
+  if (value.mode !== undefined && value.mode !== "web_grounding")
+    invalid("mode must be omitted or \"web_grounding\".");
+  if (value.maxStaleness !== undefined &&
+      (!Number.isSafeInteger(value.maxStaleness) || (value.maxStaleness as number) < 0))
+    invalid("maxStaleness must be a non-negative safe integer.");
   const ids = new Set<string>();
   if (value.images !== undefined) {
     if (!Array.isArray(value.images) || value.images.length > 8)
@@ -76,6 +121,10 @@ export function validateParams(value: unknown): ClassifyParams {
   const references = [...imageReferences(value.state), ...questionImageReferences(value.questions as Record<string, Question>)];
   for (const id of references) if (!ids.has(id)) invalid("Every image reference must name an image descriptor in images.");
   for (const id of ids) if (!references.includes(id)) invalid("Every named image must be referenced in state, instructions or criteria.");
+  if (value.mode === "web_grounding" &&
+      Object.values(value.questions).some((question) => isRecord(question) && question.type === "locate") &&
+      typeof value.state !== "string")
+    invalid("web grounding with locate requires a string state.");
   if (Buffer.byteLength(JSON.stringify(value)) > 2 * 1024 * 1024)
     invalid("Classification text and questions must be at most 2 MiB.");
   return value as unknown as ClassifyParams;

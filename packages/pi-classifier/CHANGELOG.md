@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Added Perplexity Decider v1.3 and Flash v1.3 to the built-in catalog, pricing and 255-choice limits. `latest` aliases now resolve to v1.3 upstream.
+- Added Perplexity `locate` answers with Unicode-character spans and explicit `web_grounding`/`maxStaleness` support, including search evidence and documented non-token fee accounting.
+- Added Liquid `d1.2` and `d1.2-ultra` with typed text/number/date reads, `spans`, `box`/`boxes`, ranged estimates, multi-select choices, top-level image/audio uploads and public pricing.
+- Added Cloudflare `@cf/cloudflare/clef-omni` with local audio/video inputs and verified media limits, preserving the model-specific Clef wire branch.
+- Added Cloudflare Clairic extraction through `classify_extract`, with documented field contracts, images/PDFs, grounding metadata, truncation reporting and scheduled pricing.
+- Clairic caller options `includeQuantiles` and `returnStateText` are translated to the provider's documented `include_quantiles` and `return_state_text` wire keys.
+- Liquid multi-select probabilities no longer require a sum of one, estimate ranges and intervals allow negative/fractional numbers, and unparseable number/date values preserve documented `found`/`text`/`span` metadata instead of collapsing to `no_match`.
+- NONE-choice batching now preserves Perplexity web evidence from every call, rebases `locate.searchResult` indices onto the combined evidence, and no longer drops `result.webGrounding`.
+- Shared desktop and Durable tool schemas were updated together. Model-facing JSON Schema avoids `$ref` fragments for `classify_extract` and `classify_tree`; recursive validation stays in runtime code. No live provider calls, paid usage, commits or unit tests were made for these changes.
+
 ## 0.4.1
 
 - Added `@abhishek944/pi-classifier/durable`, a settings-only native Durable extension named `classifier` that registers `classify`, `classify_compare`, `classify_tree`, and `classifier_box_image`.

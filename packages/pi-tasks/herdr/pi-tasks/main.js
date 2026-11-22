@@ -1,11 +1,16 @@
 import { View, div, svg } from "gpui-kit";
-import { Button, h_flex, v_flex } from "gpui-base";
+import { Button, ScrollHandle, h_flex, v_flex } from "gpui-base";
 import { readFile } from "fs/promises";
-import { agents, panes, props, readTextFile, run, terminals, theme, watchFolder } from "herdr";
+import { agents, panes, props, readTextFile, run, setShared, shared, terminals, theme, watchFolder } from "herdr";
 
 const SESSION = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 const TERMINAL = /^(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)?t[0-9a-z]+$/;
 const STATUSES = ["active", "blocked", "completed", "cancelled"];
+const DEPENDENCIES = ["user-decision", "another-agent"];
+const DEPENDENCY_LABELS = { "user-decision": "User decision", "another-agent": "Another agent" };
+// The pane this view is drawn in; the opener publishes it because a pane content copy
+// receives only its creation props, and the live pane inventory names it. See README "Status filter".
+const PANE = /^p[A-Za-z0-9]+$/;
 const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const number = (value) => Number.isSafeInteger(value) && value >= 0;
 const text = (value) => typeof value === "string" && value.trim().length > 0;
@@ -72,6 +77,7 @@ function validate(value, sessionId) {
     if (!object(todo) || !/^T[1-9][0-9]*$/.test(todo.taskId) || tasks.has(todo.taskId) || !works.has(todo.workId)
       || !text(todo.taskName) || !text(todo.taskInfo) || !STATUSES.includes(todo.status)
       || (todo.blockedReason != null && typeof todo.blockedReason !== "string")
+      || (todo.dependentOn !== undefined && (todo.status !== "blocked" || !DEPENDENCIES.includes(todo.dependentOn)))
       || (todo.finalThoughts !== undefined && !text(todo.finalThoughts))
       || (todo.workingSince !== undefined && !number(todo.workingSince))
       || (todo.delegatedTimes !== undefined && (!Array.isArray(todo.delegatedTimes) || todo.delegatedTimes.some((source) => !object(source) || (source.elapsedMs !== null && !number(source.elapsedMs)))))) throw new Error("Invalid task in the task snapshot.");
@@ -105,6 +111,11 @@ export default class Tasks extends View {
       this.error = "Restart Pi, resume this session, then reopen Tasks with /works-panel herdr.";
       return;
     }
+    this.paneFile = typeof binding.paneFile === "string" && /^(?:\/|[A-Za-z]:[\\/])/.test(binding.paneFile) && !binding.paneFile.includes("\0")
+      ? binding.paneFile : null;
+    this.paneId = null;
+    this.filter = "all";
+    this.scroll = ScrollHandle.new();
     this.bound = true;
     this.directory = this.path.replace(/[\\/][^\\/]+$/, "");
     cx.spawn(async (cx) => {
@@ -130,6 +141,7 @@ export default class Tasks extends View {
     if (this.loading) { this.reloadPending = true; return; }
     this.loading = true;
     try {
+      await this.readPane(cx);
       let content;
       try { content = await readTextFile(this.path); }
       catch { content = await readFile(this.path, "utf8"); }
@@ -155,6 +167,51 @@ export default class Tasks extends View {
   }
 
   close() { this.closed = true; }
+
+  // A pane content copy is given only its creation props, so the opener publishes the hosting pane
+  // id beside the snapshot. A pane opened before that hand-off existed carries no `paneFile` prop,
+  // and its stored props never change, so the live inventory is the fallback: the opener always
+  // splits the view into the source terminal's tab, where exactly one Tasks pane is this one.
+  // Anything absent, malformed or ambiguous leaves this view unfiltered instead of guessing another
+  // pane's selection. The file lives beside the watched snapshot, so the directory retries a
+  // first-mount race.
+  async readPane(_cx) {
+    let published = null;
+    if (this.paneFile) {
+      try {
+        const content = await readTextFile(this.paneFile);
+        const value = content === null ? "" : content.trim();
+        published = PANE.test(value) ? value : null;
+      } catch { published = null; }
+    }
+    this.paneId = published ?? this.paneFromInventory();
+  }
+
+  paneFromInventory() {
+    if (typeof this.terminal !== "string") return null;
+    const host = panes().find((pane) => pane.terminal === this.terminal);
+    if (!host) return null;
+    const siblings = panes().filter((pane) => pane.mod === "pi-tasks" && pane.terminal === null && pane.tab === host.tab);
+    const id = siblings.length === 1 ? siblings[0].pane : null;
+    return typeof id === "string" && PANE.test(id) ? id : null;
+  }
+
+  statusFilter() {
+    const value = this.paneId === null ? "all" : shared("pi-tasks-status:" + this.paneId);
+    return STATUSES.includes(value) ? value : "all";
+  }
+
+  // The header owns the menu, so a press in this view must dismiss it: Herdr closes a Select on
+  // Escape and on presses inside its own mod, never on one that lands here. A press anywhere in the
+  // view reaches this root handler; the selected status is a separate value, so dismissing keeps it.
+  dismissOnPress(element) {
+    if (this.paneId === null) return element;
+    return element.on_mouse_down("left", (_event, cx) => {
+      if (shared("pi-tasks-status-open:" + this.paneId) !== true) return;
+      setShared("pi-tasks-status-open:" + this.paneId, false);
+      cx.notify();
+    });
+  }
 
   linked(todo) {
     const link = delegate(todo);
@@ -281,9 +338,12 @@ export default class Tasks extends View {
     const elements = [row];
     if (this.expanded.has(todo.taskId)) {
       const thoughts = this.finalThoughts(todo);
+      const dependency = todo.status === "blocked" ? DEPENDENCY_LABELS[todo.dependentOn] : undefined;
       const detail = v_flex().id("description-" + todo.taskId).flex_none().min_w(0).ml(this.width < 450 ? 20 : 38)
         .pl(23).pr(10).py(10).gap(8).border_l(1).border_color(t.input).text_size(12).text_color(t.muted);
-      detail.child(div().text_size(10).text_color(t.dim).child("Final thoughts"));
+      detail.child(h_flex().min_w(0).gap(8).items_center()
+        .child(div().flex_none().text_size(10).text_color(t.dim).child("Final thoughts"))
+        .when(dependency !== undefined, (row) => row.child(div().min_w(0).truncate().text_size(10).text_color(t.blocked).child("Dependent on: " + dependency))));
       detail.child(div().min_w(0).whitespace_normal().text_color(todo.status === "blocked" ? t.blocked : t.muted)
         .child(thoughts || "No final thoughts recorded."));
       elements.push(detail);
@@ -299,17 +359,31 @@ export default class Tasks extends View {
       .on_size_change((size, cx) => { if (this.width !== size.width) { this.width = size.width; cx.notify(); } });
     if (this.actionError) root.child(div().px(16).py(6).text_size(12).text_color(t.blocked).whitespace_normal().child(this.actionError));
     if (!this.document) {
-      return root.child(h_flex().px(16).py(12).gap(8)
-        .child(div().flex_1().min_w(0).whitespace_normal().text_color(t.muted).child(this.error || "Loading tasks…")));
+      return this.dismissOnPress(root.child(h_flex().px(16).py(12).gap(8)
+        .child(div().flex_1().min_w(0).whitespace_normal().text_color(t.muted).child(this.error || "Loading tasks…"))));
     }
     if (this.error) root.child(div().px(16).py(6).text_color(t.blocked).whitespace_normal().child(this.error));
     if (!this.document.works.length) {
-      return root.child(h_flex().px(16).py(12).gap(8)
-        .child(div().flex_1().min_w(0).whitespace_normal().text_color(t.muted).child("No works or tasks yet.")));
+      return this.dismissOnPress(root.child(h_flex().px(16).py(12).gap(8)
+        .child(div().flex_1().min_w(0).whitespace_normal().text_color(t.muted).child("No works or tasks yet."))));
     }
-    const list = v_flex().id("pi-task-list").flex_1().min_h(0).min_w(0).overflow_y_scrollbar().px(this.width < 450 ? 10 : 20).pt(22).pb(20);
-    for (const [index, work] of [...this.document.works].reverse().entries()) {
+    // Visibility only: Work progress/effort below still use every task of the Work, and no record
+    // is touched. A changed selection starts at the first matching result instead of an old offset.
+    const filter = this.statusFilter();
+    if (filter !== this.filter) {
+      this.filter = filter;
+      this.scroll.scroll_to_item(0);
+    }
+    const rows = [...this.document.works].reverse().map((work) => {
       const todos = this.document.todos.filter((todo) => todo.workId === work.workId);
+      return { work, todos, shown: filter === "all" ? todos : todos.filter((todo) => todo.status === filter) };
+    }).filter((row) => filter === "all" || row.shown.length > 0);
+    const list = v_flex().id("pi-task-list").flex_1().min_h(0).min_w(0).overflow_y_scrollbar().px(this.width < 450 ? 10 : 20).pt(22).pb(20)
+      .track_scroll(this.scroll);
+    if (!rows.length) {
+      return this.dismissOnPress(root.child(list.child(div().px(10).py(6).text_color(t.muted).child("No " + filter + " tasks."))));
+    }
+    for (const [index, { work, todos, shown }] of rows.entries()) {
       if (index) list.child(div().h(1).flex_none().my(16).bg(t.border));
       const open = !this.collapsed.has(work.workId);
       const pct = progress(todos);
@@ -331,9 +405,9 @@ export default class Tasks extends View {
         .child(div().flex_1().min_w(0).child("Task"))
         .child(div().w(columns.progress).flex_none().text_right().text_size(this.width < 450 ? 9 : 10).whitespace_nowrap().child("Progress"))
         .child(div().w(columns.time).flex_none().text_right().whitespace_nowrap().child("Effort")));
-      for (const todo of todos) list.children(this.taskRow(todo, t, columns));
-      if (!todos.length) list.child(div().px(28).py(6).text_color(t.dim).child("No tasks yet."));
+      for (const todo of shown) list.children(this.taskRow(todo, t, columns));
+      if (!shown.length) list.child(div().px(28).py(6).text_color(t.dim).child("No tasks yet."));
     }
-    return root.child(list);
+    return this.dismissOnPress(root.child(list));
   }
 }

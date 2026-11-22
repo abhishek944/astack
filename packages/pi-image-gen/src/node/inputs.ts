@@ -84,7 +84,8 @@ export async function resolveImageInputValue(
   }
 
   if (/^https?:\/\//i.test(trimmed)) {
-    return resolveRemoteImageInput(trimmed, inputLabel, logLabel, fetchImpl, signal);
+    const remote = await resolveRemoteImageInput(trimmed, inputLabel, logLabel, fetchImpl, signal);
+    return { ...remote, sourceUrl: trimmed };
   }
 
   // Anything else — treat as a file path (absolute or relative to cwd).

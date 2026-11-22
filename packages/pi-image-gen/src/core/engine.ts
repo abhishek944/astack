@@ -1,5 +1,5 @@
 import type { RawImageResult } from '../types/provider.js';
-import { MAX_GENERATED_IMAGES } from '../image-input.js';
+import { outputImageLimit } from '../capabilities.js';
 import { MAX_CATALOG_RESPONSE_BYTES, runCatalog } from './catalog.js';
 import { ProviderResultError } from './provider-result.js';
 import { awaitWithAbort, executionDeadline } from './deadline.js';
@@ -51,10 +51,16 @@ export async function generateImageCore<Stored>(
       raws = await awaitWithAbort(host.adapter!.generate(
         request.route.provider, request.route.remoteModelId, params,
         host.providerFetch ?? fetch, signal, images,
-        { ...host.providerRuntime, ...(mask ? { mask } : {}), ...(markup ? { markup } : {}) },
+        {
+          ...host.providerRuntime,
+          capabilities: request.route.capabilities,
+          ...(mask ? { mask } : {}),
+          ...(markup ? { markup } : {}),
+        },
       ), signal);
     }
-    if (!Array.isArray(raws) || !raws.length || raws.length > MAX_GENERATED_IMAGES) {
+    const outputLimit = outputImageLimit(request.effective, request.route.capabilities);
+    if (!Array.isArray(raws) || !raws.length || raws.length > outputLimit) {
       throw new ImageGenError('Provider returned no usable image batch.', 'invalid image batch');
     }
     confirmed = true;

@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util";
 import { checkAnswer, stopLocal, submissionResult, submitQuestion, watchAnswer, } from "./core.js";
 import { serve } from "./local.js";
+import { migrateQuestion } from "./migrate.js";
 import { json, object, string } from "./model.js";
 const controller = new AbortController();
 for (const signal of ["SIGINT", "SIGTERM"])
@@ -32,7 +33,9 @@ async function main() {
         return;
     }
     const file = string(values.state, "--state");
-    if (command === "check")
+    if (command === "migrate")
+        console.log(JSON.stringify(await migrateQuestion(file, controller.signal)));
+    else if (command === "check")
         console.log(JSON.stringify(await checkAnswer(file, controller.signal)));
     else if (command === "watch")
         console.log(JSON.stringify({
@@ -46,7 +49,7 @@ async function main() {
         console.log(JSON.stringify({ status: "stopped" }));
     }
     else
-        throw new Error("Usage: submit --request FILE --session-id ID --cwd REPO [--backend local|here.now], or check|watch|stop --state FILE");
+        throw new Error("Usage: submit --request FILE --session-id ID --cwd REPO [--backend local|here.now], or check|watch|stop|migrate --state FILE");
 }
 main().catch((error) => {
     console.error(JSON.stringify({

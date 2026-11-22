@@ -1,0 +1,23 @@
+---
+name: page-performance
+description: Discover and refresh application pages, observe browser requests, load timings and console errors, investigate evidenced slowdowns, and verify authorized fixes with comparable runtime evidence. Use for local page performance investigation and ongoing coverage.
+---
+
+# Page performance
+
+Follow global `implement`, `no-unit-tests`, and `no-arbitrary-limits`. Use applicable project-specific startup/readiness and development identity/auth guidance when the repository provides it to establish the actual checkout, service pairing, and required ready dependencies before product browser checks; otherwise use its current docs and verified runtime state. Do not assume a particular framework, service, data store, auth provider, port, or identity mechanism. Follow the host's browser guidance, using its selected browser skill first and reading the current guide. Never inspect another account, production, credentials, or raw sensitive request/response content; do not trigger paid inference, product writes, imports, or destructive actions. A refresh may itself trigger actions: inspect the route and its effects first. Do not refresh another worker's tab; use an owned tab and coordinate shared services.
+
+## Discover and measure
+
+1. Find current routes from the application and actual navigation, not an assumed static list. Choose accessible local routes and record the origin, route, auth state, revision, browser, viewport, service pairing, data condition and cache state. Check the rendered result, not just an HTTP response. Stop at actual authentication, consent, or account-choice boundaries; do not bypass them.
+2. Attach observational network and console/error listeners **before** navigating or refreshing. Capture safe summaries only: method, sanitized path (no query or identifiers), status/failure, duration, resource type, console severity and redacted error category. Never persist headers, bodies, cookies, tokens, full URLs or personal data. Include document and API calls; distinguish redirects, aborted requests and framework development-mode cancellations (for example, React StrictMode) from failures. Verify the observer catches a known document request and a known safe console event in the owned page; a failed observer makes the check unverified.
+3. Refresh the same page with the same conditions and collect navigation timing (response, DOM content loaded, load), visible meaningful-content timing when observable, and outstanding long requests. Record whether content is actually usable, and note loading, errors and dependency status. Do not equate an HTTP 200 or load event with a ready UI. Use comparable repeated observations where practical, but do not present a single run or development-mode result as a production performance claim.
+4. Investigate the slowest meaningful request or rendering interval using browser evidence, relevant source and safe server logs. Separate network, backend, frontend, third-party and instrumentation causes. Correlation alone is not root cause. Do not modify an area owned by another worker; coordinate before editing.
+
+## Fix and recheck
+
+Make only an evidence-backed fix within the user's authorization and the owning architecture/flow skills. Preserve unrelated changes. After the fix, ensure the affected runtime actually loaded it (a built server or API may not watch source changes), then repeat the same route, state, browser, cache and measurement procedure. Report before/after raw timings and conditions, request/error changes, observed user-visible result and any variance or unresolved confounder. A source inspection, typecheck or HTTP response alone is not an end-to-end fix. Do not claim improvement when the comparable runtime check could not run.
+
+## Ongoing coverage and handoff
+
+For an ongoing request, use the harness-supported idle/event continuation under the owning session, not an OS scheduler or a detached polling script. Each iteration should select a different accessible route or revisit an evidenced regression, keep a compact deduplicated record of route, conditions, measurements, findings and status in the canonical task artifact directory, and give the next iteration concrete context. Continue only while the user-authorized stop condition has not been met; block on a specific access, safety or tooling dependency rather than repeating unchanged attempts. Avoid overlapping work or concurrent control of the same browser page. Report verified fixes separately from observations and unverified areas, including exact blockers and checks not run. Do not create or run unit tests unless explicitly requested.

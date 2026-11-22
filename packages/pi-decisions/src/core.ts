@@ -22,6 +22,7 @@ import {
 	optionalJson,
 	privateDirectory,
 	questionId,
+	questionPaths,
 	type State,
 	type SubmitRequest,
 	save,
@@ -46,10 +47,7 @@ export async function findState(
 	sessionId: string,
 ): Promise<State> {
 	const storage = await sessionStorage(cwd, sessionId);
-	return loadState(
-		path.join(storage.storageDir, questionId(id), "state.json"),
-		sessionId,
-	);
+	return loadState(questionPaths(storage.storageDir, id).statePath, sessionId);
 }
 async function startLocal(state: State): Promise<void> {
 	const child = spawn(
@@ -160,10 +158,10 @@ export async function submitQuestion(
 			}
 		}
 	}
-	const questionDir = path.join(storage.storageDir, id),
-		statePath = path.join(questionDir, "state.json");
+	const questionDir = questionPaths(storage.storageDir, id);
+	const statePath = questionDir.statePath;
 	try {
-		await mkdir(questionDir, { mode: 0o700 });
+		await mkdir(questionDir.questionDir, { mode: 0o700 });
 	} catch (e) {
 		if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
 		const existing = await loadState(statePath, context.sessionId);
@@ -200,17 +198,18 @@ export async function submitQuestion(
 		}
 		return loadState(statePath, context.sessionId);
 	}
-	const bundleDir = path.join(questionDir, "public");
+	const bundleDir = questionDir.bundleDir;
 	await privateDirectory(path.join(bundleDir, "assets"));
 	const state: State = {
 		version: 2,
 		sessionId: context.sessionId,
-		...storage,
+		cwd: storage.cwd,
+		storageDir: storage.storageDir,
 		questionId: id,
 		revision,
 		backend,
 		question: input.question,
-		responsePath: path.join(questionDir, "response.json"),
+		responsePath: questionDir.responsePath,
 		statePath,
 		bundleDir,
 		files: [],
@@ -288,7 +287,7 @@ export async function archive(
 	}
 	return readArchived(state);
 }
-async function readArchived(state: State): Promise<Answer> {
+export async function readArchived(state: State): Promise<Answer> {
 	const answer = await optionalJson<Answer>(state.responsePath);
 	if (
 		!answer ||

@@ -38,6 +38,33 @@ type ChoicePlan = {
 const NONE_DESCRIPTION =
   "None of the other options in this question applies to the supplied state. Select this only when every listed real option is unsuitable.";
 
+/**
+ * Each provider call returns its own web evidence. `searchResult` indexes that call's array,
+ * so spans must be rebased onto the accumulated evidence assembled by this orchestrator.
+ */
+function remapGroundedAnswers(
+  answers: Record<string, Answer>,
+  offset: number,
+): Record<string, Answer> {
+  if (offset === 0) return answers;
+  const mapped = Object.create(null) as Record<string, Answer>;
+  for (const [id, answer] of Object.entries(answers)) {
+    if (answer.type !== "locate" || !answer.spans.some((span) => span.searchResult !== undefined)) {
+      mapped[id] = answer;
+      continue;
+    }
+    mapped[id] = {
+      ...answer,
+      spans: answer.spans.map((span) =>
+        span.searchResult === undefined
+          ? span
+          : { ...span, searchResult: span.searchResult + offset },
+      ),
+    };
+  }
+  return mapped;
+}
+
 /** Only this operation owns batching. Transport, images, credentials and routes stay with the caller. */
 export async function executeChoices(
   input: PreparedInput,
@@ -81,6 +108,7 @@ export async function executeChoices(
   let last: ClassifierResult | undefined;
   let usage: ClassifierResult["usage"];
   let cost: ClassifierCost | undefined;
+  let webGrounding: NonNullable<ClassifierResult["webGrounding"]> | undefined;
   while (plans.size > 0) {
     if (signal?.aborted)
       throw new ClassifierError("aborted", "Classification was cancelled.");
@@ -122,9 +150,21 @@ export async function executeChoices(
     }
     usage = calls === 0 ? result.usage : sumUsage(usage, result.usage);
     cost = cost === undefined ? result.cost : sumCost(cost, result.cost);
+    const callAnswers = remapGroundedAnswers(
+      result.answers,
+      webGrounding?.searchResults.length ?? 0,
+    );
+    if (result.webGrounding !== undefined) {
+      webGrounding ??= { searchResults: [] };
+      webGrounding.searchResults.push(...result.webGrounding.searchResults);
+      if (result.webGrounding.fetchedResults?.length) {
+        webGrounding.fetchedResults ??= [];
+        webGrounding.fetchedResults.push(...result.webGrounding.fetchedResults);
+      }
+    }
     calls++;
     last = result;
-    for (const [id, answer] of Object.entries(result.answers)) {
+    for (const [id, answer] of Object.entries(callAnswers)) {
       const plan = plans.get(id);
       if (!plan) {
         answers[id] = answer;
@@ -168,6 +208,7 @@ export async function executeChoices(
     cost: cost!,
   };
   if (usage !== undefined) combined.usage = usage;
+  if (webGrounding !== undefined) combined.webGrounding = webGrounding;
   if (calls === 1 && last!.requestId !== undefined)
     combined.requestId = last!.requestId;
   return combined;

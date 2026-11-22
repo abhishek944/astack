@@ -1,5 +1,14 @@
 import type { ApiStyle, BuiltInProviderId, ImageModelCapabilities } from './types.js';
 
+export type ModelLifecycle = {
+  status: 'deprecated' | 'retiring' | 'preview';
+  /** ISO shutdown/retirement date when the provider publishes one. */
+  effective?: string;
+  replacement?: string;
+  /** Official provider page that supplied the status. */
+  source: string;
+};
+
 /**
  * Built-in known image models. Maps a model id (or alias) to its built-in
  * provider. Custom providers may add or override entries via settings.
@@ -10,6 +19,8 @@ export type BuiltInModelEntry = {
   provider: BuiltInProviderId;
   /** Remote model id sent to the provider (defaults to id). */
   remoteId?: string;
+  /** Provider-published lifecycle status; existing configs stay resolvable. */
+  lifecycle?: ModelLifecycle;
   /**
    * The model's capability contract — drives the tool schema (which params
    * exist, their enums/patterns) and pre-flight validation before any paid
@@ -59,10 +70,25 @@ const GEMINI_ASPECTS_14 = [
   '16:9',
   '21:9',
 ];
+const RECRAFT_1K_SIZES = [
+  '1024x1024', '1536x768', '768x1536', '1280x832', '832x1280', '1216x896', '896x1216',
+  '1152x896', '896x1152', '832x1344', '1280x896', '896x1280', '1344x768', '768x1344',
+];
+const RECRAFT_2K_SIZES = [
+  '2048x2048', '3072x1536', '1536x3072', '2560x1664', '1664x2560', '2432x1792', '1792x2432',
+  '2304x1792', '1792x2304', '1664x2688', '2560x1792', '1792x2560', '2688x1536', '1536x2688',
+];
+const RECRAFT_LEGACY_SIZES = [
+  '1024x1024', '2048x1024', '1024x2048', '1536x1024', '1024x1536', '1365x1024', '1024x1365',
+  '1280x1024', '1024x1280', '1024x1707', '1434x1024', '1024x1434', '1820x1024', '1024x1820',
+];
+const RECRAFT_RATIOS = ['1:1', '2:1', '1:2', '3:2', '2:3', '4:3', '3:4', '5:4', '4:5', '6:10', '14:10', '10:14', '16:9', '9:16'];
+const STABILITY_RATIOS = ['21:9', '16:9', '3:2', '5:4', '1:1', '4:5', '2:3', '9:16', '9:21'];
 
 /**
- * Capability values reflect the official provider docs as of 2026-08 and are
- * PENDING live verification where noted:
+ * Capability values reflect official provider docs reviewed 2026-11-20; each
+ * family's source URLs are cited beside its entries. No live generation calls
+ * were made:
  * - gpt-image-2: https://developers.openai.com/api/docs/guides/image-generation
  * - Gemini: https://ai.google.dev/gemini-api/docs/image-generation
  * - Qwen 3.0: https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference
@@ -93,12 +119,18 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
   // standard sizes: both edges divisible by 16, ratio ≤ 3:1, total pixels
   // 655,360–8,294,400, longest edge ≤ 3840; "auto" lets the model pick.
   // Reference images: png/webp/jpg, ≤ 50MB each, up to 16.
-  {
-    id: 'gpt-image-2',
-    provider: 'openai',
+  ...(['gpt-image-2', 'gpt-image-2-2026-04-21'] as const).map((id) => ({
+    id,
+    provider: 'openai' as const,
+    lifecycle: {
+      status: 'retiring' as const,
+      effective: '2027-02-10',
+      replacement: 'gpt-image-2.6-sunburst or gpt-image-2.6-flare',
+      source: 'https://developers.openai.com/api/docs/deprecations.md',
+    },
     capabilities: {
       sizeRange: {
-        separator: 'x',
+        separator: 'x' as const,
         allowAuto: true,
         minArea: 655_360,
         maxArea: 8_294_400,
@@ -108,8 +140,8 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
         maxEdge: 3840,
       },
       qualityValues: ['low', 'medium', 'high', 'auto'],
-      outputFormats: ['png', 'jpeg', 'webp'],
-      backgroundValues: ['auto', 'transparent', 'opaque'],
+      outputFormats: ['png', 'jpeg', 'webp'] as Array<'png' | 'jpeg' | 'webp'>,
+      backgroundValues: ['auto', 'transparent', 'opaque'] as Array<'auto' | 'transparent' | 'opaque'>,
       supportsOutputCompression: true,
       supportsMask: true,
       nMax: 10,
@@ -117,7 +149,7 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
       inputFormats: ['PNG', 'WEBP', 'JPEG'],
       inputMaxBytes: 50 * MB,
     },
-  },
+  })),
 
   // GPT Image 2.5 adds xhigh/max and supports the same arbitrary-size range
   // documented for GPT Image 2. The Images API publishes n=1..10. Reference
@@ -180,6 +212,7 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
       outputFormats: ['png', 'jpeg', 'webp', 'gif', 'svg'] as Array<
         'png' | 'jpeg' | 'webp' | 'gif' | 'svg'
       >,
+      supportsSvgAuthor: true,
       complexityValues: ['low', 'medium', 'high'] as Array<'low' | 'medium' | 'high'>,
       backgroundValues: ['auto', 'transparent', 'opaque'] as Array<'auto' | 'transparent' | 'opaque'>,
       supportsOutputCompression: true,
@@ -193,11 +226,12 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
     },
   })),
 
-  // Meta Muse Image via the Meta Model API Responses endpoint. The official
-  // cookbook demonstrates square, landscape, and portrait output sizes and
-  // multiple reference images. Input metadata below is an extension safety
-  // contract rather than an asserted provider limit. Requests are stateless in this
-  // extension; callers iterate by passing the previous output as an input image.
+  // Meta Muse Image. The built-in route uses the documented one-shot Images
+  // endpoints; custom `api: meta` providers keep the conversational Responses
+  // wire shape. Input metadata below is an extension safety contract rather
+  // than an asserted provider limit. Requests are stateless in this extension;
+  // callers iterate by passing the previous output as an input image.
+  // https://dev.meta.ai/docs/image-generation
   {
     id: 'muse-image-1.0',
     aliases: ['muse-image', 'meta-muse'],
@@ -213,9 +247,10 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
     },
   },
 
-  // Microsoft Foundry MAI image catalog (preview). API `model` is the Azure
-  // deployment name; these entries describe deployments named after the model.
-  // Versions: 2.5/Flash 2026-06-02, Pro 2026-06-19, 2.6/Flash 2026-07-31.
+  // Microsoft Foundry MAI image catalog. API `model` is the Azure deployment
+  // name; these entries describe deployments named after the model.
+  // Versions: 2.5/Flash 2026-06-02, Pro 2026-06-19, 2.6/Flash 2026-07-31,
+  // 2.7/Flash 2026-11-02.
   // https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image
   ...([
     'MAI-Image-2.5',
@@ -226,6 +261,13 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
   ] as const).map((id) => ({
     id,
     provider: 'mai' as const,
+    ...(id.startsWith('MAI-Image-2.5') ? {
+      lifecycle: {
+        status: 'retiring' as const,
+        effective: '2026-11-24',
+        source: 'https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule',
+      },
+    } : {}),
     capabilities: {
       sizeRange: {
         separator: 'x' as const,
@@ -237,6 +279,26 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
       inputFormats: ['PNG', 'JPEG'],
       inputMaxBytes: 20 * MB,
       // Microsoft publishes count/formats, not a per-file byte limit.
+      referenceLimitsSource: 'extension' as const,
+    },
+  })),
+  // MAI 2.7 adds transparent-background generation. Microsoft's inspected
+  // table gives no 2.7 pixel ceiling, so `size` has no invented local range;
+  // the Azure deployment remains the authority. The endpoint and 768px floor
+  // are shared with 2.5/2.6.
+  ...(['MAI-Image-2.7', 'MAI-Image-2.7-Flash'] as const).map((id) => ({
+    id,
+    provider: 'mai' as const,
+    lifecycle: {
+      status: 'preview' as const,
+      source: 'https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image',
+    },
+    capabilities: {
+      backgroundValues: ['opaque', 'transparent'] as Array<'opaque' | 'transparent'>,
+      nMax: 1,
+      maxReferenceImages: 5,
+      inputFormats: ['PNG', 'JPEG'],
+      inputMaxBytes: 20 * MB,
       referenceLimitsSource: 'extension' as const,
     },
   })),
@@ -263,14 +325,39 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
     },
   },
   {
-    id: 'gemini-3.1-flash-image',
-    aliases: ['nano-banana-2'],
+    id: 'gemini-nano-banana-2.1',
+    aliases: ['nano-banana-2-1'],
     provider: 'gemini',
     capabilities: {
       aspectRatios: GEMINI_ASPECTS_14,
-      // The 512px tier is documented for 3.1 Flash — PENDING live verification
-      // of the exact literal ("512px" vs "0.5K").
-      imageSizes: ['512px', '1K', '2K', '4K'],
+      imageSizes: ['1K', '2K', '4K'],
+      supportsThoughtOutput: true,
+      thinkingLevels: ['minimal', 'medium', 'high'],
+      supportsSearchGrounding: true,
+      supportsImageSearchGrounding: true,
+      nMax: 8,
+      maxReferenceImages: 14,
+      inputFormats: GEMINI_INPUT_FORMATS,
+      inputMaxBytes: 20 * MB,
+    },
+  },
+  {
+    id: 'gemini-3.1-flash-image',
+    aliases: ['nano-banana-2'],
+    provider: 'gemini',
+    lifecycle: {
+      status: 'deprecated',
+      replacement: 'gemini-nano-banana-2.1',
+      source: 'https://ai.google.dev/gemini-api/docs/deprecations',
+    },
+    capabilities: {
+      aspectRatios: GEMINI_ASPECTS_14,
+      // GenerateContent's ImageConfig documents the tiny tier literal as "512".
+      imageSizes: ['512', '1K', '2K', '4K'],
+      supportsThoughtOutput: true,
+      thinkingLevels: ['minimal', 'high'],
+      supportsSearchGrounding: true,
+      supportsImageSearchGrounding: true,
       nMax: 8,
       maxReferenceImages: 14,
       inputFormats: GEMINI_INPUT_FORMATS,
@@ -284,6 +371,8 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
     capabilities: {
       aspectRatios: GEMINI_ASPECTS_14,
       imageSizes: ['1K'], // fixed at 1K — the schema hides imageSize entirely
+      supportsThoughtOutput: true,
+      thinkingLevels: ['minimal', 'high'],
       nMax: 8,
       maxReferenceImages: 14,
       inputFormats: GEMINI_INPUT_FORMATS,
@@ -294,6 +383,12 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
     id: 'gemini-2.5-flash-image',
     aliases: ['nano-banana'],
     provider: 'gemini',
+    lifecycle: {
+      status: 'retiring',
+      effective: '2027-03-15',
+      replacement: 'gemini-3.1-flash-lite-image',
+      source: 'https://ai.google.dev/gemini-api/docs/deprecations',
+    },
     capabilities: {
       aspectRatios: GEMINI_ASPECTS_10,
       // No imageSize knob — fixed 1024px output. Works best with ≤ 3 inputs.
@@ -316,10 +411,28 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
       supportsNegativePrompt: true,
       supportsSeed: true,
       supportsPromptEnhance: true,
-      supportsThinking: true,
+      supportsEnableThinking: true,
       supportsWatermark: true,
       nMax: 6,
       maxReferenceImages: 3,
+      inputFormats: QWEN_INPUT_FORMATS,
+      inputMaxBytes: 10 * MB,
+      inputDimAdvice: 'reference images work best with both dimensions between 384 and 2048 px',
+    },
+  })),
+  // Qwen Image 2.1 keeps the 3.0 size window but accepts up to 10 references
+  // and can emit alpha automatically. Alibaba documents negative_prompt only
+  // for the 3.0 series, so that control stays off here.
+  ...(['qwen-image-2.1-pro', 'qwen-image-2.1-turbo'] as const).map((id) => ({
+    id,
+    provider: 'dashscope' as const,
+    capabilities: {
+      sizeRange: QWEN3_SIZE_RANGE,
+      supportsSeed: true,
+      supportsPromptEnhance: true,
+      supportsWatermark: true,
+      nMax: 6,
+      maxReferenceImages: 10,
       inputFormats: QWEN_INPUT_FORMATS,
       inputMaxBytes: 10 * MB,
       inputDimAdvice: 'reference images work best with both dimensions between 384 and 2048 px',
@@ -361,15 +474,46 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
   // and doubao-seedream-5-0-lite-260128 as the SAME model — hence the merged
   // entry below. The retired ids stay as aliases so existing configs resolve.
   {
+    id: 'doubao-seedream-5-5-261028',
+    aliases: ['seedream-5-5'],
+    provider: 'ark',
+    capabilities: {
+      supportsWatermark: true,
+      supportsLayerDecomposition: true,
+      supportsLayerTextRecognition: true,
+      layerMaxImages: { min: 2, max: 100 },
+      layerOutputMax: 100,
+      backgroundValues: ['auto', 'opaque', 'transparent'],
+      sizeRange: {
+        separator: 'x' as const,
+        tiers: ['1K', '1.5K', '2K'],
+        minArea: 921_600,
+        maxArea: 4_624_220,
+        minRatio: 1 / 16,
+        maxRatio: 16,
+      },
+      nMax: 1,
+      maxReferenceImages: 10,
+      inputFormats: SEEDREAM_INPUT_FORMATS,
+      inputMaxBytes: 30 * MB,
+      inputDimAdvice: SEEDREAM_DIM_ADVICE,
+    },
+  },
+  {
     id: 'doubao-seedream-5-0-pro-260628',
     aliases: ['seedream-5-pro', 'doubao-seedream-5-0-pro-260128'],
     provider: 'ark',
     capabilities: {
+      backgroundValues: ['opaque', 'transparent'],
+      supportsLayerDecomposition: true,
+      // Volcengine documents 1 base image plus up to 16 layers for 5.0 Pro/Flash,
+      // but the max_images request control is 5.5-only.
+      layerOutputMax: 17,
       // 5.0 pro accepts 1K/1.5K/2K tiers; pixel range 1280x720–2048x2048-class.
       // Unlike the non-Pro 5.0 model, Pro does not support related series output.
       supportsWatermark: true,
       sizeRange: {
-        separator: 'x',
+        separator: 'x' as const,
         tiers: ['1K', '1.5K', '2K'],
         minArea: 921_600,
         maxArea: 4_624_220,
@@ -377,6 +521,30 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
         maxRatio: 16,
       },
       nMax: 1, // no count knob — sequential_image_generation is not exposed
+      maxReferenceImages: 10,
+      inputFormats: SEEDREAM_INPUT_FORMATS,
+      inputMaxBytes: 30 * MB,
+      inputDimAdvice: SEEDREAM_DIM_ADVICE,
+    },
+  },
+  {
+    id: 'doubao-seedream-5-0-flash-260915',
+    aliases: ['seedream-5-flash'],
+    provider: 'ark',
+    capabilities: {
+      supportsWatermark: true,
+      supportsLayerDecomposition: true,
+      backgroundValues: ['opaque', 'transparent'],
+      layerOutputMax: 17,
+      sizeRange: {
+        separator: 'x' as const,
+        tiers: ['1K', '1.5K', '2K'],
+        minArea: 921_600,
+        maxArea: 4_624_220,
+        minRatio: 1 / 16,
+        maxRatio: 16,
+      },
+      nMax: 1,
       maxReferenceImages: 10,
       inputFormats: SEEDREAM_INPUT_FORMATS,
       inputMaxBytes: 30 * MB,
@@ -392,7 +560,7 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
       supportsWatermark: true,
       supportsSeries: true,
       sizeRange: {
-        separator: 'x',
+        separator: 'x' as const,
         tiers: ['2K', '3K', '4K'],
         minArea: 3_686_400,
         maxArea: 16_777_216,
@@ -414,7 +582,7 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
       supportsWatermark: true,
       supportsSeries: true,
       sizeRange: {
-        separator: 'x',
+        separator: 'x' as const,
         tiers: ['2K', '4K'],
         minArea: 3_686_400,
         maxArea: 16_777_216,
@@ -437,7 +605,7 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
       supportsWatermark: true,
       supportsSeries: true,
       sizeRange: {
-        separator: 'x',
+        separator: 'x' as const,
         tiers: ['1K', '2K', '4K'],
         minArea: 921_600,
         maxArea: 16_777_216,
@@ -449,6 +617,370 @@ export const BUILT_IN_MODELS: BuiltInModelEntry[] = [
       inputFormats: SEEDREAM_INPUT_FORMATS,
       inputMaxBytes: 30 * MB,
       inputDimAdvice: SEEDREAM_DIM_ADVICE,
+    },
+  },
+
+  // Black Forest Labs FLUX.2 direct API. Auth is `x-key`; generation is a
+  // task submit followed by polling the returned `polling_url`. The API
+  // accepts explicit width/height >= 64 and documents up to 4MP output.
+  // https://docs.bfl.ml/api_integration/integration_guidelines
+  ...(['flux-2-pro', 'flux-2-flex', 'flux-2-max', 'flux-2-klein-4b', 'flux-2-klein-9b'] as const).map((id) => ({
+    id,
+    ...(id === 'flux-2-pro' ? { aliases: ['flux-2-pro-preview'] } : {}),
+    ...(id === 'flux-2-klein-9b' ? { aliases: ['flux-2-klein-9b-preview'] } : {}),
+    provider: 'bfl' as const,
+    capabilities: {
+      sizeRange: {
+        separator: 'x' as const,
+        minArea: 64 * 64,
+        maxArea: 4_000_000,
+      },
+      outputFormats: ['png', 'jpeg', 'webp'] as Array<'png' | 'jpeg' | 'webp'>,
+      supportsPromptEnhance: true,
+      supportsSeed: true,
+      nMax: 1,
+      maxReferenceImages: id.startsWith('flux-2-klein') ? 4 : 8,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+      referenceLimitsSource: 'extension' as const,
+    },
+  })),
+
+  // Adobe Firefly Image5. The verified v4 endpoint selects Image5 with the
+  // required x-model-version header and uses IMS client-credentials auth.
+  // https://developer.adobe.com/firefly-services/docs/firefly-api/
+  {
+    id: 'firefly-image5',
+    aliases: ['firefly_image', 'firefly-image'],
+    provider: 'adobe-firefly',
+    remoteId: 'firefly_image',
+    capabilities: {
+      aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16', 'auto'],
+      resolutionLevels: ['1MP', '2.4MP', '4MP'],
+      promptReasonerValues: ['speed', 'quality'],
+      supportsSeed: true,
+      nMax: 1,
+      maxReferenceImages: 1,
+      inputFormats: ['PNG', 'JPEG', 'WEBP', 'BMP', 'TIFF', 'HEIC', 'HEIF'],
+      inputMaxBytes: 10 * MB,
+    },
+  },
+
+  // Stability AI /v2beta image services. Multipart requests accept `image/*`
+  // or JSON base64 responses; this adapter uses the documented JSON form.
+  // https://docs.stability.ai/api-reference
+  ...(['stable-image-core', 'stable-image-ultra'] as const).map((id) => ({
+    id,
+    provider: 'stability' as const,
+    capabilities: {
+      aspectRatios: STABILITY_RATIOS,
+      outputFormats: ['png', 'jpeg', 'webp'] as Array<'png' | 'jpeg' | 'webp'>,
+      supportsNegativePrompt: true,
+      supportsSeed: true,
+      nMax: 1,
+      maxReferenceImages: 0,
+      inputFormats: [] as string[],
+      inputMaxBytes: 10 * MB,
+    },
+  })),
+  ...(['sd3.5-large', 'sd3.5-large-turbo', 'sd3.5-medium'] as const).map((id) => ({
+    id,
+    provider: 'stability' as const,
+    capabilities: {
+      aspectRatios: STABILITY_RATIOS,
+      outputFormats: ['png', 'jpeg', 'webp'] as Array<'png' | 'jpeg' | 'webp'>,
+      supportsNegativePrompt: true,
+      supportsSeed: true,
+      supportsStrength: true,
+      nMax: 1,
+      maxReferenceImages: 1,
+      inputFormats: ['JPEG', 'PNG', 'WEBP'],
+      inputMaxBytes: 10 * MB,
+    },
+  })),
+
+  // Alibaba Model Studio Wan 2.7 and Z-Image. Both use the DashScope
+  // multimodal-generation request envelope; Wan also documents an async task
+  // endpoint and image-set mode. https://www.alibabacloud.com/help/en/model-studio
+  ...(['wan2.7-image-pro', 'wan2.7-image'] as const).map((id) => ({
+    id,
+    provider: 'dashscope' as const,
+    capabilities: {
+      sizeRange: {
+        separator: 'x' as const,
+        tiers: id === 'wan2.7-image-pro' ? ['1K', '2K', '4K'] : ['1K', '2K'],
+        minArea: 768 * 768,
+        maxArea: id === 'wan2.7-image-pro' ? 4096 * 4096 : 2048 * 2048,
+        minRatio: 1 / 8,
+        maxRatio: 8,
+      },
+      supportsSeed: true,
+      supportsWatermark: true,
+      supportsEnableThinking: true,
+      supportsAsyncMode: true,
+      supportsSequentialSets: true,
+      sequentialMaxImages: { min: 1, max: 10 },
+      nMax: 4,
+      maxReferenceImages: 9,
+      inputFormats: ['JPEG', 'JPG', 'PNG', 'BMP', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+      inputDimAdvice: 'reference images: each dimension 240–8000 px and aspect ratio 1:8–8:1',
+    },
+  })),
+  {
+    id: 'z-image-turbo',
+    provider: 'dashscope',
+    capabilities: {
+      sizeRange: {
+        separator: '*' as const,
+        minArea: 512 * 512,
+        maxArea: 2048 * 2048,
+      },
+      supportsSeed: true,
+      supportsPromptEnhance: true,
+      nMax: 1,
+      maxReferenceImages: 0,
+      inputFormats: [] as string[],
+      inputMaxBytes: 10 * MB,
+    },
+  },
+
+  // Recraft dedicated REST API. All model ids, sizes and parameter support
+  // come from https://www.recraft.ai/docs/api-reference/agents.md.
+  {
+    id: 'recraftv4_1_flash_v2',
+    provider: 'recraft',
+    capabilities: {
+      sizes: RECRAFT_1K_SIZES,
+      supportsSeed: true,
+      supportsColorControls: true,
+      responseFormats: ['url', 'b64_json'],
+      outputFormats: ['png', 'webp'] as Array<'png' | 'webp'>,
+      operations: ['generate'],
+      nMax: 6,
+      maxReferenceImages: 0,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  },
+  ...(['recraftv4_1', 'recraftv4', 'recraftv4_1_utility'] as const).map((id) => ({
+    id,
+    provider: 'recraft' as const,
+    capabilities: {
+      sizes: RECRAFT_1K_SIZES,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['flexible', 'precise'],
+      responseFormats: ['url', 'b64_json'] as Array<'url' | 'b64_json'>,
+      outputFormats: ['png', 'webp'] as Array<'png' | 'webp'>,
+      operations: ['generate', 'imageToImage'] as Array<'generate' | 'imageToImage'>,
+      supportsStrength: true,
+      nMax: 6,
+      maxReferenceImages: 1,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  })),
+  ...(['recraftv4_1_pro', 'recraftv4_pro', 'recraftv4_1_utility_pro'] as const).map((id) => ({
+    id,
+    provider: 'recraft' as const,
+    capabilities: {
+      sizes: RECRAFT_2K_SIZES,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['flexible', 'precise'],
+      responseFormats: ['url', 'b64_json'] as Array<'url' | 'b64_json'>,
+      outputFormats: ['png', 'webp'] as Array<'png' | 'webp'>,
+      operations: ['generate', 'imageToImage'] as Array<'generate' | 'imageToImage'>,
+      supportsStrength: true,
+      nMax: 6,
+      maxReferenceImages: 1,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  })),
+  {
+    id: 'recraftv4_styles',
+    provider: 'recraft',
+    capabilities: {
+      sizes: RECRAFT_1K_SIZES,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['flexible', 'precise'],
+      responseFormats: ['url', 'b64_json'],
+      outputFormats: ['png', 'webp'],
+      operations: ['generate'],
+      nMax: 6,
+      maxReferenceImages: 0,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  },
+  {
+    id: 'recraftv4_styles_pro',
+    provider: 'recraft',
+    capabilities: {
+      sizes: RECRAFT_2K_SIZES,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['flexible', 'precise'],
+      responseFormats: ['url', 'b64_json'],
+      outputFormats: ['png', 'webp'],
+      operations: ['generate'],
+      nMax: 6,
+      maxReferenceImages: 0,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  },
+  ...(['recraftv4_1_vector', 'recraftv4_1_utility_vector', 'recraftv4_vector'] as const).map((id) => ({
+    id,
+    provider: 'recraft' as const,
+    capabilities: {
+      aspectRatios: RECRAFT_RATIOS,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['flexible', 'precise'],
+      responseFormats: ['url', 'b64_json'] as Array<'url' | 'b64_json'>,
+      outputFormats: ['svg'] as Array<'svg'>,
+      operations: ['generate', 'imageToImage'] as Array<'generate' | 'imageToImage'>,
+      supportsSvgEdits: true,
+      supportsSvgVariants: true,
+      supportsStrength: true,
+      nMax: 6,
+      maxReferenceImages: 1,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  })),
+  ...(['recraftv4_1_pro_vector', 'recraftv4_1_utility_pro_vector', 'recraftv4_pro_vector'] as const).map((id) => ({
+    id,
+    provider: 'recraft' as const,
+    capabilities: {
+      aspectRatios: RECRAFT_RATIOS,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['flexible', 'precise'],
+      responseFormats: ['url', 'b64_json'] as Array<'url' | 'b64_json'>,
+      outputFormats: ['svg'] as Array<'svg'>,
+      operations: ['generate', 'imageToImage'] as Array<'generate' | 'imageToImage'>,
+      supportsSvgEdits: true,
+      supportsSvgVariants: true,
+      supportsStrength: true,
+      nMax: 6,
+      maxReferenceImages: 1,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  })),
+  ...(['recraftv4_styles_vector', 'recraftv4_styles_pro_vector'] as const).map((id) => ({
+    id,
+    provider: 'recraft' as const,
+    capabilities: {
+      aspectRatios: RECRAFT_RATIOS,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['flexible', 'precise'],
+      responseFormats: ['url', 'b64_json'] as Array<'url' | 'b64_json'>,
+      outputFormats: ['svg'] as Array<'svg'>,
+      operations: ['generate'] as Array<'generate'>,
+      supportsSvgVariants: true,
+      nMax: 6,
+      maxReferenceImages: 0,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  })),
+  {
+    id: 'recraftv3',
+    provider: 'recraft',
+    capabilities: {
+      sizes: RECRAFT_LEGACY_SIZES,
+      supportsNegativePrompt: true,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['regular'],
+      supportsTextLayout: true,
+      supportsStrength: true,
+      supportsMask: true,
+      responseFormats: ['url', 'b64_json'],
+      outputFormats: ['png', 'webp'],
+      operations: ['generate', 'imageToImage', 'inpaint', 'outpaint', 'replaceBackground', 'generateBackground', 'vectorize', 'variateImage'],
+      nMax: 6,
+      maxReferenceImages: 1,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  },
+  {
+    id: 'recraftv3_vector',
+    provider: 'recraft',
+    capabilities: {
+      aspectRatios: RECRAFT_RATIOS,
+      supportsNegativePrompt: true,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['regular'],
+      supportsTextLayout: true,
+      supportsStrength: true,
+      supportsMask: true,
+      responseFormats: ['url', 'b64_json'],
+      outputFormats: ['svg'],
+      operations: ['generate', 'imageToImage', 'inpaint', 'outpaint', 'replaceBackground', 'generateBackground', 'vectorize', 'variateImage'],
+      supportsSvgEdits: true,
+      supportsSvgVariants: true,
+      nMax: 6,
+      maxReferenceImages: 1,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  },
+  {
+    id: 'recraftv2',
+    provider: 'recraft',
+    capabilities: {
+      sizes: RECRAFT_LEGACY_SIZES,
+      supportsNegativePrompt: true,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['regular'],
+      responseFormats: ['url', 'b64_json'],
+      outputFormats: ['png', 'webp'],
+      operations: ['generate'],
+      nMax: 6,
+      maxReferenceImages: 0,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
+    },
+  },
+  {
+    id: 'recraftv2_vector',
+    provider: 'recraft',
+    capabilities: {
+      aspectRatios: RECRAFT_RATIOS,
+      supportsNegativePrompt: true,
+      supportsSeed: true,
+      supportsColorControls: true,
+      supportsStyleReferences: true,
+      styleMatchValues: ['regular'],
+      responseFormats: ['url', 'b64_json'],
+      outputFormats: ['svg'],
+      operations: ['generate'],
+      supportsSvgVariants: true,
+      nMax: 6,
+      maxReferenceImages: 0,
+      inputFormats: ['PNG', 'JPEG', 'WEBP'],
+      inputMaxBytes: 20 * MB,
     },
   },
 ];
@@ -475,7 +1007,7 @@ export const AZURE_OPENAI_CAPABILITIES = {
 const AZURE_OPENAI_MODELS: BuiltInModelEntry[] = [
   ...BUILT_IN_MODELS.filter((model) =>
     model.provider === 'openai' &&
-    ['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(model.id),
+    ['gpt-image-2', 'gpt-image-2-2026-04-21', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'].includes(model.id),
   ).map((model) => ({
     ...model,
     provider: 'azure-openai' as const,
@@ -488,9 +1020,18 @@ const AZURE_OPENAI_MODELS: BuiltInModelEntry[] = [
       referenceLimitsSource: 'extension' as const,
     },
   })),
-  ...['gpt-image-1', 'gpt-image-1-mini', 'gpt-image-1.5'].map((id) => ({
+  // gpt-image-1 shut down on 2026-10-23 and is intentionally absent. The next
+  // two deployments retire on 2026-12-01 but remain resolvable for existing
+  // Azure deployment names until that date.
+  ...['gpt-image-1-mini', 'gpt-image-1.5'].map((id) => ({
     id,
     provider: 'azure-openai' as const,
+    lifecycle: {
+      status: 'retiring' as const,
+      effective: '2026-12-01',
+      replacement: 'gpt-image-2.6-sunburst or gpt-image-2.6-flare',
+      source: 'https://developers.openai.com/api/docs/deprecations.md',
+    },
     capabilities: {
       ...AZURE_OPENAI_CAPABILITIES,
       sizes: ['auto', '1024x1024', '1536x1024', '1024x1536'],
@@ -502,6 +1043,15 @@ export function modelsForProvider(id: BuiltInProviderId): BuiltInModelEntry[] {
   return id === 'azure-openai'
     ? AZURE_OPENAI_MODELS
     : BUILT_IN_MODELS.filter((model) => model.provider === id);
+}
+
+/** Compact status text for provider listings; no lifecycle means no annotation. */
+export function describeModelLifecycle(entry: BuiltInModelEntry | undefined): string | undefined {
+  const lifecycle = entry?.lifecycle;
+  if (!lifecycle) return undefined;
+  const label = lifecycle.status === 'preview' ? 'preview' : lifecycle.effective
+    ? `${lifecycle.status} ${lifecycle.effective}` : lifecycle.status;
+  return lifecycle.replacement ? `${label}; use ${lifecycle.replacement}` : label;
 }
 
 /** Resolve a model id or alias against the built-in registry. */
@@ -522,6 +1072,10 @@ export const DEFAULT_BASE_URL: Record<BuiltInProviderId, string> = {
   mai: '',
   'azure-openai': '',
   codex: 'https://chatgpt.com/backend-api/codex/images',
+  bfl: 'https://api.bfl.ai',
+  'adobe-firefly': 'https://firefly-api.adobe.io',
+  stability: 'https://api.stability.ai',
+  recraft: 'https://external.api.recraft.ai/v1',
 };
 
 export const DEFAULT_API_STYLE: Record<BuiltInProviderId, ApiStyle> = {
@@ -534,6 +1088,10 @@ export const DEFAULT_API_STYLE: Record<BuiltInProviderId, ApiStyle> = {
   meta: 'meta',
   mai: 'mai',
   codex: 'codex',
+  bfl: 'bfl',
+  'adobe-firefly': 'adobe-firefly',
+  stability: 'stability',
+  recraft: 'recraft',
 };
 
 export const ENV_VARS: Partial<Record<BuiltInProviderId, string>> = {
@@ -545,6 +1103,10 @@ export const ENV_VARS: Partial<Record<BuiltInProviderId, string>> = {
   ark: 'ARK_API_KEY',
   meta: 'META_API_KEY',
   mai: 'AZURE_MAI_API_KEY',
+  bfl: 'BFL_API_KEY',
+  'adobe-firefly': 'FIREFLY_SERVICES_CLIENT_ID',
+  stability: 'STABILITY_API_KEY',
+  recraft: 'RECRAFT_API_TOKEN',
 };
 
 export const PROVIDER_DISPLAY_NAME: Record<BuiltInProviderId, string> = {
@@ -557,4 +1119,8 @@ export const PROVIDER_DISPLAY_NAME: Record<BuiltInProviderId, string> = {
   meta: 'Meta Model API',
   mai: 'Microsoft MAI (Azure)',
   codex: 'ChatGPT Plus/Pro (Codex)',
+  bfl: 'Black Forest Labs FLUX.2',
+  'adobe-firefly': 'Adobe Firefly Services',
+  stability: 'Stability AI',
+  recraft: 'Recraft',
 };

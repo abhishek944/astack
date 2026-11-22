@@ -2,7 +2,9 @@ export type ApiStyle =
   | "openai-decisions"
   | "perplexity-decisions"
   | "system-one"
+  | "liquid-system-one"
   | "cloudflare-system-one"
+  | "cloudflare-clairic"
   | "microsoft-system-one";
 
 /** Explicit references are resolved only from the request's named images. */
@@ -13,6 +15,10 @@ export type ImageInput =
   | { id: string; path: string }
   | { id: string; url: string };
 
+export type MediaInput = { type: "audio" | "video"; path: string };
+export type CharSpan = [number, number];
+export type BoxEdges = { top: number; bottom: number; left: number; right: number };
+
 export type Question =
   | {
       type: "bool";
@@ -21,7 +27,53 @@ export type Question =
     }
   | { type: "choice"; instructions: QuestionContent; criteria: Record<string, QuestionContent> }
   | { type: "score"; instructions: QuestionContent; criteria: QuestionContent[] }
-  | { type: "box"; instructions: QuestionContent };
+  | { type: "box"; instructions: QuestionContent }
+  | { type: "locate"; instructions: QuestionContent }
+  | { type: "text"; instructions: QuestionContent }
+  | { type: "number"; instructions: QuestionContent; unit?: string; range?: CharSpan; step?: number }
+  | { type: "date"; instructions: QuestionContent }
+  | { type: "spans"; instructions: QuestionContent; max?: number }
+  | { type: "boxes"; instructions: QuestionContent; max?: number }
+  | { type: "estimate"; instructions: QuestionContent; range: CharSpan; step?: number; unit?: string }
+  | { type: "multi_choice"; instructions: QuestionContent; criteria: Record<string, QuestionContent> };
+
+export type TextSpan = {
+  start: number;
+  end: number;
+  text: string;
+  score: number;
+  /** Index into webGrounding.searchResults when the span came from search evidence. */
+  searchResult?: number;
+};
+
+export type WebSearchResult = {
+  title: string;
+  url: string;
+  snippet: string;
+  date?: string;
+  lastUpdated?: string;
+};
+
+export type WebFetchedResult = {
+  title: string;
+  url: string;
+  snippet: string;
+};
+
+export type NonTokenCost = {
+  currency: "USD";
+  webGrounding: {
+    status: "estimated_maximum";
+    /** One search is requested per question; duplicate queries and failed searches may not be billed. */
+    searchesRequested: number;
+    searchFeeMaximum: number;
+    /** A successful URL fetch is reported by the provider and is billable. */
+    successfulFetches: number;
+    fetchFee: number;
+    totalMaximum: number;
+    note: string;
+  };
+};
 
 export type Answer =
   | { type: "bool"; probability: number }
@@ -42,9 +94,30 @@ export type Answer =
     }
   | {
       type: "box";
-      box: { top: number; bottom: number; left: number; right: number };
+      box: BoxEdges;
       confidence: number;
+      found?: number;
     }
+  | { type: "locate"; spans: TextSpan[] }
+  | { type: "text"; text: string; span?: CharSpan | null; found?: number }
+  | { type: "number"; value: number | null; unit?: string | null; text?: string | null; span?: CharSpan | null; found?: number }
+  | { type: "date"; date: string | null; text?: string | null; span?: CharSpan | null; found?: number }
+  | {
+      type: "spans";
+      spans: { text: string; span: CharSpan; found: number }[];
+      count: number;
+      atLeast: boolean;
+      presence: number[];
+    }
+  | {
+      type: "boxes";
+      boxes: { box: BoxEdges; found: number; confidence: number }[];
+      count: number;
+      atLeast: boolean;
+      presence: number[];
+    }
+  | { type: "estimate"; value: number; interval: CharSpan; unit?: string | null }
+  | { type: "multi_choice"; choices: string[]; probabilities: Record<string, number> }
   | { type: "refusal" }
   | { type: "no_match" }
   | { type: "ambiguous" };
@@ -54,6 +127,12 @@ export interface ClassifyParams {
   questions: Record<string, Question>;
   /** Legacy paths are shared in order. Named images require explicit {$image:id} references. */
   images?: ImageInput[];
+  /** Shared audio/video inputs for providers that document media support. */
+  media?: MediaInput[];
+  /** Explicit opt-in to Perplexity web search and page fetching. This can upload state text and incur per-search fees. */
+  mode?: "web_grounding";
+  /** Maximum stored-page age in seconds for a URL-only state with web grounding. */
+  maxStaleness?: number;
 }
 
 export type ClassificationTreeNode = {
@@ -95,7 +174,7 @@ export type ClassifierTreeResult = {
 export interface ModelDefinition {
   id: string;
   name?: string;
-  input?: ("text" | "image")[];
+  input?: ("text" | "image" | "audio" | "video")[];
   box?: boolean;
 }
 
@@ -116,6 +195,7 @@ export type ClassifierCost =
       total: number;
       source: "builtin" | "configured";
       rates: TokenPricing;
+      nonToken?: NonTokenCost;
     }
   | {
       status: "estimated";
@@ -124,6 +204,7 @@ export type ClassifierCost =
       output: number;
       total: number;
       source: "aggregated";
+      nonToken?: NonTokenCost;
     }
   | {
       status: "unavailable";
@@ -178,12 +259,16 @@ export interface ResolvedModel {
   provider: string;
   model: string;
   api: ApiStyle;
+  /** Provider wire format used by the selected route. */
+  mediaFormat: "jev-assets" | "base64-object";
   baseUrl: string;
   headers: Record<string, string>;
   configuredApiKey?: string;
   credentialProvider: string;
   envVar?: string;
   images: boolean;
+  audio: boolean;
+  video: boolean;
   box: boolean;
   experimentalImages: boolean;
   requestTimeoutMs: number;
@@ -200,10 +285,19 @@ export interface PreparedLocalImage {
 
 export type PreparedImage = (PreparedLocalImage | { url: string }) & { id?: string };
 
+export type PreparedMedia = {
+  type: "audio" | "video";
+  mimeType: string;
+  data: string;
+};
+
 export interface PreparedInput {
   state: ClassifyParams["state"];
   questions: Record<string, Question>;
   images: PreparedImage[];
+  media: PreparedMedia[];
+  mode?: ClassifyParams["mode"];
+  maxStaleness?: number;
 }
 
 export type ClassifierResult = {
@@ -222,6 +316,11 @@ export type ClassifierResult = {
   /** Estimate for completed requests in this result, not an invoice or total of failed attempts. */
   cost: ClassifierCost;
   requestId?: string;
+  /** Evidence returned by Perplexity web grounding, with the same order and counts as the provider response. */
+  webGrounding?: {
+    searchResults: WebSearchResult[];
+    fetchedResults?: WebFetchedResult[];
+  };
   attemptedRoutes?: ClassifierRoute[];
 };
 
@@ -257,3 +356,71 @@ export function userError(error: unknown): string {
     ? error.message
     : "Classification failed unexpectedly. Check the selected provider configuration.";
 }
+
+/** Cloudflare Clairic field specifications. Keys use the provider's documented names. */
+export type ExtractionField = {
+  type:
+    | "text" | "number" | "compute" | "date" | "time" | "datetime" | "duration"
+    | "boolean" | "enum" | "object" | "list" | "estimate" | "forecast";
+  instructions?: string;
+  nullable?: boolean;
+  unit?: string;
+  integer?: boolean;
+  decimals?: number;
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  enum?: unknown[];
+  knowledge?: boolean;
+  source_only?: boolean;
+  null_threshold?: number;
+  properties?: Record<string, ExtractionField>;
+  items?: "text" | "number" | "date" | { type: "object"; properties: Record<string, ExtractionField> };
+  max_items?: number;
+  min?: number | string;
+  max?: number | string;
+  step?:
+    | number
+    | "minute" | "hour" | "day" | "week" | "month" | "quarter" | "year";
+  scale?: "linear" | "log";
+  horizon?: number;
+  interval?: "step" | "minute" | "hour" | "day" | "week" | "month" | "quarter" | "year";
+};
+
+export type ExtractParams = {
+  state?: ClassifyParams["state"];
+  fields: Record<string, ExtractionField>;
+  images?: string[];
+  documents?: string[];
+  referenceDate?: string;
+  options?: { includeQuantiles?: boolean; returnStateText?: boolean };
+};
+
+export type JsonLike =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonLike[]
+  | { [key: string]: JsonLike };
+
+export type ExtractionAnswer = {
+  type: string;
+  value: JsonLike;
+  [key: string]: JsonLike;
+};
+
+export type ExtractResult = {
+  provider: string;
+  model: string;
+  answers: Record<string, ExtractionAnswer>;
+  truncated: boolean;
+  usage?: NonNullable<ClassifierResult["usage"]>;
+  cost: ClassifierCost;
+  requestId?: string;
+  stateText?: string;
+};

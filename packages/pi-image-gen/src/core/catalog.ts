@@ -9,6 +9,7 @@ import type { CatalogImageModelId, CatalogImageRoute, ImageHost, Original, Prepa
 
 export const CATALOG_MODELS: readonly CatalogImageModelId[] = Object.freeze([
   'openai/gpt-image-2.5-flare', 'openai/gpt-image-2.5-sunburst',
+  'openai/gpt-image-2.6-flare', 'openai/gpt-image-2.6-sunburst',
 ]);
 export const MAX_CATALOG_RESPONSE_BYTES = MAX_BASE64_IMAGE_CHARS + 1024 * 1024;
 
@@ -16,10 +17,16 @@ export function catalogImageRoute(model: CatalogImageModelId, gatewayId: string)
   if (!CATALOG_MODELS.includes(model) || !gatewayId.trim()) {
     throw new ImageGenError('Configure a supported image model and Gateway ID.', 'invalid catalog route');
   }
+  const is26 = model.startsWith('openai/gpt-image-2.6');
+  // Cloudflare's catalog explicitly publishes xhigh/max and GIF for 2.6, even
+  // though OpenAI's direct 2.6 docs reserve xhigh/max for 2.5. This route is
+  // Cloudflare's binding contract, so its own documentation is authoritative.
   const capabilities: ImageModelCapabilities = {
     sizes: ['auto', '1024x1024', '1024x1536', '1536x1024'],
     qualityValues: ['auto', 'low', 'medium', 'high', 'xhigh', 'max'],
-    backgroundValues: ['auto', 'opaque', 'transparent'], outputFormats: ['png', 'jpeg', 'webp'],
+    backgroundValues: ['auto', 'opaque', 'transparent'],
+    outputFormats: is26 ? ['png', 'jpeg', 'webp', 'gif'] : ['png', 'jpeg', 'webp'],
+    ...(is26 ? { complexityValues: ['low', 'medium', 'high'] as Array<'low' | 'medium' | 'high'> } : {}),
     // The schema has no count knob; this does not limit independent native calls.
     nMax: 1, nMaxSource: 'provider', maxReferenceImages: 16,
     inputFormats: ['PNG', 'JPEG', 'WEBP'], inputMaxBytes: MAX_IMAGE_BYTES,
@@ -46,6 +53,11 @@ export async function runCatalog<Stored>(
     if (args[key] !== undefined) body[key] = args[key];
   }
   if (args.outputFormat !== undefined) body.output_format = args.outputFormat;
+  if (args.complexity !== undefined) body.complexity = args.complexity;
+  if (args.outputFormat === 'gif') {
+    if (args.frameCount !== undefined) body.frame_count = args.frameCount;
+    if (args.frameDurationMs !== undefined) body.frame_duration_ms = args.frameDurationMs;
+  }
   if (signal.aborted) throw new ImageGenError('Image generation was cancelled.', 'image cancelled');
   onDispatch();
   const raw = await host.cloudflareRun(request.route.model, body, {

@@ -17,13 +17,17 @@
     "qwen-image",
     "muse-image",
     "meta-ai",
-    "openrouter"
+    "openrouter",
+    "mcp"
   ],
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "pi-image-gen-mcp": "./dist/mcp-cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -49,6 +53,11 @@
       "types": "./dist/durable.d.ts",
       "import": "./dist/durable.js",
       "default": "./dist/durable.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp-server.d.ts",
+      "import": "./dist/mcp-server.js",
+      "default": "./dist/mcp-server.js"
     },
     "./package.json": "./package.json"
   },
@@ -85,13 +94,14 @@
   },
   "dependencies": {
     "@amaster.ai/pi-shared": "^0.1.10",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "sharp": "^0.35.5",
     "upng-js": "^2.1.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-durable": "1.1.0",
     "@earendil-works/pi-ai": ">=0.80.10",
     "@earendil-works/pi-coding-agent": ">=0.79.1",
+    "@earendil-works/pi-durable": "1.1.0",
     "typebox": "*"
   },
   "peerDependenciesMeta": {
@@ -103,15 +113,12 @@
     },
     "@earendil-works/pi-coding-agent": {
       "optional": true
-    },
-    "typebox": {
-      "optional": true
     }
   },
   "devDependencies": {
-    "@earendil-works/pi-durable": "1.1.0",
     "@earendil-works/pi-ai": "0.80.10",
     "@earendil-works/pi-coding-agent": "0.80.10",
+    "@earendil-works/pi-durable": "1.1.0",
     "typebox": "*",
     "typescript": "^5.9.3"
   }

@@ -1,8 +1,10 @@
+import { outputImageLimit } from '../capabilities.js';
 import { describeNetworkError, missingKeyError } from '../errors.js';
 import { toDataUri } from '../image-input.js';
 import type {
   GenerateImageParams,
   ImageProviderAdapter,
+  ImageProviderRuntime,
   RawImageResult,
   ResolvedImageInput,
   ResolvedProvider,
@@ -30,6 +32,7 @@ export const arkAdapter: ImageProviderAdapter = {
     fetchImpl: typeof fetch,
     signal?: AbortSignal,
     inputs?: ResolvedImageInput[],
+    runtime?: ImageProviderRuntime,
   ): Promise<RawImageResult[]> {
     if (!hasProviderAuthentication(provider)) {
       throw missingKeyError(provider);
@@ -44,6 +47,18 @@ export const arkAdapter: ImageProviderAdapter = {
       watermark: params.watermark ?? false,
     };
     if (params.size) body.size = params.size;
+    if (params.background) body.background = params.background;
+    // Transparent RGBA output is defined for PNG; JPEG is rejected upstream.
+    if (params.background === 'transparent') body.output_format = 'png';
+    if (params.layerDecomposition) {
+      body.layer_decomposition = true;
+      // Volcengine documents these options only for Seedream 5.5; capability
+      // validation gates which callers may set them.
+      const options: Record<string, number | boolean> = {};
+      if (params.layerMaxImages != null) options.max_images = params.layerMaxImages;
+      if (params.layerTextRecognition != null) options.text_recognition = params.layerTextRecognition;
+      if (Object.keys(options).length > 0) body.layer_decomposition_options = options;
+    }
     if (params.seriesMaxImages != null) {
       body.sequential_image_generation = 'auto';
       body.sequential_image_generation_options = { max_images: params.seriesMaxImages };
@@ -69,6 +84,8 @@ export const arkAdapter: ImageProviderAdapter = {
     } catch (error) {
       throw describeNetworkError(error, provider);
     }
-    return parseImagesResponse(res, url, provider);
+    return parseImagesResponse(res, url, provider, {
+      maxImages: outputImageLimit(params, runtime?.capabilities),
+    });
   },
 };

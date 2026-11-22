@@ -5,7 +5,12 @@ import {
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { classify, compareClassifiers } from "./classify.js";
+import { extract } from "./extract.js";
 import {
+  CLASSIFY_EXTRACT_TOOL,
+  CLASSIFY_EXTRACT_TOOL_DESCRIPTION,
+  classifyExtractOutput,
+  classifyExtractParameters,
   CLASSIFY_COMPARE_TOOL,
   CLASSIFY_COMPARE_TOOL_DESCRIPTION,
   CLASSIFY_TOOL,
@@ -37,6 +42,8 @@ export {
   classifyParameters,
   classifyTreeOutput,
   classifyTreeParameters,
+  classifyExtractOutput,
+  classifyExtractParameters,
 };
 
 // Tool names, descriptions, parameters and result schemas are shared with the
@@ -58,7 +65,9 @@ export default function piClassifier(pi: ExtensionAPI): void {
         "Use for bounded judgments, classification and rubric scoring, not open-ended prose.",
         "Treat low confidence as uncertainty, not permission to switch models or retry. Only configured remove_choice_limits with none_of_above_choice permits internal sequential choice batches; this is first-match selection, not a global ranking.",
         "Handle no_match and ambiguous answers explicitly. probabilityScope=batch and noneOfAboveProbability describe only the winning batch; they are not a full-list probability distribution.",
-        "Send only data the user intends to share with the configured provider.",
+        "Send only data the user intends to share with the configured provider. Web grounding sends question text and the start of state to Perplexity Search and incurs per-search fees.",
+        "Liquid reads and estimates are provider-rendered values, not conversions. Spans and locate offsets count Unicode characters; boxes are localization hints, not proof of presence.",
+        "Audio and video are accepted only by routes with documented media contracts. Duration and codec compatibility remain provider-owned.",
         "Ask /classifier status for the active model. Do not change provider settings without user direction.",
       ],
       parameters: classifyParameters,
@@ -150,6 +159,40 @@ export default function piClassifier(pi: ExtensionAPI): void {
       async execute(_id, params, signal, _onUpdate, ctx) {
         try {
           const result = await classifyTree(params, {
+            settings: loadClassifierSettings(ctx.cwd, isProjectTrusted(ctx)),
+            cwd: ctx.cwd,
+            ...(signal ? { signal } : {}),
+          });
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            details: result,
+            structuredContent: { ...result },
+          };
+        } catch (error) {
+          throw new Error(userError(error));
+        }
+      },
+    }),
+  );
+
+  pi.registerTool(
+    defineTool({
+      name: CLASSIFY_EXTRACT_TOOL,
+      label: "Extract structured fields",
+      description: CLASSIFY_EXTRACT_TOOL_DESCRIPTION,
+      promptSnippet: "Extract typed fields with Cloudflare Clairic into a caller-defined field contract.",
+      promptGuidelines: [
+        "Use fields that describe the value you need; do not invent provider field types or keys.",
+        "Clairic renders values from text and media. A result is not proof that a fact is correct; use grounded spans and confidence when available.",
+        "truncated means generated fields are incomplete or invalid. Do not treat truncated output as complete extraction.",
+        "The configured clairic-api route receives state, fields and media. Do not send data the user does not intend to share with Cloudflare.",
+      ],
+      parameters: classifyExtractParameters,
+      outputSchema: classifyExtractOutput,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+      async execute(_id, params, signal, _onUpdate, ctx) {
+        try {
+          const result = await extract(params, {
             settings: loadClassifierSettings(ctx.cwd, isProjectTrusted(ctx)),
             cwd: ctx.cwd,
             ...(signal ? { signal } : {}),

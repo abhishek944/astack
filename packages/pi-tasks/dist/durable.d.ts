@@ -1,4 +1,5 @@
 import type { Extension } from "@earendil-works/pi-durable";
+import { type TaskDependency } from "./dependency.js";
 /** Plain serializable settings accepted at factory creation. No callbacks. */
 export interface TasksDurableSettings {
     /** Maximum works per conversation. Default 100. Must be an integer from 1 to 10000. */
@@ -24,6 +25,7 @@ export type DurableTodo = {
     finalThoughts?: string;
     status: DurableTaskStatus;
     blockedReason: string | null;
+    dependentOn: TaskDependency | null;
     completionPercent: number | null;
     createdAt: number;
     updatedAt: number;

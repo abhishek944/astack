@@ -47,12 +47,26 @@ export const BUILT_INS = [
     credentialProvider: "perplexity",
     envVar: "PERPLEXITY_API_KEY",
     models: [
+      { id: "pplx-decider-v1.3", input: ["text", "image"] },
+      { id: "pplx-decider-flash-v1.3", input: ["text", "image"] },
       { id: "pplx-decider-v1.2", input: ["text", "image"] },
       { id: "pplx-decider-flash-v1.2", input: ["text", "image"] },
       { id: "pplx-decider-latest", input: ["text", "image"] },
       { id: "pplx-decider-flash-latest", input: ["text", "image"] },
       { id: "pplx-decider-v1.1-27b", input: ["text", "image"] },
       { id: "pplx-decider-v1-27b", input: ["text", "image"] },
+    ],
+  },
+  {
+    id: "liquid",
+    route: "liquid-api",
+    api: "liquid-system-one",
+    baseUrl: "https://api.liquid.ai/decisions/v1",
+    credentialProvider: "liquid",
+    envVar: "LIQUID_API_KEY",
+    models: [
+      { id: "d1.2", input: ["text", "image", "audio"], box: true },
+      { id: "d1.2-ultra", input: ["text", "image", "audio"], box: true },
     ],
   },
   {
@@ -79,8 +93,18 @@ export const BUILT_INS = [
     models: [
       { id: "@cf/cloudflare/clef", input: ["text", "image"] },
       { id: "@cf/cloudflare/clef-flash", input: ["text", "image"] },
+      { id: "@cf/cloudflare/clef-omni", input: ["text", "image", "audio", "video"] },
       { id: "typesafe/jev" },
     ],
+  },
+  {
+    id: "clairic",
+    route: "clairic-api",
+    api: "cloudflare-clairic",
+    baseUrl: "",
+    credentialProvider: "cloudflare-workers-ai",
+    envVar: "CLOUDFLARE_API_KEY",
+    models: [{ id: "@cf/cloudflare/clairic", input: ["text", "image"] }],
   },
   {
     id: "openrouter",
@@ -298,7 +322,9 @@ export function resolveModel(
       "openai-decisions",
       "perplexity-decisions",
       "system-one",
+      "liquid-system-one",
       "cloudflare-system-one",
+      "cloudflare-clairic",
       "microsoft-system-one",
     ].includes(api)
   )
@@ -314,7 +340,9 @@ export function resolveModel(
         !m.id.trim() ||
         (m.input !== undefined &&
           (!Array.isArray(m.input) ||
-            m.input.some((x) => x !== "text" && x !== "image"))) ||
+            m.input.some(
+              (x) => x !== "text" && x !== "image" && x !== "audio" && x !== "video",
+            ))) ||
         (m.box !== undefined && typeof m.box !== "boolean"),
     )
   ) {
@@ -333,7 +361,7 @@ export function resolveModel(
       return configuration(flag + " must be a boolean.");
   }
   let baseUrl = optionalString(raw.baseUrl, "baseUrl") ?? builtIn?.baseUrl;
-  if (api === "cloudflare-system-one" && !baseUrl)
+  if ((api === "cloudflare-system-one" || api === "cloudflare-clairic") && !baseUrl)
     baseUrl =
       "https://api.cloudflare.com/client/v4/accounts/" +
       cloudflareAccountId(optionalString(raw.accountId, "accountId"), source) +
@@ -359,6 +387,7 @@ export function resolveModel(
     provider: builtIn?.id ?? routeId,
     model: modelId,
     api,
+    mediaFormat: api === "system-one" ? "jev-assets" : "base64-object",
     baseUrl: validateBaseUrl(baseUrl),
     headers: headers(raw.headers),
     credentialProvider: builtIn?.credentialProvider ?? routeId,
@@ -370,12 +399,21 @@ export function resolveModel(
               raw.experimentalImages && definition?.input?.includes("image"),
             )
           : Boolean(definition?.input?.includes("image")),
+    audio: Boolean(
+      (api === "liquid-system-one" || api === "cloudflare-system-one") &&
+        definition?.input?.includes("audio"),
+    ),
+    video: Boolean(
+      api === "cloudflare-system-one" && definition?.input?.includes("video"),
+    ),
     box: Boolean(
-      (isJevDirect || custom?.api === "system-one") &&
-        definition?.box &&
-        definition?.input?.includes("image") &&
-        raw.experimentalBox &&
-        raw.experimentalImages,
+      api === "liquid-system-one"
+        ? definition?.box && definition?.input?.includes("image")
+        : (isJevDirect || custom?.api === "system-one") &&
+          definition?.box &&
+          definition?.input?.includes("image") &&
+          raw.experimentalBox &&
+          raw.experimentalImages,
     ),
     experimentalImages: raw.experimentalImages === true,
     requestTimeoutMs: timeout,
@@ -421,6 +459,8 @@ function knownMaxChoices(route: ResolvedModel): number | undefined {
     [
       "pplx-decider-v1.1-27b",
       "pplx-decider-v1-27b",
+      "pplx-decider-v1.3",
+      "pplx-decider-flash-v1.3",
       "pplx-decider-v1.2",
       "pplx-decider-latest",
       "pplx-decider-flash-v1.2",
@@ -429,8 +469,12 @@ function knownMaxChoices(route: ResolvedModel): number | undefined {
   const clef =
     route.provider === "cloudflare" &&
     /^https:\/\/api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai$/.test(route.baseUrl) &&
-    ["@cf/cloudflare/clef", "@cf/cloudflare/clef-flash"].includes(route.model);
-  return directJev || openai || perplexity || clef ? 255 : undefined;
+    ["@cf/cloudflare/clef", "@cf/cloudflare/clef-flash", "@cf/cloudflare/clef-omni"].includes(route.model);
+  const liquid =
+    route.provider === "liquid" &&
+    route.baseUrl === "https://api.liquid.ai/decisions/v1" &&
+    ["d1.2", "d1.2-ultra"].includes(route.model);
+  return directJev || openai || perplexity || clef || liquid ? 255 : undefined;
 }
 
 export function listModels(settings: ClassifierSettings): string {

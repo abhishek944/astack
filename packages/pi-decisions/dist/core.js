@@ -5,7 +5,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { ApiError, publish, records } from "./herenow.js";
-import { hash, inside, loadState, normalize, optionalJson, privateDirectory, questionId, save, sessionStorage, } from "./model.js";
+import { hash, inside, loadState, normalize, optionalJson, privateDirectory, questionId, questionPaths, save, sessionStorage, } from "./model.js";
 import { dataManifest, prepare, render } from "./render.js";
 export { loadState } from "./model.js";
 export const cliPath = fileURLToPath(new URL("./cli.js", import.meta.url));
@@ -18,7 +18,7 @@ export function watcherCommand(statePath) {
 }
 export async function findState(id, cwd, sessionId) {
     const storage = await sessionStorage(cwd, sessionId);
-    return loadState(path.join(storage.storageDir, questionId(id), "state.json"), sessionId);
+    return loadState(questionPaths(storage.storageDir, id).statePath, sessionId);
 }
 async function startLocal(state) {
     const child = spawn(process.execPath, [cliPath, "serve", "--state", state.statePath], { stdio: ["ignore", "ignore", "ignore", "ipc"] });
@@ -110,9 +110,10 @@ export async function submitQuestion(request, context, signal) {
             }
         }
     }
-    const questionDir = path.join(storage.storageDir, id), statePath = path.join(questionDir, "state.json");
+    const questionDir = questionPaths(storage.storageDir, id);
+    const statePath = questionDir.statePath;
     try {
-        await mkdir(questionDir, { mode: 0o700 });
+        await mkdir(questionDir.questionDir, { mode: 0o700 });
     }
     catch (e) {
         if (e.code !== "EEXIST")
@@ -142,17 +143,18 @@ export async function submitQuestion(request, context, signal) {
         }
         return loadState(statePath, context.sessionId);
     }
-    const bundleDir = path.join(questionDir, "public");
+    const bundleDir = questionDir.bundleDir;
     await privateDirectory(path.join(bundleDir, "assets"));
     const state = {
         version: 2,
         sessionId: context.sessionId,
-        ...storage,
+        cwd: storage.cwd,
+        storageDir: storage.storageDir,
         questionId: id,
         revision,
         backend,
         question: input.question,
-        responsePath: path.join(questionDir, "response.json"),
+        responsePath: questionDir.responsePath,
         statePath,
         bundleDir,
         files: [],
@@ -228,7 +230,7 @@ export async function archive(state, input, recordId = null) {
     }
     return readArchived(state);
 }
-async function readArchived(state) {
+export async function readArchived(state) {
     const answer = await optionalJson(state.responsePath);
     if (!answer ||
         answer.questionId !== state.questionId ||

@@ -1,4 +1,4 @@
-import type { GenerateImageParams, ResolvedImageInput } from './image.js';
+import type { GenerateImageParams, ImageModelCapabilities, ResolvedImageInput } from './image.js';
 
 export type ApiStyle =
   | 'openai'
@@ -8,7 +8,11 @@ export type ApiStyle =
   | 'ark'
   | 'meta'
   | 'mai'
-  | 'codex';
+  | 'codex'
+  | 'bfl'
+  | 'adobe-firefly'
+  | 'stability'
+  | 'recraft';
 export type CustomApiStyle = Exclude<ApiStyle, 'codex'>;
 
 /** A user-defined image-generation provider. */
@@ -24,6 +28,10 @@ export type ResolvedProvider = {
   api: ApiStyle;
   baseUrl: string;
   apiKey?: string;
+  /** OAuth client secret or equivalent second credential for server-to-server auth. */
+  apiSecret?: string;
+  /** Pre-acquired provider access token, when credentials are managed externally. */
+  accessToken?: string;
   headers?: Record<string, string>;
   /** Authentication behavior selected by a user-facing provider route. */
   authMode?: 'auto' | 'oauth' | 'api-key';
@@ -83,6 +91,8 @@ export type ImageModelRegistry = {
 
 export type ImageProviderRuntime = {
   modelRegistry?: ImageModelRegistry;
+  /** Frozen route capability contract for this request; adapters may use it for output bounds. */
+  capabilities?: ImageModelCapabilities;
   mask?: ResolvedImageInput;
   /** Transparent annotation layer for markup-guided edits; never combined with mask. */
   markup?: ResolvedImageInput;
@@ -90,6 +100,8 @@ export type ImageProviderRuntime = {
 
 export type RawGenerationMetadata = {
   requestId?: string;
+  /** Unix seconds from OpenRouter's top-level `expires_at` when supplied. */
+  expiresAt?: number;
   usage?: Record<string, number>;
   cost?: number;
 };

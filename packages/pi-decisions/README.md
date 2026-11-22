@@ -129,9 +129,28 @@ Selections and labels are reconstructed in displayed option order from trusted q
 
 ## Internal storage and lifecycle
 
-State, `response.json` and the explicit public bundle live internally under `.pi/decisions/<sessionId>/<questionId>/` in the current project. This storage is private, session-scoped and independent of tasks or media source locations. Media is published under content-hashed filenames. Public presentation containing local filesystem paths is rejected; keep source paths only in media `path` fields.
+State, `response.json` and the explicit public bundle live internally under `var/<sessionId>/pi-decisions/<questionId>/` in the current project. This storage is private, session-scoped and independent of tasks or media source locations. The first segment follows the repository `var/<sessionId>/...` artifact shape so every generated entry stays attributable to the real Pi session that produced it; `pi-decisions` occupies the segment where a Work ID would appear because this tool interface has no Work/Task context and must not invent one. Media is published under content-hashed filenames. Public presentation containing local filesystem paths is rejected; keep source paths only in media `path` fields.
 
-Only state format 2 is supported. Earlier saved formats are not loaded or migrated. Existing files are never deleted or overwritten to upgrade them; resubmit outstanding questions using fresh IDs. On reload/reopen, supported pending questions prompt the agent to consume/re-arm their watchers. Unavailable saved questions are reported for resubmission. A stopped local server can be restarted by repeating an identical submission.
+Only state format 2 is supported. Earlier saved formats are not loaded or migrated. Existing files are never deleted or overwritten to upgrade them; resubmit outstanding questions using fresh IDs. On reload/reopen, a pending reference saved under the legacy layout is translated to its `var/` location for the same project root and session once that question has been copied, and is otherwise kept and reported as needing relocation rather than dropped or given a new ID. A stopped local server can be restarted by repeating an identical submission.
+
+### Relocating questions saved under `.pi/decisions`
+
+Earlier releases stored the same files under `.pi/decisions/<sessionId>/<questionId>/`. A saved state records absolute `storageDir`, `statePath`, `responsePath` and `bundleDir` values, and the loader accepts only a state whose recorded paths match its canonical location, so moving that directory by hand breaks its identity. `migrate` copies one question at a time:
+
+```bash
+node /absolute/path/to/pi-decisions/dist/cli.js migrate \
+  --state /absolute/project/.pi/decisions/SESSION/QUESTION/state.json
+```
+
+It prints `{questionId, from, to, outcome}`, where `outcome` is `relocated` or `already-migrated`. It claims the target question directory with the same single exclusive `mkdir` that `SubmitQuestion` uses, writes only the bundle files the state declares plus its byte-identical archived answer, and makes the question visible by writing `state.json` last. An interrupted run can therefore leave a claimed directory without a state; both commands refuse that directory until it is inspected, and no target is ever replaced by a rename. The source files are never deleted, rewritten or moved as a directory — this command is copy-only.
+
+Supported inputs are deliberately narrow: a local question that is `ready` and already has an archived answer. An unanswered question is refused because a delivery that is already loaded could still archive into the old paths, and a hosted question is refused because it can still be answered through its public link while it is copied. Neither is reported as preserved. A refused loopback connection on the recorded address is only a refusal guard: it does not prove that a process exited or that an accepted handler is not still finishing, so the owning session must confirm quiescence before the copy is trusted. `migrate` never signals, stops or inspects a process.
+
+Repeating the command reports `already-migrated` only after re-checking the target's immutable identity and question content, its complete declared bundle metadata and bytes, and its archived answer. A target whose answer is missing or different is refused; a restarted delivery URL, or an answer archived after the copy, is accepted as legitimate runtime change. The same eligibility rules (`ready`, local, archived answer) apply to an already-active copy, which is validated without any probe. The project and session are read from the saved state, so the working directory of the call does not matter.
+
+Removing the old `.pi/decisions` files is a separate, explicitly authorized operation. The command never does it, so a completed copy is not by itself a completed relocation out of `.pi`.
+
+`.pi/decisions` remains readable only by `migrate`; the tools and `check|watch|stop` require the `var/` location.
 
 Classic monitors stop on reload, session switch or shutdown. The extension shuts down local delivery children it owns. Keep Pi running while waiting; stopped machines cannot be woken automatically. CLI users must stop unanswered local deliveries they no longer need. There is no separate recovery manager.
 
@@ -159,9 +178,10 @@ node /absolute/path/to/pi-decisions/dist/cli.js submit \
 node /absolute/path/to/pi-decisions/dist/cli.js check --state /absolute/state.json
 node /absolute/path/to/pi-decisions/dist/cli.js watch --state /absolute/state.json
 node /absolute/path/to/pi-decisions/dist/cli.js stop --state /absolute/state.json
+node /absolute/path/to/pi-decisions/dist/cli.js migrate --state /absolute/legacy-state.json
 ```
 
-The request JSON contains exactly the direct SubmitQuestion fields above. `--backend` is standalone CLI configuration (default local), not a property of that request. Use `--backend here.now` for configured hosted CLI delivery. `check` returns waiting or the normalized answer. `watch` remains alive without a waiting deadline and archives before success. `stop` closes the owned local server; it does not delete hosted Sites or answers. Private credentials, question text and capabilities are not CLI arguments or submission output.
+The request JSON contains exactly the direct SubmitQuestion fields above. `--backend` is standalone CLI configuration (default local), not a property of that request. Use `--backend here.now` for configured hosted CLI delivery. `check` returns waiting or the normalized answer. `watch` remains alive without a waiting deadline and archives before success. `stop` closes the owned local server; it does not delete hosted Sites or answers. `migrate` is the only verb that accepts a `.pi/decisions` location and only relocates the named question; see [Relocating questions](#relocating-questions-saved-under-pidecisions). Private credentials, question text and capabilities are not CLI arguments or submission output.
 
 ## Development verification
 

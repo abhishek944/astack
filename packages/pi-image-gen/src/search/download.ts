@@ -4,6 +4,7 @@ import { safeFetch } from '@amaster.ai/pi-shared';
 import { readResponseBytes } from '../core/response.js';
 import { MAX_IMAGE_BYTES } from '../image-input.js';
 import { writeUnique } from '../node/output-files.js';
+import { DEFAULT_SEARCH_OUTPUT_DIR } from '../output-defaults.js';
 import { inspectRaster, RasterError, resizeRaster } from '../node/raster.js';
 import type { ImageSearchCandidate, ImageSearchImage, ImageSearchParams, ImageSearchRejection } from './types.js';
 
@@ -14,7 +15,7 @@ export async function downloadSearchImages(
   const images: ImageSearchImage[] = [];
   const rejected: ImageSearchRejection[] = [];
   const saved: string[] = [];
-  const directory = resolve(cwd, params.outputDir ?? '.pi/images/search');
+  const directory = resolve(cwd, params.outputDir ?? DEFAULT_SEARCH_OUTPUT_DIR);
   try {
     for (const [index, candidate] of candidates.entries()) {
       signal.throwIfAborted();

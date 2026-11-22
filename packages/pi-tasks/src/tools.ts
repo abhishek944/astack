@@ -2,6 +2,7 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, type ExtensionAPI, formatSize, truncateHead } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { preservePaneLink } from "./agents/links.js";
+import { DEPENDENCY_GUIDANCE, dependentOnLabel, TASK_DEPENDENCIES } from "./dependency.js";
 import { formatCompletion, taskCompletion, workCompletion } from "./progress.js";
 import { TaskState } from "./state.js";
 import { finalThoughtsFor } from "./thoughts.js";
@@ -11,13 +12,14 @@ import { areTrackingToolsActive } from "./tracking.js";
 import type { Todo, WorkWithTodos } from "./types.js";
 
 const StatusSchema = StringEnum(["active", "blocked", "completed", "cancelled"] as const);
-const STATUS_GUIDANCE = "New tasks default to active. Use blocked immediately when the next step must wait for agent output, review, an external response, user input, permission, or another obstacle. Supply blockedReason when creating a blocked task or moving a task to blocked: explain the obstacle and what will allow work to resume. Unrelated blocked edits preserve the reason; leaving blocked clears it. Retain progress. Return blocked tasks to active when the dependency resolves and work resumes. Works are collections and have no status.";
+const STATUS_GUIDANCE = "New tasks default to active. Use blocked only when the next step must wait for a user decision (a response, approval, or permission) or for another agent's output or review. Supply both blockedReason and dependentOn when creating a blocked task or moving a task to blocked; dependentOn accepts only \"user-decision\" or \"another-agent\". Unrelated blocked edits preserve both; leaving blocked clears both. Retain progress. Return blocked tasks to active when the dependency resolves and work resumes. Do not mark blocked for external services, tool failures, or other obstacles that fit neither category; keep the task active, preserve safety, and report the unavailable dependency truthfully. Works are collections and have no status.";
 const CompletionSchema = Type.Union([Type.Integer({ minimum: 0, maximum: 100 }), Type.Null()], {
   description: "AI-reported approximate task completion, not elapsed time or a status-to-percentage mapping. Use null for unknown; reserve 100 for verified completed status. Work progress is the equal average of non-cancelled tasks. Keep visible evidence in finalThoughts only for a significant change; never narrate progress in taskInfo.",
 });
 const BlockedReasonSchema = Type.Union([Type.String({ minLength: 1, maxLength: 10_000 }), Type.Null()], {
-  description: "Required when creating a blocked task or entering blocked status. Explain the current dependency and what will unblock it. This is the visible Final thoughts for a blocked task, so do not duplicate it in finalThoughts. Omission preserves the current reason while blocked; leaving blocked clears it automatically.",
+  description: "Required with dependentOn when creating a blocked task or entering blocked status. Explain the current dependency and what will unblock it. This is the visible Final thoughts for a blocked task, so do not duplicate it in finalThoughts. Omission preserves the current reason while blocked; leaving blocked clears it automatically.",
 });
+const DependencySchema = StringEnum(TASK_DEPENDENCIES, { description: DEPENDENCY_GUIDANCE });
 const NameSchema = Type.String({ minLength: 1, maxLength: 240 });
 const WORK_INFO_GUIDANCE = "Write workInfo in normal prose with full sentences and spaces between words. Conversational brevity modes must not compress stored records or concatenate words.";
 const TASK_INFO_GUIDANCE = "taskInfo is hidden coordination metadata for resumption: keep the owner declaration, canonical artifact paths, parent IDs, and necessary execution constraints. Do not restate the goal, narrate progress, or put visible updates there.";
@@ -72,7 +74,7 @@ export function registerTaskTools(pi: ExtensionAPI, state: TaskState): void {
     label: "WorkUpdate",
     description: `Update a work's name or detailed information as its scope or shared context changes. Works are collections of tasks and have no status. ${WORK_INFO_GUIDANCE}`,
     promptSnippet: "Update work context as its scope or shared decisions change",
-    promptGuidelines: ["Use WorkUpdate when shared scope or context changes; keep execution status on tasks with TodoUpdate. Never update tracking during /ask or /btw.", WORK_INFO_GUIDANCE],
+    promptGuidelines: ["Use WorkUpdate when shared scope or context changes; keep execution status on tasks with TodoUpdate. It is not the record for a new user request: create that request's Todo first. Never update tracking during /ask or /btw.", WORK_INFO_GUIDANCE],
     parameters: Type.Object({
       workId: Type.String(),
       workName: Type.Optional(NameSchema),
@@ -106,9 +108,10 @@ export function registerTaskTools(pi: ExtensionAPI, state: TaskState): void {
     name: "TodoCreate",
     label: "TodoCreate",
     description: `Create a todo under an existing work, optionally reporting approximate completionPercent (0 for known unstarted work, null for unknown). For longer tasks, use TodoUpdate for interim estimates after roughly 5–10 meaningful working steps or a milestone; do not wait until completion. taskInfo must contain the required hidden coordination metadata and is never shown; finalThoughts is the only user-visible task text. ${STATUS_GUIDANCE} ${TASK_INFO_GUIDANCE} ${FINAL_THOUGHTS_GUIDANCE}`,
-    promptSnippet: "Create detailed todos under the current work before implementation",
+    promptSnippet: "Create a todo for each distinct new actionable request before work",
     promptGuidelines: [
       "Use TodoCreate only under an existing work and only for actionable main-conversation work; never use it during /ask or /btw.",
+      "Create a Todo for each distinct new actionable user request, including one added to an existing Work; reuse an existing Todo only when it owns the same outcome. Do not create one for each sentence, clarification, check, or tool call.",
       "Keep taskInfo to hidden coordination metadata and finalThoughts to the visible update. completionPercent is optional; estimate from actual progress, use null when unknown, and do not infer partial completion just from status. For longer tasks, report interim estimates through TodoUpdate after roughly 5–10 meaningful working steps or a milestone.",
       TASK_INFO_GUIDANCE,
       FINAL_THOUGHTS_GUIDANCE,
@@ -119,11 +122,12 @@ export function registerTaskTools(pi: ExtensionAPI, state: TaskState): void {
       taskInfo: TaskInfoSchema,
       finalThoughts: Type.Optional(FinalThoughtsSchema),
       blockedReason: Type.Optional(BlockedReasonSchema),
+      dependentOn: Type.Optional(DependencySchema),
       status: Type.Optional(StatusSchema),
       completionPercent: Type.Optional(CompletionSchema),
     }, { additionalProperties: false }),
     execute(_id, params) {
-      const todo = state.createTodo({ workId: params.workId, taskName: params.taskName, taskInfo: params.taskInfo, finalThoughts: params.finalThoughts, status: params.status, completionPercent: params.completionPercent, blockedReason: params.blockedReason });
+      const todo = state.createTodo({ workId: params.workId, taskName: params.taskName, taskInfo: params.taskInfo, finalThoughts: params.finalThoughts, status: params.status, completionPercent: params.completionPercent, blockedReason: params.blockedReason, dependentOn: params.dependentOn });
       return Promise.resolve(taskResult(`Created todo ${todo.taskId} under ${todo.workId}: ${todo.taskName} · ${formatCompletion(taskCompletion(todo))} [${todo.status}]`, "todo-create", { taskId: todo.taskId, workId: todo.workId, completionPercent: taskCompletion(todo) }));
     },
     renderCall: renderTaskCall("TodoCreate"),
@@ -155,13 +159,14 @@ export function registerTaskTools(pi: ExtensionAPI, state: TaskState): void {
     label: "TodoUpdate",
     description: `Update a todo's name, hidden coordination metadata, visible final thoughts, status, completionPercent, or working selection. Set working=true immediately before working on an active owner: self task; it pauses any previously selected task. Set working=false to pause without changing status. Timing is calculated automatically, never estimated. Re-select with working=true on each fresh run. Delegated agents time their own local tasks; never select a parent delegate task. For longer tasks, include an optional completionPercent estimate after roughly 5–10 meaningful working steps or a milestone, not just at completion or in status-only updates. Use finalThoughts for significant visible evidence; use null when unknown and never increase a percentage without evidence. A status change clears an unsupplied thought, so state the new dependency through blockedReason or the completed verified result. Blocking retains progress. Reserve completed/100 for verified completion. ${STATUS_GUIDANCE} ${TASK_INFO_GUIDANCE} ${FINAL_THOUGHTS_GUIDANCE}`,
     promptSnippet: "Keep todo status and visible final thoughts synchronized with active work",
-    promptGuidelines: ["Use TodoUpdate with working=true immediately before working on an active owner: self task, including when resuming on a fresh run. Use working=false when pausing without a status change. Only one local task is timed; runtime idle and user waits pause automatically. Never update tracking during /ask or /btw.", "During longer tasks, include an evidence-based completionPercent estimate after roughly 5–10 meaningful working steps or a milestone; do not wait until completion or only update status. Estimates remain optional: use null when unknown, and leave a percentage unchanged if there is no new evidence. Explain evidence in finalThoughts only when it is significant; only verified completed tasks may reach 100. Work completion is calculated automatically from tasks.", TASK_INFO_GUIDANCE, FINAL_THOUGHTS_GUIDANCE],
+    promptGuidelines: ["Use TodoUpdate with working=true immediately before working on an active owner: self task, including when resuming on a fresh run. Use working=false when pausing without a status change. Only one local task is timed; runtime idle and user waits pause automatically. Never update tracking during /ask or /btw.", "Do not rename or broaden an existing Todo to absorb a distinct new user request; create a new Todo for it.", "During longer tasks, include an evidence-based completionPercent estimate after roughly 5–10 meaningful working steps or a milestone; do not wait until completion or only update status. Estimates remain optional: use null when unknown, and leave a percentage unchanged if there is no new evidence. Explain evidence in finalThoughts only when it is significant; only verified completed tasks may reach 100. Work completion is calculated automatically from tasks.", TASK_INFO_GUIDANCE, FINAL_THOUGHTS_GUIDANCE],
     parameters: Type.Object({
       taskId: Type.String(),
       taskName: Type.Optional(NameSchema),
       taskInfo: Type.Optional(TaskInfoSchema),
       finalThoughts: Type.Optional(FinalThoughtsSchema),
       blockedReason: Type.Optional(BlockedReasonSchema),
+      dependentOn: Type.Optional(DependencySchema),
       status: Type.Optional(StatusSchema),
       completionPercent: Type.Optional(CompletionSchema),
       working: Type.Optional(Type.Boolean({ description: "Select this active owner: self task for automatic timing, or pause it. Selection switches away from the previously timed task. No timestamps or duration estimates are accepted." })),
@@ -169,7 +174,7 @@ export function registerTaskTools(pi: ExtensionAPI, state: TaskState): void {
     execute(_id, params) {
       if (params.working !== undefined && !areTrackingToolsActive(pi)) throw new Error("Task timing is available only in tracked main-conversation work, not /ask or /btw.");
       const taskInfo = params.taskInfo === undefined ? undefined : preservePaneLink(state.getTodo(params.taskId)?.taskInfo ?? "", params.taskInfo);
-      const todo = state.updateTodo(params.taskId, { taskName: params.taskName, taskInfo, finalThoughts: params.finalThoughts, status: params.status, blockedReason: params.blockedReason, completionPercent: params.completionPercent, working: params.working });
+      const todo = state.updateTodo(params.taskId, { taskName: params.taskName, taskInfo, finalThoughts: params.finalThoughts, status: params.status, blockedReason: params.blockedReason, dependentOn: params.dependentOn, completionPercent: params.completionPercent, working: params.working });
       return Promise.resolve(taskResult(`Updated todo ${todo.taskId}: ${todo.taskName} · ${formatCompletion(taskCompletion(todo))} · ${formatTime(taskTime(todo))}${todo.workingSince === undefined ? "" : " running"} [${todo.status}]`, "todo-update", { taskId: todo.taskId, workId: todo.workId, completionPercent: taskCompletion(todo), elapsedMs: taskTime(todo), working: todo.workingSince !== undefined }));
     },
     renderCall: renderTaskCall("TodoUpdate"),
@@ -203,7 +208,10 @@ function formatWorks(works: WorkWithTodos[]): string {
 
 function formatTodos(todos: Todo[]): string {
   if (todos.length === 0) return "No todos found.";
-  return todos.map((todo) => `${todo.taskId} [${todo.status}] ${todo.taskName} · ${formatCompletion(taskCompletion(todo))} · Time: ${formatTime(taskTime(todo))}${todo.workingSince === undefined ? "" : " (running)"}\nWork: ${todo.workId}\nFinal thoughts:\n${finalThoughtsFor(todo) ?? "None recorded."}\nTask info (hidden coordination metadata):\n${todo.taskInfo}`).join("\n\n");
+  return todos.map((todo) => {
+    const dependency = dependentOnLabel(todo.dependentOn);
+    return `${todo.taskId} [${todo.status}] ${todo.taskName} · ${formatCompletion(taskCompletion(todo))} · Time: ${formatTime(taskTime(todo))}${todo.workingSince === undefined ? "" : " (running)"}\nWork: ${todo.workId}\nFinal thoughts:\n${finalThoughtsFor(todo) ?? "None recorded."}\n${dependency === undefined ? "" : `Dependent on: ${dependency}\n`}Task info (hidden coordination metadata):\n${todo.taskInfo}`;
+  }).join("\n\n");
 }
 
 function bounded(text: string): string {

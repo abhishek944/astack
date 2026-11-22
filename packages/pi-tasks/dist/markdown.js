@@ -1,3 +1,4 @@
+import { dependentOnLabel } from "./dependency.js";
 import { formatCompletion, taskCompletion, workCompletion } from "./progress.js";
 import { safeMultiline, safeSingleLine } from "./text.js";
 import { finalThoughtsFor } from "./thoughts.js";
@@ -13,7 +14,7 @@ export function formatWorksMarkdown(works) {
             continue;
         }
         for (const todo of work.tasks) {
-            lines.push(`#### ${todo.taskId} — ${escapeMarkdownInline(safeSingleLine(todo.taskName))}`, "", `**Status:** ${todo.status}`, `**Completion:** ${formatCompletion(taskCompletion(todo))}`, `**Time:** ${formatTime(taskTime(todo))}${todo.workingSince === undefined ? "" : " (running)"}`, "", "**Final thoughts:**", "", markdownBody(finalThoughtsFor(todo) ?? "No final thoughts recorded."), "");
+            lines.push(`#### ${todo.taskId} — ${escapeMarkdownInline(safeSingleLine(todo.taskName))}`, "", `**Status:** ${todo.status}`, `**Completion:** ${formatCompletion(taskCompletion(todo))}`, `**Time:** ${formatTime(taskTime(todo))}${todo.workingSince === undefined ? "" : " (running)"}`, "", `**Final thoughts${dependentOnLabel(todo.dependentOn) === undefined ? "" : ` (Dependent on: ${dependentOnLabel(todo.dependentOn)})`}:**`, "", markdownBody(finalThoughtsFor(todo) ?? "No final thoughts recorded."), "");
         }
     }
     return `${lines.join("\n").trimEnd()}\n`;

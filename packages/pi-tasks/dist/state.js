@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { isTaskDependency } from "./dependency.js";
 import { taskOwner } from "./ownership.js";
 import { taskCompletion } from "./progress.js";
 import { emptySnapshot, readSnapshot, taskSnapshotPath, writeSnapshot } from "./snapshot.js";
@@ -148,7 +149,7 @@ export class TaskState {
         });
     }
     createTodo(input) {
-        const { workId, taskName, taskInfo, finalThoughts, status = "active", completionPercent, blockedReason } = input;
+        const { workId, taskName, taskInfo, finalThoughts, status = "active", completionPercent, blockedReason, dependentOn } = input;
         return this.change((snapshot) => {
             if (!snapshot.works.some((work) => work.workId === workId))
                 throw new Error(`Work ${workId} not found.`);
@@ -156,8 +157,9 @@ export class TaskState {
                 throw new Error(`Maximum of ${MAX_TODOS} todos reached.`);
             validateCompletion(status, completionPercent);
             const now = Date.now();
+            const dependency = normalizeDependency(status, dependentOn, undefined);
             const todo = { taskId: `T${snapshot.nextTaskId++}`, workId, taskName: requiredName(taskName, "taskName"), taskInfo: requiredText(taskInfo, "taskInfo"), finalThoughts: optionalThoughts(finalThoughts), status,
-                blockedReason: normalizeBlockedReason(status, blockedReason, undefined), completionPercent: status === "completed" ? 100 : completionPercent ?? null, elapsedMs: 0, createdAt: now, updatedAt: now };
+                blockedReason: normalizeBlockedReason(status, blockedReason, undefined), ...(dependency === undefined ? {} : { dependentOn: dependency }), completionPercent: status === "completed" ? 100 : completionPercent ?? null, elapsedMs: 0, createdAt: now, updatedAt: now };
             snapshot.todos.push(todo);
             return todo;
         });
@@ -171,12 +173,15 @@ export class TaskState {
             const transitioned = status !== current.status;
             validateCompletion(status, patch.completionPercent);
             const blockedReason = normalizeBlockedReason(status, patch.blockedReason, current);
+            const dependency = normalizeDependency(status, patch.dependentOn, current);
+            const dependencyCleared = (patch.dependentOn !== undefined || transitioned) && dependency === undefined;
             const normalized = compactPatch({
                 taskName: patch.taskName === undefined ? undefined : requiredName(patch.taskName, "taskName"),
                 taskInfo: patch.taskInfo === undefined ? undefined : requiredText(patch.taskInfo, "taskInfo"),
                 finalThoughts: optionalThoughts(patch.finalThoughts),
                 status: patch.status,
                 blockedReason: patch.blockedReason !== undefined || transitioned ? blockedReason : undefined,
+                dependentOn: patch.dependentOn !== undefined && dependency !== undefined ? dependency : undefined,
                 completionPercent: patch.completionPercent,
             });
             if (Object.keys(normalized).length === 0 && patch.working === undefined && patch.finalThoughts === undefined)
@@ -190,6 +195,8 @@ export class TaskState {
                 delete snapshot.focusedTaskId;
             }
             Object.assign(current, normalized, { updatedAt: Date.now() });
+            if (dependencyCleared)
+                delete current.dependentOn;
             // A new status is a new statement. Keep an explicitly supplied thought;
             // otherwise drop the old one so blocked, resumed, and completed rows never
             // show a stale message from the previous state. A completion without a
@@ -321,6 +328,7 @@ function applyEvent(snapshot, event) {
             const todo = { ...event.todo, taskName: requiredName(event.todo.taskName, "taskName"), taskInfo: requiredText(event.todo.taskInfo, "taskInfo"),
                 finalThoughts: optionalThoughts(typeof event.todo.finalThoughts === "string" ? event.todo.finalThoughts : undefined), status,
                 blockedReason: status === "blocked" ? restoredReason(event.todo.blockedReason) : null,
+                ...(status === "blocked" && isTaskDependency(event.todo.dependentOn) ? { dependentOn: event.todo.dependentOn } : {}),
                 completionPercent: taskCompletion({ ...event.todo, status }), elapsedMs: validElapsed(event.todo.elapsedMs) ? event.todo.elapsedMs : null, delegatedTimes: undefined, workingSince: undefined };
             if (snapshot.works.some((work) => work.workId === todo.workId))
                 snapshot.todos = [...snapshot.todos.filter((item) => item.taskId !== todo.taskId), todo];
@@ -334,9 +342,16 @@ function applyEvent(snapshot, event) {
             const patch = event.patch;
             const status = restoredStatus(patch.status) ?? todo.status;
             const transitioned = status !== todo.status;
+            const dependency = status === "blocked"
+                ? patch.dependentOn !== undefined ? (isTaskDependency(patch.dependentOn) ? patch.dependentOn : todo.dependentOn) : todo.dependentOn
+                : undefined;
             Object.assign(todo, compactPatch({ taskName: typeof patch.taskName === "string" ? requiredName(patch.taskName, "taskName") : undefined, taskInfo: patch.taskInfo, completionPercent: patch.completionPercent }), {
                 status, blockedReason: status === "blocked" ? patch.blockedReason !== undefined ? restoredReason(patch.blockedReason) : todo.blockedReason : null, updatedAt: event.at,
             });
+            if (dependency === undefined)
+                delete todo.dependentOn;
+            else
+                todo.dependentOn = dependency;
             if (typeof patch.finalThoughts === "string") {
                 const thoughts = optionalThoughts(patch.finalThoughts);
                 if (thoughts === undefined)
@@ -382,6 +397,18 @@ function normalizeBlockedReason(status, supplied, current) {
     if (reason.length > 10_000)
         throw new Error("blockedReason must not exceed 10000 characters.");
     return reason;
+}
+function normalizeDependency(status, supplied, current) {
+    if (status !== "blocked") {
+        if (supplied !== undefined && supplied !== null)
+            throw new Error("dependentOn is only valid for blocked tasks.");
+        return undefined;
+    }
+    if (supplied === undefined && current?.status === "blocked")
+        return current.dependentOn;
+    if (!isTaskDependency(supplied))
+        throw new Error("Blocked tasks require dependentOn=\"user-decision\" or dependentOn=\"another-agent\".");
+    return supplied;
 }
 function validDelegatedTime(value) {
     return !!value && typeof value.reportPath === "string" && value.reportPath.length > 0

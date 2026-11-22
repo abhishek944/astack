@@ -25,6 +25,7 @@ export async function buildMetadata(
     provider: route.kind === 'catalog' ? 'cloudflare' : route.provider.id,
     durationMs: Math.max(0, Date.now() - startedAt),
     ...(reported.requestId ? { requestId: reported.requestId } : {}),
+    ...(reported.expiresAt !== undefined ? { expiresAt: reported.expiresAt } : {}),
     ...(reported.reportedUsage ? { reportedUsage: reported.reportedUsage } : {}),
     ...(tokenUsage ? { tokenUsage } : {}),
     cost: await buildImageCost({

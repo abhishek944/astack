@@ -7,9 +7,13 @@ import type {
 import type { Context } from "@earendil-works/chord";
 import { classify, compareClassifiers } from "./classify.js";
 import { classifyTree } from "./tree.js";
+import { extract } from "./extract.js";
 import { renderClassifierBox } from "./box.js";
 import {
   CLASSIFIER_BOX_TOOL,
+  CLASSIFY_EXTRACT_TOOL,
+  CLASSIFY_EXTRACT_TOOL_DESCRIPTION,
+  classifyExtractParameters,
   CLASSIFIER_BOX_TOOL_DESCRIPTION,
   CLASSIFY_COMPARE_TOOL,
   CLASSIFY_COMPARE_TOOL_DESCRIPTION,
@@ -188,6 +192,34 @@ export function createClassifierExtension(
     },
   });
 
+  const extractTool = defineTool({
+    name: CLASSIFY_EXTRACT_TOOL,
+    description: CLASSIFY_EXTRACT_TOOL_DESCRIPTION,
+    parameters: classifyExtractParameters,
+    replay: "unsafe",
+    executionMode: "parallel",
+    async execute(args, api, context) {
+      const cwd = await resolveCwd(api, context, configuredCwd);
+      try {
+        const result = await extract(args, {
+          settings: frozenSettings,
+          cwd,
+          credentialSource: "explicit",
+          ...(context.abortSignal ? { signal: context.abortSignal } : {}),
+        });
+        return {
+          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          details: toJson(result),
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: "classify_extract failed: " + userError(error) }],
+        };
+      }
+    },
+  });
+
   const boxTool = defineTool({
     name: CLASSIFIER_BOX_TOOL,
     description: CLASSIFIER_BOX_TOOL_DESCRIPTION,
@@ -259,7 +291,7 @@ export function createClassifierExtension(
 
   return defineExtension({
     name: "classifier",
-    tools: [classifyTool, compareTool, treeTool, boxTool],
+    tools: [classifyTool, compareTool, treeTool, extractTool, boxTool],
   });
 }
 

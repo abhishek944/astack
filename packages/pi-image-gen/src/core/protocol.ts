@@ -31,7 +31,11 @@ export type OriginalReference = {
 /** Authorized original bytes returned by a host loader. */
 export type Original = { readonly bytes: Uint8Array; readonly mimeType: string };
 
-export type CatalogImageModelId = 'openai/gpt-image-2.5-flare' | 'openai/gpt-image-2.5-sunburst';
+export type CatalogImageModelId =
+  | 'openai/gpt-image-2.5-flare'
+  | 'openai/gpt-image-2.5-sunburst'
+  | 'openai/gpt-image-2.6-flare'
+  | 'openai/gpt-image-2.6-sunburst';
 
 export type ProviderImageRoute = {
   readonly kind: 'provider';
@@ -135,6 +139,8 @@ export type ImageMetadata = {
   readonly provider: string;
   readonly durationMs: number;
   readonly requestId?: string;
+  /** Unix seconds when a provider return URL expires. */
+  readonly expiresAt?: number;
   readonly reportedUsage?: ReportedUsage;
   readonly tokenUsage?: ImageTokenUsage;
   readonly cost: Cost;

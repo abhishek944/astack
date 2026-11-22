@@ -1,4 +1,6 @@
 export { classify, compareClassifiers } from "./classify.js";
+export { extract } from "./extract.js";
+export type { ExtractOptions } from "./extract.js";
 export type { ClassifyOptions } from "./classify.js";
 export type { MemoryImage } from "./inputs.js";
 export { runComputerUse } from "./computer-use.js";
@@ -31,5 +33,18 @@ export type {
   ModelDefinition,
   ProviderSettings,
   ApiStyle,
+  MediaInput,
+  PreparedMedia,
+  TextSpan,
+  BoxEdges,
+  CharSpan,
+  NonTokenCost,
+  WebSearchResult,
+  WebFetchedResult,
+  ExtractionField,
+  ExtractParams,
+  ExtractResult,
+  ExtractionAnswer,
+  JsonLike,
 } from "./types.js";
 export { ClassifierError } from "./types.js";

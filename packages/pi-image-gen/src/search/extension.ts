@@ -4,6 +4,7 @@ import { Type } from 'typebox';
 import { imageResizeSchema } from '../resize-schema.js';
 import { imageSearchCredential, loadImageSearchSettings } from './config.js';
 import { imageSearchErrorMessage } from './errors.js';
+import { DEFAULT_SEARCH_OUTPUT_DIR } from '../output-defaults.js';
 import { compareImageSearches, searchImages } from './search.js';
 import { IMAGE_SEARCH_PROVIDERS } from './types.js';
 
@@ -11,7 +12,7 @@ const parameters = Type.Object({
   query: Type.String({ minLength: 1, maxLength: 200, description: 'Find and download existing images matching this search query (at most 50 words). Not a generation prompt.' }),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20, description: 'Maximum candidates per provider; default 5. Download failures and unsupported formats are excluded, so fewer usable files may be returned.' })),
   resize: Type.Optional(imageResizeSchema()),
-  outputDir: Type.Optional(Type.String({ minLength: 1, description: 'Download directory, relative to cwd. Default .pi/images/search.' })),
+  outputDir: Type.Optional(Type.String({ minLength: 1, description: `Download directory, relative to cwd. Default ${DEFAULT_SEARCH_OUTPUT_DIR}.` })),
 }, { additionalProperties: false });
 
 const routeSchema = Type.Object({ provider: Type.Union(IMAGE_SEARCH_PROVIDERS.map((id) => Type.Literal(id))) });

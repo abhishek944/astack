@@ -76,12 +76,29 @@ export const geminiAdapter: ImageProviderAdapter = {
     const imageConfig: Record<string, string> = {};
     if (params.aspectRatio) imageConfig.aspectRatio = params.aspectRatio;
     if (params.imageSize) imageConfig.imageSize = params.imageSize;
+    // generateContent accepts thinkingConfig.thinkingLevel as an uppercase enum.
+    // The public control stays lowercase to match the documented model table.
+    const thinkingConfig: Record<string, string | boolean> = {};
+    if (params.thinkingLevel) thinkingConfig.thinkingLevel = params.thinkingLevel.toUpperCase();
+    if (params.includeThoughts) thinkingConfig.includeThoughts = true;
+    // Documented REST shape is `tools: [{ google_search: {} }]`; image search is
+    // nested under searchTypes when requested.
+    const groundingEnabled = params.searchGrounding === true || params.imageSearchGrounding === true;
+    const tools = groundingEnabled
+      ? [{
+          google_search: params.imageSearchGrounding === true
+            ? { searchTypes: { webSearch: {}, imageSearch: {} } }
+            : {},
+        }]
+      : [];
     const body = {
       contents: [{ role: 'user', parts: userParts }],
+      ...(tools.length > 0 ? { tools } : {}),
       generationConfig: {
         responseModalities: ['IMAGE'],
         candidateCount: n,
         ...(Object.keys(imageConfig).length > 0 ? { imageConfig } : {}),
+        ...(Object.keys(thinkingConfig).length > 0 ? { thinkingConfig } : {}),
       },
     };
 
@@ -116,6 +133,7 @@ export const geminiAdapter: ImageProviderAdapter = {
       throw invalidResponseError(provider);
     }
     const out: RawImageResult[] = [];
+    let revisedPrompt: string | undefined;
     for (const candidate of json.candidates ?? []) {
       if (!isRecord(candidate)) throw invalidResponseError(provider);
       const content = candidate.content;
@@ -124,6 +142,11 @@ export const geminiAdapter: ImageProviderAdapter = {
       if (parts !== undefined && !Array.isArray(parts)) throw invalidResponseError(provider);
       for (const part of parts ?? []) {
         if (!isRecord(part)) throw invalidResponseError(provider);
+        // Thinking can emit interim images; the docs say the last image is final.
+        if (part.thought === true) continue;
+        if (typeof part.text === 'string' && revisedPrompt === undefined && part.text.trim()) {
+          revisedPrompt = part.text;
+        }
         // Google's REST API returns camelCase `inlineData`; the gRPC/proto form
         // is `inline_data`. Accept both — different gateways may pass either.
         const inline = isRecord(part.inlineData)
@@ -149,6 +172,7 @@ export const geminiAdapter: ImageProviderAdapter = {
               bytes: data,
               mimeType,
             },
+            ...(revisedPrompt ? { revisedPrompt } : {}),
           });
         }
       }

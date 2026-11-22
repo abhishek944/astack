@@ -16,7 +16,19 @@ export const maiAdapter: ImageProviderAdapter = {
     if (!hasProviderAuthentication(provider)) throw missingKeyError(provider);
     // Even an explicitly supplied custom capability contract cannot make this
     // wire format carry unsupported controls (quality, n > 1, masks, etc.).
-    validateGenerateParams(params, genericCapabilitiesForApi('mai'), remoteModelId);
+    // Transparent background is verified only for catalog-named 2.7 deployments;
+    // arbitrary Azure deployment names are left to provider validation.
+    const supportsBackground = /^MAI-Image-2\.7(?:-Flash)?$/.test(remoteModelId);
+    if (params.background !== undefined && !supportsBackground) {
+      throw new ImageGenError(
+        'This Microsoft MAI deployment does not support background; only catalog-named MAI-Image-2.7 deployments do.',
+        'MAI background unsupported',
+      );
+    }
+    const validationCapabilities = supportsBackground
+      ? { ...genericCapabilitiesForApi('mai'), backgroundValues: ['opaque', 'transparent'] as Array<'opaque' | 'transparent'> }
+      : genericCapabilitiesForApi('mai');
+    validateGenerateParams(params, validationCapabilities, remoteModelId);
     for (const control of ['quality', 'aspectRatio', 'imageSize'] as const) {
       if (params[control] !== undefined) {
         throw new ImageGenError(
@@ -66,6 +78,9 @@ export const maiAdapter: ImageProviderAdapter = {
       body = form;
     } else {
       const payload: Record<string, unknown> = { model: remoteModelId, prompt: params.prompt };
+      // MAI 2.7 documents transparent generation; arbitrary deployment names
+      // stay on the legacy wire shape until Azure identifies their version.
+      if (supportsBackground && params.background !== undefined) payload.background = params.background;
       if (params.size !== undefined) {
         const match = SIZE_PIXEL_RE.exec(params.size);
         if (!match) {

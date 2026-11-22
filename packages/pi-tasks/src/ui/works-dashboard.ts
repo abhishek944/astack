@@ -11,6 +11,7 @@ import {
   wrapTextWithAnsi,
 } from "@earendil-works/pi-tui";
 import { type DelegateLink, delegateLink, focusTerminal } from "../agents/links.js";
+import { dependentOnLabel } from "../dependency.js";
 import type { GitStatusCache } from "../git-status.js";
 import { formatWorksMarkdown } from "../markdown.js";
 import { openRepository } from "../open-repository.js";
@@ -336,7 +337,8 @@ export class WorksDashboard implements Component, Focusable {
       lines.push(...wrap(`${formatCompletion(workCompletion(item.work))} complete · Time (task effort): ${formatTime(workTime(item.work))}`), "");
     }
     if (task) {
-      lines.push(this.theme.fg("accent", this.theme.bold("Final thoughts")));
+      const dependency = dependentOnLabel(task.dependentOn);
+      lines.push(this.theme.fg("accent", this.theme.bold(dependency === undefined ? "Final thoughts" : `Final thoughts · Dependent on: ${dependency}`)));
       const thoughts = finalThoughtsFor(task) ?? "No final thoughts recorded.";
       const color = task.status === "blocked" ? "warning" : "muted";
       lines.push(...safeMultiline(thoughts).flatMap(wrap).map((line) => this.theme.fg(color, line)));

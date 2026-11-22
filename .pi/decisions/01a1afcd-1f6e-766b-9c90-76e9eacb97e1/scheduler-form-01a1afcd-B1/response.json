@@ -1,0 +1,13 @@
+{
+  "questionId": "scheduler-form-01a1afcd-B1",
+  "revision": "5c900c9708c1db6f39017bc8e3a9cd1a4f19b643cd891c72d4ca7ec05813b03a",
+  "mode": "single",
+  "selectedIds": [],
+  "selectedLabels": [],
+  "submissionType": "comments-only",
+  "response": "The workspace of the project folder, existing worktree, new worktree that can be a drop-down, right? Why aren't you choosing that.\nAnd also have the enabled as a last point rather than merging it with choose how it runs.\n",
+  "timestamp": "2026-11-06T07:53:15.777Z",
+  "sessionId": "01a1afcd-1f6e-766b-9c90-76e9eacb97e1",
+  "backend": "local",
+  "recordId": null
+}

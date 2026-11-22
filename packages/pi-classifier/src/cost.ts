@@ -25,6 +25,8 @@ const PRICES: Record<string, Record<string, TokenPricing>> = {
     ]),
   ),
   perplexity: {
+    "pplx-decider-v1.3": { inputPerMillion: 0.02, outputPerMillion: 0 },
+    "pplx-decider-flash-v1.3": { inputPerMillion: 0.01, outputPerMillion: 0 },
     "pplx-decider-v1.1-27b": { inputPerMillion: 0.02, outputPerMillion: 0 },
     "pplx-decider-v1-27b": { inputPerMillion: 0.02, outputPerMillion: 0 },
     "pplx-decider-v1.2": { inputPerMillion: 0.02, outputPerMillion: 0 },
@@ -32,9 +34,15 @@ const PRICES: Record<string, Record<string, TokenPricing>> = {
     "pplx-decider-flash-v1.2": { inputPerMillion: 0.01, outputPerMillion: 0 },
     "pplx-decider-flash-latest": { inputPerMillion: 0.01, outputPerMillion: 0 },
   },
+  liquid: {
+    "d1.2": { inputPerMillion: 0.02, outputPerMillion: 0 },
+    "d1.2-ultra": { inputPerMillion: 0.042, outputPerMillion: 0 },
+  },
   cloudflare: {
     "@cf/cloudflare/clef": { inputPerMillion: 0.24, outputPerMillion: 0 },
     "@cf/cloudflare/clef-flash": { inputPerMillion: 0.038, outputPerMillion: 0 },
+    "@cf/cloudflare/clef-omni": { inputPerMillion: 0.15, outputPerMillion: 0 },
+    "@cf/cloudflare/clairic": { inputPerMillion: 0.1, outputPerMillion: 0 },
     "typesafe/jev": {
       inputPerMillion: 0.042,
       outputPerMillion: 0,
@@ -92,14 +100,24 @@ export function resolvePricing(
     (provider === "openai" && baseUrl === "https://api.openai.com/v1") ||
     (provider === "typesafe" && baseUrl === "https://api.typesafe.ai/v1") ||
     (provider === "perplexity" && baseUrl === "https://api.perplexity.ai/v1") ||
-    (provider === "cloudflare" &&
+    (provider === "liquid" && baseUrl === "https://api.liquid.ai/decisions/v1") ||
+    ((provider === "cloudflare" || provider === "clairic") &&
       /^https:\/\/api\.cloudflare\.com\/client\/v4\/accounts\/[^/]+\/ai$/.test(baseUrl));
-  const catalog = Object.hasOwn(PRICES, provider) ? PRICES[provider] : undefined;
+  const catalogKey = provider === "clairic" ? "cloudflare" : provider;
+  const catalog = Object.hasOwn(PRICES, catalogKey) ? PRICES[catalogKey] : undefined;
   const rates =
     official && catalog && Object.hasOwn(catalog, model)
       ? catalog[model]
       : undefined;
-  return rates ? { rates: { ...rates }, source: "builtin" } : undefined;
+  if (!rates) return undefined;
+  // Cloudflare announced a scheduled list-price increase for Clairic on 2026-12-01.
+  const scheduledClairic =
+    (provider === "cloudflare" || provider === "clairic") &&
+    model === "@cf/cloudflare/clairic" &&
+    new Date().toISOString().slice(0, 10) >= "2026-12-01"
+      ? { ...rates, inputPerMillion: 0.24 }
+      : rates;
+  return { rates: { ...scheduledClairic }, source: "builtin" };
 }
 
 function validRate(value: unknown): value is number {
@@ -239,7 +257,7 @@ export function sumCost(left: ClassifierCost, right: ClassifierCost): Classifier
       currency: "USD",
       reason: "calculation_overflow",
     };
-  return {
+  const result: Extract<ClassifierCost, { status: "estimated"; source: "aggregated" }> = {
     status: "estimated",
     currency: "USD",
     source: "aggregated",
@@ -247,4 +265,23 @@ export function sumCost(left: ClassifierCost, right: ClassifierCost): Classifier
     output,
     total,
   };
+  const leftNonToken = left.nonToken?.webGrounding;
+  const rightNonToken = right.nonToken?.webGrounding;
+  if (leftNonToken && rightNonToken) {
+    const searchFeeMaximum = leftNonToken.searchFeeMaximum + rightNonToken.searchFeeMaximum;
+    const fetchFee = leftNonToken.fetchFee + rightNonToken.fetchFee;
+    result.nonToken = {
+      currency: "USD",
+      webGrounding: {
+        status: "estimated_maximum",
+        searchesRequested: leftNonToken.searchesRequested + rightNonToken.searchesRequested,
+        searchFeeMaximum,
+        successfulFetches: leftNonToken.successfulFetches + rightNonToken.successfulFetches,
+        fetchFee,
+        totalMaximum: searchFeeMaximum + fetchFee,
+        note: leftNonToken.note,
+      },
+    };
+  }
+  return result;
 }

@@ -24,6 +24,7 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import { defineDoc, defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { Type } from "typebox";
+import { DEPENDENCY_GUIDANCE, dependentOnLabel, isTaskDependency, TASK_DEPENDENCIES } from "./dependency.js";
 import { taskOwner } from "./ownership.js";
 import { safeSingleLine } from "./text.js";
 import { finalThoughtsFor } from "./thoughts.js";
@@ -44,6 +45,7 @@ const FinalThoughtsSchema = Type.String({ description: "The only user-visible ta
 const NameSchema = Type.String({ minLength: 1, maxLength: 240 });
 const CompletionSchema = Type.Union([Type.Integer({ minimum: 0, maximum: 100 }), Type.Null()]);
 const BlockedReasonSchema = Type.Union([Type.String({ minLength: 1, maxLength: 10_000 }), Type.Null()]);
+const DependencySchema = Type.Union([StringEnum(TASK_DEPENDENCIES), Type.Null()], { description: DEPENDENCY_GUIDANCE });
 const MAX_TEXT_BYTES = 50_000;
 const MAX_TEXT_LINES = 2_000;
 function bounded(text) {
@@ -128,9 +130,24 @@ function normalizeBlockedReason(status, supplied, current) {
     }
     return supplied.trim();
 }
+function normalizeDependency(status, supplied, current) {
+    if (status !== "blocked") {
+        if (supplied !== undefined && supplied !== null) {
+            throw new Error("dependentOn is only valid for blocked tasks.");
+        }
+        return null;
+    }
+    if (supplied === undefined && current?.status === "blocked")
+        return current.dependentOn ?? null;
+    if (!isTaskDependency(supplied)) {
+        throw new Error("Blocked tasks require dependentOn=\"user-decision\" or dependentOn=\"another-agent\".");
+    }
+    return supplied;
+}
 function formatTodo(todo) {
     const owner = taskOwner(todo.taskInfo);
-    return `${todo.taskId} [${todo.status}] [${owner === "self" || owner === "delegate" ? owner : "unassigned"}] ${todo.taskName} · ${formatCompletion(taskCompletion(todo.status, todo.completionPercent))}\nWork: ${todo.workId}\nFinal thoughts:\n${finalThoughtsFor(todo) ?? "None recorded."}\nTask info (hidden coordination metadata):\n${todo.taskInfo}`;
+    const dependency = dependentOnLabel(todo.dependentOn);
+    return `${todo.taskId} [${todo.status}] [${owner === "self" || owner === "delegate" ? owner : "unassigned"}] ${todo.taskName} · ${formatCompletion(taskCompletion(todo.status, todo.completionPercent))}\nWork: ${todo.workId}\nFinal thoughts:\n${finalThoughtsFor(todo) ?? "None recorded."}\n${dependency === undefined ? "" : `Dependent on: ${dependency}\n`}Task info (hidden coordination metadata):\n${todo.taskInfo}`;
 }
 function formatWork(doc, work, filter) {
     const todos = doc.todos
@@ -208,7 +225,7 @@ export function createTasksDurableExtension(settings = {}) {
     });
     const workUpdate = defineTool({
         name: "WorkUpdate",
-        description: "Update a work's name or shared context when scope or decisions change. Requires at least one changed field. Works have no status.",
+        description: "Update a work's name or shared context when scope or decisions change. Requires at least one changed field. Works have no status. It is not the record for a new user request; create that request's todo first.",
         parameters: Type.Object({
             workId: Type.String({ minLength: 1 }),
             workName: Type.Optional(NameSchema),
@@ -279,7 +296,7 @@ export function createTasksDurableExtension(settings = {}) {
     });
     const todoCreate = defineTool({
         name: "TodoCreate",
-        description: "Create one concrete todo under an existing work. New tasks default to active. taskInfo is hidden coordination metadata; finalThoughts is the only user-visible task text. Supply blockedReason when creating a blocked task; it is the visible dependency. completionPercent is an optional 0-100 estimate, null for unknown; 100 requires completed status.",
+        description: `Create one concrete todo under an existing work. A distinct new user request needs its own todo, even under an existing work; reuse an existing todo only when it owns the same outcome. New tasks default to active. taskInfo is hidden coordination metadata; finalThoughts is the only user-visible task text. Supply blockedReason and dependentOn when creating a blocked task. ${DEPENDENCY_GUIDANCE} completionPercent is an optional 0-100 estimate, null for unknown; 100 requires completed status.`,
         parameters: Type.Object({
             workId: Type.String({ minLength: 1 }),
             taskName: NameSchema,
@@ -288,6 +305,7 @@ export function createTasksDurableExtension(settings = {}) {
             status: Type.Optional(StatusSchema),
             completionPercent: Type.Optional(CompletionSchema),
             blockedReason: Type.Optional(BlockedReasonSchema),
+            dependentOn: Type.Optional(DependencySchema),
         }, { additionalProperties: false }),
         replay: "unsafe",
         executionMode: "sequential",
@@ -315,6 +333,7 @@ export function createTasksDurableExtension(settings = {}) {
                     ...(finalThoughts === undefined ? {} : { finalThoughts }),
                     status,
                     blockedReason: normalizeBlockedReason(status, args.blockedReason ?? undefined, undefined),
+                    dependentOn: normalizeDependency(status, args.dependentOn, undefined),
                     completionPercent: status === "completed" ? 100 : (args.completionPercent ?? null),
                     createdAt: now,
                     updatedAt: now,
@@ -359,7 +378,7 @@ export function createTasksDurableExtension(settings = {}) {
     });
     const todoUpdate = defineTool({
         name: "TodoUpdate",
-        description: "Update a todo's name, hidden coordination metadata, visible final thoughts, status, progress, or blocked reason. Requires at least one changed field. A status change clears an unsupplied thought; supply the new completed result or blocked dependency. Completion follows: 100 only with completed status; reopening a completed task without a fresh estimate resets progress to unknown. Effort timing is unsupported natively: there is no working field.",
+        description: `Update a todo's name, hidden coordination metadata, visible final thoughts, status, progress, blocked reason, or dependency. Requires at least one changed field. A status change clears an unsupplied thought; supply the new completed result or blocked dependency. ${DEPENDENCY_GUIDANCE} Completion follows: 100 only with completed status; reopening a completed task without a fresh estimate resets progress to unknown. Do not rename or broaden a todo to absorb a distinct new request; create a new todo. Effort timing is unsupported natively: there is no working field.`,
         parameters: Type.Object({
             taskId: Type.String({ minLength: 1 }),
             taskName: Type.Optional(NameSchema),
@@ -368,6 +387,7 @@ export function createTasksDurableExtension(settings = {}) {
             status: Type.Optional(StatusSchema),
             completionPercent: Type.Optional(CompletionSchema),
             blockedReason: Type.Optional(BlockedReasonSchema),
+            dependentOn: Type.Optional(DependencySchema),
         }, { additionalProperties: false }),
         replay: "unsafe",
         executionMode: "sequential",
@@ -388,6 +408,9 @@ export function createTasksDurableExtension(settings = {}) {
                 const reason = (args.blockedReason !== undefined || transitioned)
                     ? normalizeBlockedReason(status, args.blockedReason ?? undefined, transitioned ? undefined : todo)
                     : todo.blockedReason;
+                const dependency = (args.dependentOn !== undefined || transitioned)
+                    ? normalizeDependency(status, args.dependentOn, transitioned ? undefined : todo)
+                    : todo.dependentOn;
                 let changed = false;
                 if (args.taskName !== undefined) {
                     const name = requiredName(args.taskName);
@@ -424,6 +447,10 @@ export function createTasksDurableExtension(settings = {}) {
                 }
                 if (reason !== todo.blockedReason) {
                     todo.blockedReason = reason;
+                    changed = true;
+                }
+                if (dependency !== todo.dependentOn) {
+                    todo.dependentOn = dependency;
                     changed = true;
                 }
                 if (args.completionPercent !== undefined && args.completionPercent !== todo.completionPercent) {

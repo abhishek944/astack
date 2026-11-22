@@ -10,6 +10,7 @@ export async function parseImagesResponse(
   res: Response,
   url: string,
   provider: ResolvedProvider,
+  options: { maxImages?: number } = {},
 ): Promise<RawImageResult[]> {
   let metadata: RawGenerationMetadata = {};
   try {
@@ -31,6 +32,13 @@ export async function parseImagesResponse(
       throw new ImageGenError(`${provider.name} returned invalid JSON.`, `${providerLogLabel(provider)} returned invalid JSON`);
     }
     if (!isRecord(json)) throw invalidResponseError(provider);
+    // OpenRouter added a top-level signed-URL expiry in 2026-11. Keep only a
+    // validated Unix timestamp; no response text or URL reaches metadata here.
+    const expiresAt =
+      typeof json.expires_at === 'number' &&
+      Number.isSafeInteger(json.expires_at) &&
+      json.expires_at >= 0
+        ? json.expires_at : undefined;
     const usage = isRecord(json.usage) ? json.usage : undefined;
     // SVG author tokens are reported separately from image rendering usage. Keep them
     // nested under svg_usage so image-token normalization and costing never double count them.
@@ -44,11 +52,12 @@ export async function parseImagesResponse(
     );
     metadata = coreMetadata({
       ...(requestId ? { requestId } : {}),
+      ...(expiresAt !== undefined ? { expiresAt } : {}),
       ...(reportedUsage ? { reportedUsage } : {}),
       ...(reportedCost ? { reportedCost } : {}),
       ...(reportedCost?.basis === 'provider-response' ? { cost: reportedCost.amount } : {}),
     });
-    return imageEntries(json, provider, metadata);
+    return imageEntries(json, provider, metadata, options.maxImages ?? MAX_GENERATED_IMAGES);
   } catch (error) {
     const safe = error instanceof ImageGenError ? error : invalidResponseError(provider);
     throw new ProviderResultError(safe, metadata);
@@ -59,12 +68,13 @@ function imageEntries(
   json: Record<string, unknown>,
   provider: ResolvedProvider,
   metadata: RawGenerationMetadata,
+  maxImages: number,
 ): RawImageResult[] {
   if (json.data !== undefined && !Array.isArray(json.data)) throw invalidResponseError(provider);
   const data = (json.data ?? []) as unknown[];
-  if (data.length > MAX_GENERATED_IMAGES) {
+  if (data.length > maxImages) {
     throw new ImageGenError(
-      `Provider returned too many images (maximum ${MAX_GENERATED_IMAGES}).`,
+      `Provider returned too many images (maximum ${maxImages}).`,
       `${providerLogLabel(provider)} returned too many images`,
     );
   }

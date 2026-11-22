@@ -133,7 +133,7 @@ node bin/archify.mjs doctor
 node bin/archify.mjs demo <output-directory>
 ```
 
-When shell access is unavailable, report that validated Archify generation is blocked. If an unchecked illustration would still help, offer a clearly labeled fallback through `visual-explainer`; never edit the bundled `assets/template.html` or claim a fallback passed Archify gates. Explainers require their renderer and real delivery gates; if those are unavailable, report the limitation and give a text answer when useful, without claiming HTML delivery.
+When shell access is unavailable in an effective First Mate coordinator, delegate the entire Archify generation workflow through an available, authorized backend before treating the missing shell as a blocker. For an ordinary execution session that lacks shell access, or when the coordinator has no working authorized delegation path, report that validated Archify generation is blocked. If an unchecked illustration would still help, offer a clearly labeled fallback through `visual-explainer`; never edit the bundled `assets/template.html` or claim a fallback passed Archify gates. Explainers require their renderer and real delivery gates; if those are unavailable, report the limitation and give a text answer when useful, without claiming HTML delivery.
 
 ## Output
 

@@ -1,6 +1,6 @@
 # pi-classifier
 
-A Pi extension for typed, probabilistic decisions across Microsoft Decision-1, OpenAI Decisions, Perplexity Decisions, TypeSafe Jev, Cloudflare Clef/Clef Flash and SystemOne-compatible gateways.
+A Pi extension for typed, probabilistic decisions across Microsoft Decision-1, OpenAI Decisions, Perplexity Decisions, TypeSafe Jev, Liquid d1.2, Cloudflare Clef/Clef Flash/Clef-omni and SystemOne-compatible gateways. It also exposes Perplexity text-span location and web grounding, plus Cloudflare Clairic structured extraction.
 
 One configured default, optional selective fallback, and explicit model comparisons. No automatic retries or permission auto-approval.
 
@@ -50,6 +50,7 @@ Use the `pi-classifier` namespace in Pi settings. Like `pi-image-gen`, route sel
       "openai": { "apiKey": "${OPENAI_API_KEY}" },
       "perplexity": { "apiKey": "${PERPLEXITY_API_KEY}" },
       "typesafe": { "apiKey": "${TYPESAFE_API_KEY}" },
+      "liquid": { "apiKey": "${LIQUID_API_KEY}" },
       "cloudflare": {
         "apiKey": "${CLOUDFLARE_API_KEY}",
         "accountId": "${CLOUDFLARE_ACCOUNT_ID}"
@@ -84,9 +85,11 @@ Stored API-key values support literal strings and `$NAME`/`${NAME}` references, 
 | ---------------- | --------------------- | ------------------------------------------------------------------ | -------------------- |
 | `microsoft-api` | `microsoft` | `Microsoft-Decision-1` (select your actual deployment name) | `AZURE_API_KEY` |
 | `openai-api`     | `openai`              | `gpt-6-luna`                                                       | `OPENAI_API_KEY`     |
-| `perplexity-api` | `perplexity`          | `pplx-decider-v1.2`, `pplx-decider-flash-v1.2`, latest aliases, legacy v1/v1.1 IDs                     | `PERPLEXITY_API_KEY` |
+| `perplexity-api` | `perplexity`          | `pplx-decider-v1.3`, `pplx-decider-flash-v1.3`, v1.2 models, latest aliases, legacy v1/v1.1 IDs | `PERPLEXITY_API_KEY` |
+| `liquid-api`     | `liquid`              | `d1.2`, `d1.2-ultra`                                               | `LIQUID_API_KEY`     |
 | `typesafe-api`   | `typesafe`            | `jev-latest`, `jev-1.13.0`, `jev-preview`, `jev-1.14.0`            | `TYPESAFE_API_KEY`   |
-| `cloudflare-api` | `cloudflare`          | `@cf/cloudflare/clef`, `@cf/cloudflare/clef-flash`, `typesafe/jev` | `CLOUDFLARE_API_KEY` |
+| `cloudflare-api` | `cloudflare`          | `@cf/cloudflare/clef`, `@cf/cloudflare/clef-flash`, `@cf/cloudflare/clef-omni`, `typesafe/jev` | `CLOUDFLARE_API_KEY` |
+| `clairic-api`    | `cloudflare`          | `@cf/cloudflare/clairic` (used by `classify_extract`)              | `CLOUDFLARE_API_KEY` |
 | `openrouter-api` | `openrouter`          | `typesafe/jev-1.13`, `~typesafe/jev-latest`                        | `OPENROUTER_API_KEY` |
 
 Cloudflare also needs `providers.cloudflare.accountId`, the stored `cloudflare-workers-ai` API-key credential's `env.CLOUDFLARE_ACCOUNT_ID`, or `CLOUDFLARE_ACCOUNT_ID`, in that order. Its stored API token lives under `cloudflare-workers-ai`, not `cloudflare`.
@@ -237,13 +240,17 @@ This example uses 1,000 Jev input tokens. Amounts are not rounded to cents; doin
 | --- | ---: | ---: |
 | OpenAI Decisions `gpt-6-luna` | 0.10 | 0 |
 | TypeSafe `jev-1.13.0`, `jev-1.14.0`, `jev-latest`, `jev-preview` | 0.042 | 0 |
-| Perplexity `pplx-decider-v1.2`, `pplx-decider-latest`, `pplx-decider-v1.1-27b`, `pplx-decider-v1-27b` | 0.02 | 0 |
-| Perplexity `pplx-decider-flash-v1.2`, `pplx-decider-flash-latest` | 0.01 | 0 |
+| Perplexity `pplx-decider-v1.3`, `pplx-decider-latest`, `pplx-decider-v1.2`, `pplx-decider-v1.1-27b`, `pplx-decider-v1-27b` | 0.02 | 0 |
+| Perplexity `pplx-decider-flash-v1.3`, `pplx-decider-flash-latest`, `pplx-decider-flash-v1.2` | 0.01 | 0 |
 | Cloudflare `@cf/cloudflare/clef` | 0.24 | 0 |
 | Cloudflare `@cf/cloudflare/clef-flash` | 0.038 | 0 |
+| Cloudflare `@cf/cloudflare/clef-omni` | 0.15 | 0 |
+| Cloudflare `@cf/cloudflare/clairic` | 0.10 until 2026-12-01, then 0.24 | 0 |
+| Liquid `d1.2` | 0.02 | 0 |
+| Liquid `d1.2-ultra` | 0.042 | 0 |
 | Cloudflare `typesafe/jev` | 0.042 | 0 |
 
-Sources: [OpenAI Decisions pricing](https://developers.openai.com/api/docs/guides/decisions#pricing-and-availability), [OpenAI rates](https://developers.openai.com/api/docs/pricing), [TypeSafe models](https://docs.typesafe.ai/models), [Perplexity Decisions](https://docs.perplexity.ai/docs/decisions/quickstart#pricing), [Clef](https://developers.cloudflare.com/workers-ai/models/clef/), [Clef Flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/), [Cloudflare Jev](https://developers.cloudflare.com/ai/models/typesafe/jev/). Aliases can move and public prices can change; explicit overrides take precedence. Perplexity's [model names](https://docs.perplexity.ai/docs/decisions/quickstart#model-names) documentation maps the older v1/v1.1 IDs in the discovery catalog to v1.2 and bills them at its rate. New text model IDs may already be selected through settings, but this cost feature does not change image capability declarations.
+Sources: [OpenAI Decisions pricing](https://developers.openai.com/api/docs/guides/decisions#pricing-and-availability), [OpenAI rates](https://developers.openai.com/api/docs/pricing), [TypeSafe models](https://docs.typesafe.ai/models), [Perplexity Decisions](https://docs.perplexity.ai/docs/decisions/quickstart#pricing), [Perplexity changelog](https://docs.perplexity.ai/docs/resources/changelog), [Clef](https://developers.cloudflare.com/workers-ai/models/clef/), [Clef Flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/), [Clef-omni](https://developers.cloudflare.com/workers-ai/models/clef-omni/), [Clairic](https://developers.cloudflare.com/workers-ai/models/clairic/), [Cloudflare Jev](https://developers.cloudflare.com/ai/models/typesafe/jev/), [Liquid d1.2](https://docs.liquid.ai/lfm/models/d1). Aliases can move and public prices can change; explicit overrides take precedence. Perplexity's `pplx-decider-latest` now selects v1.3 and `pplx-decider-flash-latest` selects Flash v1.3; revalidate thresholds tuned on earlier models. Its [model names](https://docs.perplexity.ai/docs/decisions/quickstart#model-names) documentation maps the older v1/v1.1 IDs in the discovery catalog to v1.2 and bills them at its rate. New text model IDs may already be selected through settings, but this cost feature does not change image capability declarations.
 
 When reported, cache reads and writes are exposed as `usage.cachedInputTokens` and `usage.cacheWriteTokens`. They are **included** in input tokens, not additional tokens. Input cost is `(ordinary input × input rate + cache reads × cached-input rate + cache writes × cache-write rate) / 1,000,000`; output cost uses its separate rate. OpenAI's bundled cached-input rate is $0.01/M and default 30-minute write rate is $0.125/M, with all input rates doubled above 272,000 input tokens. Cloudflare Jev's bundled cached-input rate is zero. Unexpected 12-hour writes are unavailable rather than priced as 30-minute writes.
 
@@ -280,9 +287,11 @@ The artificial **64-choice cap has been removed** from both runtime validation a
 | --- | --- | --- |
 | TypeSafe Jev | Up to 255 | [Choice docs](https://docs.typesafe.ai/primitives/choice); current Jev service documentation |
 | OpenAI Decisions `gpt-6-luna` | 2–255 | [API reference](https://developers.openai.com/api/reference/resources/decisions/methods/create), confirmed from official indexed search results; direct reference fetch returned 404 during this investigation |
-| Perplexity `pplx-decider-v1.2`, Flash v1.2 and documented aliases (including catalog v1/v1.1 IDs) | 1–255 | [Request limits](https://docs.perplexity.ai/docs/decisions/quickstart#request-limits) and [model names](https://docs.perplexity.ai/docs/decisions/quickstart#model-names) |
+| Perplexity v1.3, Flash v1.3, v1.2, Flash v1.2 and documented aliases (including catalog v1/v1.1 IDs) | 1–255 | [Request limits](https://docs.perplexity.ai/docs/decisions/quickstart#request-limits) and [model names](https://docs.perplexity.ai/docs/decisions/quickstart#model-names) |
 | Cloudflare Clef | 2–255 | [Official input schema](https://developers.cloudflare.com/workers-ai/models/clef/schema-input.json) |
 | Cloudflare Clef Flash | 2–255 | [Official input schema](https://developers.cloudflare.com/workers-ai/models/clef-flash/schema-input.json) |
+| Cloudflare Clef-omni | 2–255 | [Official input schema](https://developers.cloudflare.com/workers-ai/models/clef-omni/schema-input.json) |
+| Liquid `d1.2`, `d1.2-ultra` | 2–255 | [Liquid Decisions reference](https://docs.liquid.ai/api/reference/decision-models/make-decisions) |
 | Cloudflare-hosted Jev | Not independently verified | Do not assume direct-TypeSafe limits apply to every gateway |
 | Microsoft Decision-1 | Not specified in the fetched guide | [Foundry guide](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision) |
 | OpenRouter-hosted Jev / custom routes | Endpoint-dependent; not verified | Requires the selected gateway/model's contract |
@@ -312,11 +321,100 @@ With only `none_of_above_choice` enabled, the extension adds a collision-safe in
 
 With both flags enabled, the extension walks the choices in their JavaScript/JSON object enumeration order, sending at most `maxChoices - 1` real choices plus NONE per batch. On a 255-option model this is **254 + 1**. A question advances only if NONE's probability is **strictly greater than every real option's probability**, not merely because the provider picked NONE and not necessarily greater than 50%. A unique real winner ends that question. An exact tie for top probability returns `{ "type": "ambiguous" }`. If all batches reject, the answer is `{ "type": "no_match" }`. Typed refusals stop that question without advancing.
 
+With Perplexity web grounding, evidence from each completed batch is retained in call order under `webGrounding.searchResults`, and a grounded `locate.searchResult` index refers to that combined array rather than to a single batch. Fetched results are retained the same way.
+
 Batching is **sequential first-match selection**, not a global best-choice guarantee. An early acceptable result can hide a better later option, and NONE itself can be unreliable. Returned choice probabilities cover only the winning batch's real options, with `probabilityScope: "batch"` and a separate `noneOfAboveProbability`; those real probabilities plus NONE sum to approximately one. Unseen options are not assigned fabricated zeros. The internal NONE label is never returned as the selected real choice. Ordinary calls without these flags retain their previous answer shapes.
 
 Multiple choice questions progress independently in shared rounds; settled questions and bool/score/box questions are not resent. Images are prepared once per selected route and included in the required requests. Each request may be billed. Usage and estimated cost cover all completed calls in a successful result, with `providerCalls` for transparency. A multi-call result omits a single `requestId` because no one ID represents every request. If a later request fails after partial completion, the operation may have incurred charges; HTTP 401/404/429 after completed batches does not replay the operation on a fallback route.
 
 For an endpoint without a known limit, automatic batching fails before any request until you set its verified `providers.<id>.maxChoices` or `customProviders.<id>.maxChoices`. This setting does not remove context-window, input-byte, image, output-size, timeout or cancellation protections. The 2 MiB original text/questions limit and 40 KiB returned-result limit remain in place. No automatic tree construction, retrieval, hidden model switching or cross-batch probability normalization is performed.
+
+## Perplexity `locate` and web grounding
+
+Perplexity v1.3 adds a `locate` question that returns verbatim text spans with Unicode-character offsets. It requires a string `state`, no images, and `pplx-decider-v1.3`, `pplx-decider-flash-v1.3`, or the matching `-latest` alias. Other routes reject it locally.
+
+```js
+classify({
+  state: "AeroPress arrived broken; email help@brewco.example.",
+  questions: {
+    products: { type: "locate", instructions: "Every product name mentioned" },
+  },
+});
+```
+
+Each answer has `{ type: "locate", spans: [{ start, end, text, score, searchResult? }] }`. `end` is exclusive. The package checks each span against the original state or, when `searchResult` is present, against that search result's snippet. No span is fabricated when nothing matches.
+
+Set `mode: "web_grounding"` only when the answer should use public web evidence. Perplexity sends one search query per question containing the question text and the start of `state`, then adds the results to the model's input. A URL-only string `state` is fetched before searching. `maxStaleness` is an optional non-negative age in seconds for that fetched copy.
+
+```js
+classify({
+  mode: "web_grounding",
+  maxStaleness: 86400,
+  state: "Claim: the telescope launched in December 2021.",
+  questions: { supported: { type: "bool", instructions: "Is the claim supported?" } },
+});
+```
+
+The result adds `webGrounding.searchResults` (and `webGrounding.fetchedResults` when a page was fetched). `cost.nonToken.webGrounding` reports the documented maximum search fee from one search per question and the exact successful-fetch fee. Perplexity does not report the number of searches actually billed, so the search amount is an upper bound: duplicate queries may share a search and failed searches are not billed. Fetched text and search evidence are already included in `usage.input_tokens`. Grounded requests are limited to 100 questions by the provider; the common 32-question package limit still applies.
+
+Grounded `locate` requires ordinary text state, not a URL-only state. A span found in search evidence has `searchResult`, and its offsets refer to that result's snippet.
+
+## Liquid d1.2 typed reads and media
+
+`liquid-api` uses `POST https://api.liquid.ai/decisions/v1/systemone` with `LIQUID_API_KEY`. It supports bool, choice, score, box, and d1.2's typed reads and estimates. Values are read, not converted: a number answer keeps the printed `text`, `unit`, `span` and `found` probability when the provider reports them. Spans count Unicode code points; JSON object positions use the provider's two-space-indented rendering.
+
+```js
+classify({
+  state: "Invoice total: 1234.50 EUR, due 03/04/2026.",
+  questions: {
+    total: { type: "number", instructions: "Invoice total", unit: "EUR" },
+    due: { type: "date", instructions: "Payment due date" },
+    people: { type: "estimate", instructions: "How many people attended?", range: [0, 60], step: 1, unit: "people" },
+    topics: { type: "multi_choice", instructions: "Which topics apply?", criteria: { billing: "Charges", delivery: "Shipping" } },
+  },
+});
+```
+
+`text` returns a typed value. `number` and `date` preserve a present-but-unparseable value as `value: null` or `date: null`, together with the provider's `found`, `text` and `span` metadata; this is different from a field that was not found at all. `spans` and `boxes` return provider slot semantics: `presence` gives each slot's probability, `spans`/`boxes` retain slots at or above 0.5, and `atLeast: true` means more matches may exist. `estimate` returns `{ value, interval, unit? }`; request ranges and returned intervals may be negative or fractional. Multi-select answers use `choices` plus independent per-label probabilities that do **not** sum to one.
+
+Liquid images are top-level `{ content_type, base64 }` entries, not Jev assets. The package validates local PNG/JPEG/WebP files and allows eight images, each within 10,000 32×32 patches and a 100:1 aspect ratio. Audio is sent in a top-level `audio` array as WAV, MP3, FLAC or OGG; up to eight clips and 300 seconds total are documented by Liquid. Video is not documented for Liquid and is rejected locally. Codec compatibility and clip duration remain provider-owned; the package validates container bytes and transport size, not decoded audio length.
+
+## Clef-omni media
+
+`@cf/cloudflare/clef-omni` uses Clef's Workers AI body shape with `model: "clef-omni"` and the same noul/choice/score answers. It adds top-level `audio` and `videos` arrays beside `images`:
+
+```js
+classify({
+  state: "Describe the reported problem.",
+  questions: { urgent: { type: "bool", instructions: "Needs urgent intervention?" } },
+  media: [
+    { type: "audio", path: "call.mp3" },
+    { type: "video", path: "demo.mp4" },
+  ],
+});
+```
+
+Local audio may be WAV, MP3, FLAC or OGG; local video may be MP4 or WebM. Container bytes must match. The documented provider maxima are four audio clips of 8 MiB and 300 seconds each, and two videos of 16 MiB and 60 seconds each with at most 16 MiB combined audio/video. Existing package request and image limits still apply. Duration and codec compatibility are enforced by the provider, not by the package. Media on other Cloudflare models is rejected locally instead of being silently dropped.
+
+## Cloudflare Clairic extraction
+
+Use **`classify_extract`** for structured extraction. It selects the configured `clairic-api` route and sends `fields`, not classifier questions. The library exports `extract(params, { settings, cwd, signal? })`.
+
+```js
+classify_extract({
+  state: "Invoice INV-2291, issued 2026-09-02, net 30.",
+  fields: {
+    invoice_number: { type: "text" },
+    due_date: { type: "date", instructions: "Issue date plus payment days" },
+    days_to_pay: { type: "estimate", min: 0, max: 120, step: 1 },
+  },
+  referenceDate: "2026-11-20",
+});
+```
+
+Clairic field types are `text`, `number`, `compute`, `date`, `time`, `datetime`, `duration`, `boolean`, `enum`, `object`, `list`, `estimate` and `forecast`. The tool validates names and documented field keys, including nested `properties` and `items`. Each result answer contains the provider's `type`, `value`, and any documented metadata it returned, such as `span`, `confidence`, `source`, `mean` or `quantiles`. `truncated: true` means generated fields were incomplete or invalid; do not treat that output as complete.
+
+Caller options use `includeQuantiles` and `returnStateText`; the adapter sends the provider's `include_quantiles` and `return_state_text` wire keys. Images and embedded PDF paths are supported with local files. Clairic accepts PNG/JPEG/WebP images and PDF documents as data URLs or base64 objects; the package sends base64 objects and allows at most four rendered images/PDF pages combined, 4 MiB per file and 8 MiB combined decoded media. Remote URLs and encrypted PDFs are rejected. Exact PDF page rendering and character-offset units remain provider-owned. Current pricing is $0.10 per million input tokens until 2026-12-01 and $0.24 afterward; output generation is not charged separately. Configure an explicit `pricing` override if your account has different rates.
 
 ## Microsoft Decision-1 on Foundry
 
@@ -425,6 +523,7 @@ Declare these images in the surrounding request's `images` list. The same conten
 | Images in question instructions | Yes, opt-in | Yes | No | No |
 | Images in criteria | Yes, opt-in | No | No | No |
 | Named hosted URL descriptors | No | Yes | No | No |
+| Top-level image/audio media | No | No | No | Clef-omni audio/video and Liquid images/audio use provider-specific base64 objects |
 
 For OpenAI, replace a named local descriptor with `{"id":"target","url":"https://example.com/reference.jpg"}` and reference it in state or instructions. Nested JSON state is represented as text fragments interleaved with the referenced images; it is not an upstream JSON object containing embedded native parts. Unsupported placements fail locally before a request, including on fallback and comparison routes. No image is silently dropped or moved.
 
@@ -446,11 +545,11 @@ The default `overlay` mode draws the box. Set `mode: "crop"` to extract its regi
 
 The library exports `renderClassifierBox(params, { cwd, signal? })`, which returns PNG base64 data, MIME type, dimensions, pixel box and mode. Saving the result is the caller's responsibility. A box is not proof that an object exists; check existence separately.
 
-Video descriptions in Cloudflare's model pages do not establish a hosted video API contract. Video, segmentation masks, multi-object box lists, image generation/editing and gateway image parity are not implemented.
+Clef-omni's official input schema establishes the hosted video contract used here. Video is rejected on other Cloudflare models and gateways. Segmentation masks, image generation/editing and gateway image parity are not implemented; Liquid `boxes` and Clairic documents have provider-specific contracts described above.
 
 ## Custom providers
 
-Like image-gen, `customProviders` adds a named endpoint and explicit model list. Supported protocols are `openai-decisions`, `perplexity-decisions`, `system-one`, `cloudflare-system-one`, and `microsoft-system-one` (Foundry resource root and API-key authentication). A custom URL cannot make an arbitrary API compatible. Custom IDs must not shadow built-in provider/route IDs.
+Like image-gen, `customProviders` adds a named endpoint and explicit model list. Supported protocols are `openai-decisions`, `perplexity-decisions`, `system-one`, `liquid-system-one`, `cloudflare-system-one`, `cloudflare-clairic`, and `microsoft-system-one` (Foundry resource root and API-key authentication). A custom URL cannot make an arbitrary API compatible. Custom IDs must not shadow built-in provider/route IDs.
 
 ```json
 {
@@ -473,7 +572,7 @@ Custom endpoints use their route ID as the Pi stored-credential provider ID. The
 
 ## Native Durable entrypoint (`/durable`)
 
-`@abhishek944/pi-classifier/durable` exposes `createClassifierExtension(settings, options?)`, a settings-only native Durable extension named `classifier` with `classify`, `classify_compare`, `classify_tree`, and `classifier_box_image`. Tool names, descriptions, and parameter/result schemas are shared with the desktop extension through `src/tool-contracts.ts`, so the two surfaces cannot drift. Desktop-only registration fields (labels, prompt guidance, annotations) stay with the desktop extension.
+`@abhishek944/pi-classifier/durable` exposes `createClassifierExtension(settings, options?)`, a settings-only native Durable extension named `classifier` with `classify`, `classify_compare`, `classify_tree`, `classify_extract`, and `classifier_box_image`. Tool names, descriptions, and parameter/result schemas are shared with the desktop extension through `src/tool-contracts.ts`, so the two surfaces cannot drift. Desktop-only registration fields (labels, prompt guidance, annotations) stay with the desktop extension.
 
 ```js
 import { createClassifierExtension } from "@abhishek944/pi-classifier/durable";
@@ -492,6 +591,30 @@ Credentials must be explicit: `providers.<id>.apiKey` (plus `providers.cloudflar
 ## Goal-running computer use (OpenAI Decisions)
 
 The optional `classifier_computer_use` tool runs a bounded Cua Driver loop inside Pi, selecting only supervisor-permitted controls and returning explicit handoff/continuation when help is needed. It has a separate opt-in OpenAI route, preserves the normal classifier default, accepts transient Driver screenshots without disk files, and verifies completion through fresh Driver predicates. See [COMPUTER_USE.md](COMPUTER_USE.md) for setup, real input/output examples, safety limits, supervisor resumption and verification.
+
+## Use from other agents (MCP)
+
+The package includes an independent stdio MCP server. It exposes `classify`, `classify_compare`, `classify_tree`, `classify_extract`, and `classifier_box_image`. Pi-only `classifier_computer_use` is not exposed because it needs Pi's Driver tool loop. Tool names, descriptions, and parameter schemas come from the package-owned tool contracts; there is no gateway and no hosted HTTP endpoint.
+
+Add it as one MCP server, separate from any image-gen or web server:
+
+```json
+{
+  "mcpServers": {
+    "pi-classifier": {
+      "command": "npx",
+      "args": ["-y", "-p", "@abhishek944/pi-classifier", "pi-classifier-mcp"],
+      "cwd": "/work/session"
+    }
+  }
+}
+```
+
+If the package is installed, `pi mcp add pi-classifier -- pi-classifier-mcp` uses the installed bin instead. The CLI uses stdio only: stdout carries JSON-RPC and diagnostics go to stderr. It does not listen on a port or expose an HTTP path. `cwd` is optional and sets the directory for relative local images, media, and tree-file paths; without it, the MCP child inherits the client session directory. Global and agent settings are read at startup; project settings are not loaded. Restart the server after changing settings.
+
+The standalone server uses explicit provider credentials by default (environment variables or configured `providers.<id>.apiKey`). It does not silently use Pi chat login. An embedding host can opt into stored Pi credentials through `createClassifierMcpServer({ credentialSource: "pi-store" })`. `@abhishek944/pi-classifier/mcp` also exports the MCP tool definitions.
+
+Classification and comparison calls send supplied state to the configured provider and may incur charges. Only send data the caller intends to share.
 
 ## Development and live verification
 
@@ -514,6 +637,9 @@ No provider calls are made by these commands. Live tests belong to the user:
 9. On Jev, enable the image/box flags and try the named scene/reference example above. Compare visual choice/score criteria, then a box plus a separate existence question. Verify repeated references and choice batching do not leave unreferenced assets. Try a 279-pixel side and confirm local rejection.
 10. On OpenAI, try one shared named local image plus a question-specific local image, then replace the latter with a public HTTPS descriptor. Confirm references stay in their intended placements. On Perplexity, try named state references and eight small images; instruction/criterion images should fail locally.
 11. Invoke `classifier_box_image` with the exact local scene and a returned box in both overlay and crop modes. Confirm pixel bounds and orientation visually, no files are written, invalid/reversed edges are rejected, and cancellation interrupts processing. Check EXIF-oriented photos carefully: no automatic rotation is applied.
+12. On Perplexity v1.3, verify locate spans against the original text, then run a small web-grounded bool and inspect `search_results`, `fetched_results` and the non-token fee accounting. Do not enable grounding for sensitive state.
+13. On Liquid d1.2, verify a typed read, a ranged estimate, a multi-select choice, one image and one audio clip. Confirm that unparseable values become `no_match` rather than converted guesses.
+14. On Clef-omni, verify text, one image, one audio clip and one video in one request, then confirm unsupported media on Clef Flash fails locally. On Clairic, verify a field contract with grounding metadata and `truncated` reporting.
 
 Provider schemas and previews can change; no live entitlement or model-accuracy claim is made by a local build.
 

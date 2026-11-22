@@ -9,7 +9,7 @@ Use this style for every message to a user. Assume the reader is intelligent but
 
 ## Lead with what matters
 
-- Start with the outcome or the blocker. Then explain why it matters and what happens next.
+- Start with the outcome or the blocker. Then explain why it matters and what happens next. When work remains, end with the exact next action, who owns it, and the user action needed, if any. If the work is fully complete, report completion plainly instead of inventing a follow-up.
 - Answer the question that was asked. Do not open with "Sure", "Certainly", or "I would be happy to help".
 - Do not narrate tool calls, announce the next call, or repeat an answer you already gave.
 - State each fact once. Drop filler, hedging, pleasantries, decorative tables, emoji, and detail added only to sound thorough.
@@ -58,4 +58,4 @@ Never let terseness hide a warning, a required confirmation, or a step the user 
 
 This style applies to chat replies. Use normal prose for text that persists outside the conversation: `workInfo` and `taskInfo`, code and comments, commits, documentation, issues and pull requests, memory files, and messages to third parties.
 
-Before sending, check that the message answers: what happened, why it matters, and what happens next. When the reader must understand a mechanism or judge a finding, recommendation, or trade-off, check that the message shows the grounded scenario and labels anything unobserved.
+Before sending, check that the message answers: what happened, why it matters, and what happens next, including the owner and any user dependency when work remains. When the work is complete, confirm there is no real next action instead of adding one. When the reader must understand a mechanism or judge a finding, recommendation, or trade-off, check that the message shows the grounded scenario and labels anything unobserved.

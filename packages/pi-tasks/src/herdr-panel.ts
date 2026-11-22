@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { app, hc, object, TERMINAL_ID } from "./agents/herdr.js";
@@ -65,6 +65,22 @@ export interface HerdrTasksPaneOptions {
   replaceStale?: boolean;
 }
 
+/**
+ * A pane's content copy cannot name its own pane: Herdr passes a pane header `{pane, terminal}`
+ * but a content mod only the props it was created with. The Tasks status filter is view state
+ * keyed by that pane id, so this opener, which knows both ids, publishes the hosting pane beside
+ * the session task file. The view reads it and stays unfiltered while it is absent.
+ */
+function tasksPaneFile(snapshot: string): string {
+  return snapshot.endsWith(".json") ? `${snapshot.slice(0, -5)}.pane` : `${snapshot}.pane`;
+}
+
+async function publishTasksPane(snapshot: string, pane: string): Promise<void> {
+  const path = tasksPaneFile(snapshot);
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${pane}\n`);
+}
+
 /** Show beside this terminal, or hide only its same-session Tasks mod panes. */
 export async function setHerdrTasksPaneVisible(ctx: ExtensionContext, visible: boolean, snapshot: string, openCommand: string[] = ["cursor"], options: HerdrTasksPaneOptions = {}): Promise<void> {
   if (visible && (typeof snapshot !== "string" || !isAbsolute(snapshot))) {
@@ -106,7 +122,10 @@ export async function setHerdrTasksPaneVisible(ctx: ExtensionContext, visible: b
           return;
         }
         if (existing.length) {
-          await app(["do", "pane.focus", JSON.stringify({ pane: existing[0]!.id })], ctx.cwd, ctx.signal);
+          const pane = existing[0]!;
+          if (typeof pane.id !== "string") throw new Error("The existing Tasks pane has no pane ID.");
+          await app(["do", "pane.focus", JSON.stringify({ pane: pane.id })], ctx.cwd, ctx.signal);
+          await publishTasksPane(snapshot, pane.id);
           return;
         }
         if (options.replaceStale) {
@@ -122,7 +141,7 @@ export async function setHerdrTasksPaneVisible(ctx: ExtensionContext, visible: b
         const activity = panes.find((pane) => matches(pane, "pi-loop-monitor"));
         await installBundledMod(appHome);
         await ensureHerdrTasksHeader(ctx, appHome);
-        const args = ["do", "pane.split", JSON.stringify({ pane: activity?.id ?? item.pane, direction: activity ? "down" : "right", mod: "pi-tasks", props: { sessionId: ctx.sessionManager.getSessionId(), snapshot, terminal, openCommand } })];
+        const args = ["do", "pane.split", JSON.stringify({ pane: activity?.id ?? item.pane, direction: activity ? "down" : "right", mod: "pi-tasks", props: { sessionId: ctx.sessionManager.getSessionId(), snapshot, terminal, openCommand, paneFile: tasksPaneFile(snapshot) } })];
         let result: Record<string, unknown>;
         try { result = await app(args, ctx.cwd, ctx.signal); }
         catch (error) {
@@ -135,6 +154,7 @@ export async function setHerdrTasksPaneVisible(ctx: ExtensionContext, visible: b
           result = await app(args, ctx.cwd, ctx.signal);
         }
         if (typeof result.pane !== "string") throw new Error("Herdr did not return a Tasks pane ID.");
+        await publishTasksPane(snapshot, result.pane);
         return;
       }
     }

@@ -1,12 +1,18 @@
 ---
 name: ui-copy
-description: "Write and review interface text in a product UI: remove filler, redundant hints and restated labels while keeping required warnings, error text, labels and accessibility instructions intact. Use when adding, reviewing or trimming microcopy, helper text, hint text, empty states, tooltips, toasts, dialog bodies, menu captions or settings descriptions."
+description: "Write, change, review, or remove user-facing text in a product UI. Use before writing any string rendered in a product UI, including incidental copy added during coding changes and changes to labels, metric labels, helper or coverage explanations, hints, empty states, buttons, tooltips, toasts, dialogs, menus, settings descriptions, errors, and accessibility text. Remove filler, redundant hints and restated labels while keeping required warnings, error text, labels and accessibility instructions intact. Not for chat replies (talk-human), documentation, release notes, or marketing pages."
 ---
 
 # Interface copy
 
-Use this for text inside a product UI. It is not a style guide for chat replies
-(that is `talk-human`), and not for documentation, release notes or marketing pages.
+Use this before writing, changing, reviewing, or removing any text rendered in a
+product UI. A coding task that adds or edits a user-visible string is enough; do
+not wait for a copy-specific request. This includes labels, metric labels, helper
+or coverage explanations, hints, empty states, buttons, tooltips, toasts, dialog
+bodies, menu captions, settings descriptions, errors, and accessibility text.
+
+This is not a style guide for chat replies (that is `talk-human`), and not for
+documentation, release notes or marketing pages.
 
 The rule is easy to state and easy to get wrong:
 

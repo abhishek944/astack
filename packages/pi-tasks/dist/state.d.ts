@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { type TaskDependency } from "./dependency.js";
 import type { DelegatedTime, Todo, TodoStatus, Work, WorkWithTodos } from "./types.js";
 /** Legacy session entries are read once for migration, never written again. */
 export declare const TASK_ENTRY_TYPE = "pi-tasks-state";
@@ -37,8 +38,9 @@ export declare class TaskState {
         status?: TodoStatus;
         completionPercent?: number | null;
         blockedReason?: string | null;
+        dependentOn?: TaskDependency | null;
     }): Todo;
-    updateTodo(taskId: string, patch: Partial<Pick<Todo, "taskName" | "taskInfo" | "finalThoughts" | "status" | "blockedReason" | "completionPercent">> & {
+    updateTodo(taskId: string, patch: Partial<Pick<Todo, "taskName" | "taskInfo" | "finalThoughts" | "status" | "blockedReason" | "dependentOn" | "completionPercent">> & {
         working?: boolean;
     }): Todo;
     setDelegatedTime(taskId: string, source: DelegatedTime): void;

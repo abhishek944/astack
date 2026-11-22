@@ -1,0 +1,154 @@
+{
+  "version": 2,
+  "sessionId": "01a1afcd-1f6e-766b-9c90-76e9eacb97e1",
+  "cwd": "/Users/abhishektatikella/Documents/astack",
+  "storageDir": "/Users/abhishektatikella/Documents/astack/.pi/decisions/01a1afcd-1f6e-766b-9c90-76e9eacb97e1",
+  "questionId": "scheduler-form-01a1afcd-B2",
+  "revision": "ba6aca39d6a13d86f6667b9545d08aa0dd36da0f5d7e503ca944e90de9e379ae",
+  "backend": "local",
+  "question": {
+    "questionId": "scheduler-form-01a1afcd-B2",
+    "mode": "single",
+    "question": "Which revised layout works best with Workspace as a dropdown and Enabled last?",
+    "content": [
+      {
+        "type": "text",
+        "text": "Both changes are now fixed: Workspace is a dropdown, and Enabled is the final standalone setting. B is still my recommendation because its quiet sections keep every setting visible without adding card navigation. F makes Enabled a separate fifth point if you prefer the numbered guide."
+      },
+      {
+        "type": "text",
+        "text": "A remains the actual current capture for reference. B–F are revised at the same 368 × 964 panel size. All previous header/footer and real configured-model requirements remain unchanged. No layout was accepted from the earlier comments-only response."
+      }
+    ],
+    "options": [
+      {
+        "id": "A",
+        "label": "A · Existing flat structure",
+        "content": [
+          {
+            "type": "text",
+            "text": "Actual current baseline. Choosing this retains the flat organization but still applies your dropdown, final Enabled, header, and footer requirements."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B2-A.png",
+            "alt": "Actual current native panel, retained as the flat-structure reference"
+          }
+        ]
+      },
+      {
+        "id": "B",
+        "label": "B · Quiet sections — recommended",
+        "content": [
+          {
+            "type": "text",
+            "text": "Task, Location, Schedule, Runner, then a separate Enabled row. Clear grouping with minimal visual weight."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B2-B.png",
+            "alt": "Quiet sections with Workspace dropdown and separate final Enabled setting"
+          }
+        ]
+      },
+      {
+        "id": "C",
+        "label": "C · Compact label rows",
+        "content": [
+          {
+            "type": "text",
+            "text": "Dense settings rows, full-width dropdowns, and Enabled isolated at the end. Compact, but long text has less room."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B2-C.png",
+            "alt": "Compact label rows with Workspace dropdown and final separate Enabled row"
+          }
+        ]
+      },
+      {
+        "id": "D",
+        "label": "D · Expandable group cards",
+        "content": [
+          {
+            "type": "text",
+            "text": "Four expandable groups followed by a separate Enabled card. Strong boundaries, with more borders and interaction."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B2-D.png",
+            "alt": "Expanded group cards with Workspace dropdown and final independent Enabled card"
+          }
+        ]
+      },
+      {
+        "id": "E",
+        "label": "E · Task recipe",
+        "content": [
+          {
+            "type": "text",
+            "text": "Run, In, Every, Using cards, with Enabled outside the recipe at the end. Conversational, but less like native settings."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B2-E.png",
+            "alt": "Task recipe cards with Workspace dropdown and standalone final Enabled row"
+          }
+        ]
+      },
+      {
+        "id": "F",
+        "label": "F · Five-point planning rail",
+        "content": [
+          {
+            "type": "text",
+            "text": "Describe, environment, rhythm, runner, then Enable the task as point five. Clear progression without separate pages."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B2-F.png",
+            "alt": "Numbered five-point planning rail with Workspace dropdown and Enabled in its own last point"
+          }
+        ]
+      }
+    ],
+    "label": "Schedulers · Level 1 · Revised organization",
+    "recommended": "B"
+  },
+  "responsePath": "/Users/abhishektatikella/Documents/astack/.pi/decisions/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/scheduler-form-01a1afcd-B2/response.json",
+  "statePath": "/Users/abhishektatikella/Documents/astack/.pi/decisions/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/scheduler-form-01a1afcd-B2/state.json",
+  "bundleDir": "/Users/abhishektatikella/Documents/astack/.pi/decisions/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/scheduler-form-01a1afcd-B2/public",
+  "files": [
+    {
+      "path": "index.html",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "path": "assets/0484326f8357c4bda8205868fb2c50c6ca82c5784e8f7db64093e1ae91ebe7a8.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "assets/8682c0b7b6fc15ecff0c055f536bce583478c9ec437fbc94a0b1b1b4a369b25f.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "assets/7bde4a5ed87909fa863393305f688420477ce47726cb23c8aceb3616888c8a7a.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "assets/f55810cbe28f98f4d64c342afa242032d03bf94b525dd7817dd2ac437aa7a3a4.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "assets/ef7f1f35ebe66daea3a04508cff54e563123ba477ecfcfa7884d7ba3b1699904.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "assets/46a56e4b646e0f9b86bf11d2cbbe6ae12a2e9350b86f881a59b27e39bbe19ac8.png",
+      "contentType": "image/png"
+    }
+  ],
+  "status": "ready",
+  "capability": "BLd9WA2KiIwLSvgWLJCeGi2NFMJDQJe7plES8Qm46zo",
+  "url": "http://127.0.0.1:64236/"
+}

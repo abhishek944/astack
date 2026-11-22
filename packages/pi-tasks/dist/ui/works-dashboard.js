@@ -1,6 +1,7 @@
 import { copyToClipboard } from "@earendil-works/pi-coding-agent";
 import { matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi, } from "@earendil-works/pi-tui";
 import { delegateLink, focusTerminal } from "../agents/links.js";
+import { dependentOnLabel } from "../dependency.js";
 import { formatWorksMarkdown } from "../markdown.js";
 import { openRepository } from "../open-repository.js";
 import { formatCompletion, taskCompletion, workCompletion } from "../progress.js";
@@ -340,7 +341,8 @@ export class WorksDashboard {
             lines.push(...wrap(`${formatCompletion(workCompletion(item.work))} complete · Time (task effort): ${formatTime(workTime(item.work))}`), "");
         }
         if (task) {
-            lines.push(this.theme.fg("accent", this.theme.bold("Final thoughts")));
+            const dependency = dependentOnLabel(task.dependentOn);
+            lines.push(this.theme.fg("accent", this.theme.bold(dependency === undefined ? "Final thoughts" : `Final thoughts · Dependent on: ${dependency}`)));
             const thoughts = finalThoughtsFor(task) ?? "No final thoughts recorded.";
             const color = task.status === "blocked" ? "warning" : "muted";
             lines.push(...safeMultiline(thoughts).flatMap(wrap).map((line) => this.theme.fg(color, line)));

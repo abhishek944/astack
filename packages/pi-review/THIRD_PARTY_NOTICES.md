@@ -1,6 +1,6 @@
 # Third-party notices
 
-This package's original packaging, documentation and the `agent-review`, `no-unit-tests`, `no-arbitrary-limits`, `ui-ux-testing` and `ui-ux-followthrough` skills use the root [MIT License](LICENSE). Redistributed material retains the following upstream terms.
+This package's original packaging, documentation and the `agent-review`, `no-unit-tests`, `no-arbitrary-limits` and `ui-ux-testing` skills use the root [MIT License](LICENSE). Redistributed material retains the following upstream terms.
 
 ## awesome-logging-standards
 

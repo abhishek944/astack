@@ -1,15 +1,15 @@
 {
   "snapshot": "2026-11-17",
-  "skills": 10,
+  "skills": 11,
   "files": [
     {
       "path": "skills/aside-browser/SKILL.md",
-      "sha256": "bba791c53181d11d8ca265510146b43fc24556e68f91a0df0134ef260d74d7a4",
+      "sha256": "ae57cd7178e845fbaf1d4e54d900c936099d365e63a95afcc3f77792fc084040",
       "executable": false
     },
     {
       "path": "skills/browser-use/SKILL.md",
-      "sha256": "effb775a77a76b0614204099e6cb6883ac1fe9057a7e054595a1a1522e023ab0",
+      "sha256": "ef1386cda8c29df45ab782a6e0049c62d0c4374e785e9321e4e76ae6894e1ab0",
       "executable": false
     },
     {
@@ -29,7 +29,12 @@
     },
     {
       "path": "skills/implement/SKILL.md",
-      "sha256": "a4b576ea7a957708745aeba84eeeebe906a5e291d17e952e3c1e011ed0cad5f7",
+      "sha256": "64e34b773bc64084022c9eba2a0a0cbbf838c83d5dbed8265c7a8cf372e5c5fe",
+      "executable": false
+    },
+    {
+      "path": "skills/page-performance/SKILL.md",
+      "sha256": "139eda2e4492e219b1d3ed1970b79a1e7a4952d00ee6cae4910ec35933682d85",
       "executable": false
     },
     {
@@ -39,7 +44,7 @@
     },
     {
       "path": "skills/talk-human/SKILL.md",
-      "sha256": "fe7b08b650043c4b9e35f58c43cd5eedba596daa1ce3acb2ee24647e7a77da4b",
+      "sha256": "4fa2b943b94c96254b8d7eb4cebbebf8210f9e529e52d6d74d88235335203757",
       "executable": false
     },
     {
@@ -69,7 +74,7 @@
     },
     {
       "path": "skills/ui-copy/SKILL.md",
-      "sha256": "0518c99231a9b4b7fd858de2ff4295df2456cfd87e03a4a50b8a0e3355ab4408",
+      "sha256": "280611d804df969c86d1128d4942660c7a1c17b6d5836f14d41b5fa9196aa8d7",
       "executable": false
     }
   ]

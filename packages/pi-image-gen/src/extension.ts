@@ -34,6 +34,7 @@ import { formatAccounting } from './format-accounting.js';
 import { MAX_GENERATED_IMAGES, MAX_REFERENCE_IMAGE_INPUTS } from './image-input.js';
 import { buildImagePreviews } from './image-preview.js';
 import { discoverOpenRouterCapabilities } from './openrouter-discovery.js';
+import { DEFAULT_IMAGE_OUTPUT_DIR } from './output-defaults.js';
 import { canUseMetaOAuth } from './providers/meta.js';
 import { SettingsWriteError, updateProjectImageGenSettings } from './settings-write.js';
 import { migrateImageGenSettings, type MigrationScope } from './settings-migrate.js';
@@ -60,6 +61,8 @@ export { generateImage } from './generate.js';
 export type { GenerateImageParams, ImageGenSettings } from './types.js';
 export { runSpritePipeline } from './sprite/pipeline.js';
 export { normalizeSpriteSettings } from './sprite/settings.js';
+export { buildSpriteToolParameters } from './sprite/schema.js';
+export { formatSpriteToolResult } from './sprite/format.js';
 export type { SpriteGenerateParams, SpriteGenerateResult, SpriteGenerationSettings, SpriteValidationIssue } from './sprite/types.js';
 
 const SPRITE_TOOL = 'sprite_generate';
@@ -526,7 +529,7 @@ export default function piImageGenExtension(pi: ExtensionAPI): void {
       const defaultProblem = resolvedDefault && 'error' in resolvedDefault ? resolvedDefault.error : undefined;
       const sprite = normalizeSpriteSettings(settings.spriteGeneration);
       const lines = [
-        `Output directory: ${typeof settings.outputDir === 'string' && settings.outputDir.trim() ? settings.outputDir : '.pi/images'}`,
+        `Output directory: ${typeof settings.outputDir === 'string' && settings.outputDir.trim() ? settings.outputDir : DEFAULT_IMAGE_OUTPUT_DIR}`,
         `Sprite generation: ${sprite.enabled ? `enabled (${sprite.defaultRows}x${sprite.defaultColumns}, ${sprite.defaultFormat.toUpperCase()}, ${sprite.frameDurationMs} ms, ${sprite.strictValidation ? 'strict QC' : 'advisory QC'})` : 'disabled'}`,
         ...(sprite.enabled ? [`Sprite output directory: ${sprite.outputDir}`] : []),
         `Config schema: ${settings.version ?? 'legacy/unversioned'} (current: ${IMAGE_CONFIG_VERSION})`,
@@ -550,7 +553,10 @@ export default function piImageGenExtension(pi: ExtensionAPI): void {
         ...routes.flatMap((route) => [
           `  ${route.label} (${route.id}) [${route.configured ? 'configured' : 'not configured'}]`,
           ...(route.modelIds.length > 0
-            ? route.modelIds.map((model) => `    - ${model}`)
+            ? route.modelIds.map((model) => {
+                const lifecycle = route.modelLifecycle?.[model];
+                return `    - ${model}${lifecycle ? ` (${lifecycle})` : ''}`;
+              })
             : route.acceptsAnyModel
               ? ['    - <model-id> (pass-through; provider catalog is not fixed)']
               : ['    - (no models declared)']),
@@ -644,7 +650,7 @@ export async function diagnoseImageGen(
       lines.push(route ? `OK: custom provider ${id} is valid.` : `ERROR: custom provider ${id} is malformed or uses a reserved id.`);
     }
   }
-  const configured = typeof settings.outputDir === 'string' && settings.outputDir.trim() ? settings.outputDir : '.pi/images';
+  const configured = typeof settings.outputDir === 'string' && settings.outputDir.trim() ? settings.outputDir : DEFAULT_IMAGE_OUTPUT_DIR;
   const output = isAbsolute(configured) ? configured : resolve(cwd, configured);
   let probe = output;
   while (true) {
@@ -813,9 +819,11 @@ export function resolveImageToolCapabilities(
         }
     : provider.api === 'mai'
       ? genericCapabilitiesForApi('mai')
-      : discovered
-        ? { ...genericCapabilitiesForApi('openrouter'), ...discovered }
-        : null;
+      : provider.api === 'openrouter'
+        ? { ...genericCapabilitiesForApi('openrouter'), ...(discovered ?? {}) }
+        : discovered
+          ? { ...genericCapabilitiesForApi('openrouter'), ...discovered }
+          : null;
   return {
     api: provider.api,
     quality,
@@ -844,7 +852,7 @@ export function sizeDescription(api: ApiStyle | null): string {
     return 'Image size such as "2048x2048". Seedream 5.0 / 5.0-lite / 4.5 require 2K or larger — "1024x1024" fails with InvalidParameter; only Seedream 4.0 accepts 1K sizes.';
   }
   if (api === 'mai') {
-    return 'Text-to-image size as "<width>x<height>" (e.g. "1024x1024"). MAI 2.5 allows up to 1,048,576 total pixels; MAI 2.6 allows up to 2,359,296. Azure deployment names do not identify the model version; the provider validates its limits.';
+    return 'Text-to-image size as "<width>x<height>" (e.g. "1024x1024"). Each dimension must be at least 768. MAI 2.5 allows up to 1,048,576 total pixels and MAI 2.6 up to 2,359,296; MAI 2.7 has no published local ceiling. Azure deployment names do not identify the model version; the provider validates its limits.';
   }
   if (api === 'meta') {
     return 'Image size passed to Meta\'s image_generation tool. Official cookbook examples include "1024x1024", "1536x1024", and "1024x1536"; the provider validates the complete supported set.';
@@ -957,10 +965,17 @@ export function buildImageToolParameters(caps: ImageToolCapabilities): TObject {
         }
       : {}),
     ...(model?.outputFormats?.length
-      ? { outputFormat: Type.Optional(StringEnum(model.outputFormats, { description: 'Output image encoding. gif and svg are generation-only.' })) }
+      ? { outputFormat: Type.Optional(StringEnum(model.outputFormats, { description: 'Output image encoding. GIF is generation-only; SVG editing and batch support are model-specific.' })) }
       : {}),
     ...(model?.backgroundValues?.length
       ? { background: Type.Optional(StringEnum(model.backgroundValues, { description: 'Background behavior. Transparent output requires a format that preserves alpha.' })) }
+      : {}),
+    ...(model?.responseFormats?.length
+      ? {
+          responseFormat: Type.Optional(StringEnum(model.responseFormats, {
+            description: 'b64_json returns inline image bytes; url returns a signed OpenRouter download link that expires and is reported as metadata.expiresAt.',
+          })),
+        }
       : {}),
     ...(model?.supportsOutputCompression
       ? { outputCompression: Type.Optional(Type.Integer({ minimum: 0, maximum: 100, description: 'JPEG/WebP compression level from 0 to 100. GIF and SVG output do not accept compression.' })) }
@@ -985,7 +1000,7 @@ export function buildImageToolParameters(caps: ImageToolCapabilities): TObject {
           })),
         }
       : {}),
-    ...(model?.outputFormats?.includes('svg')
+    ...(model?.supportsSvgAuthor
       ? {
           svgModel: Type.Optional(Type.String({
             description: 'Model that authors the SVG. Supply it when the account enables SVG model selection; omit it (and the effort) otherwise. The top-level model still renders the reference image.',
@@ -1010,14 +1025,95 @@ export function buildImageToolParameters(caps: ImageToolCapabilities): TObject {
     ...(model?.supportsPromptEnhance
       ? { promptEnhance: Type.Optional(Type.Boolean({ description: 'Allow provider-native prompt enhancement.' })) }
       : {}),
-    ...(model?.supportsThinking
+    ...(model?.supportsEnableThinking
       ? { enableThinking: Type.Optional(Type.Boolean({ description: 'Enable provider-side image reasoning; may increase latency.' })) }
+      : {}),
+    ...(model?.thinkingLevels?.length
+      ? {
+          thinkingLevel: Type.Optional(StringEnum(model.thinkingLevels, {
+            description: `Gemini generateContent maximum reasoning depth. Allowed values: ${model.thinkingLevels.join(', ')}.`,
+          })),
+        }
+      : {}),
+    ...(model?.supportsThoughtOutput
+      ? { includeThoughts: Type.Optional(Type.Boolean({ description: 'Return Gemini thought parts in addition to the final image. Thought images and text are skipped by the saver.' })) }
+      : {}),
+    ...(model?.supportsSearchGrounding
+      ? { searchGrounding: Type.Optional(Type.Boolean({ description: 'Ground the generated image in real-time Google Search results.' })) }
+      : {}),
+    ...(model?.supportsImageSearchGrounding
+      ? { imageSearchGrounding: Type.Optional(Type.Boolean({ description: 'Enable Google Image Search within Google Search grounding. Supplying this alone also enables the search tool.' })) }
+      : {}),
+    ...(model?.supportsAsyncMode
+      ? { asyncMode: Type.Optional(Type.Boolean({ description: 'Submit through the provider async task endpoint and poll for completion.' })) }
+      : {}),
+    ...(model?.supportsSequentialSets
+      ? {
+          sequentialMaxImages: Type.Optional(Type.Integer({
+            minimum: model.sequentialMaxImages?.min ?? 1,
+            maximum: model.sequentialMaxImages?.max ?? MAX_GENERATED_IMAGES,
+            description: 'Maximum related images in a Wan image set; distinct from independent n variants.',
+          })),
+        }
+      : {}),
+    ...(model?.resolutionLevels?.length
+      ? { resolutionLevel: Type.Optional(StringEnum(model.resolutionLevels, { description: 'Firefly output resolution level.' })) }
+      : {}),
+    ...(model?.promptReasonerValues?.length
+      ? { promptReasoner: Type.Optional(StringEnum(model.promptReasonerValues, { description: 'Firefly prompt reasoning strategy; quality also returns generated alt text.' })) }
+      : {}),
+    ...(model?.supportsStrength
+      ? { strength: Type.Optional(Type.Number({ minimum: 0, maximum: 1, description: 'Image-to-image influence; 0 keeps the input image, 1 ignores it.' })) }
+      : {}),
+    ...(model?.operations?.length
+      ? { operation: Type.Optional(StringEnum(model.operations, { description: 'Dedicated Recraft operation. Omit to infer generate, image-to-image, or inpaint from the supplied inputs.' })) }
+      : {}),
+    ...(model?.supportsStyleReferences
+      ? {
+          styleId: Type.Optional(Type.String({ description: 'Reuse a Recraft style created from reference images.' })),
+          styleReferenceUrls: Type.Optional(Type.Array(Type.String(), { description: 'Recraft style reference URLs or data URLs.' })),
+        }
+      : {}),
+    ...(model?.styleMatchValues?.length
+      ? { styleMatch: Type.Optional(StringEnum(model.styleMatchValues, { description: 'Recraft style matching mode.' })) }
+      : {}),
+    ...(model?.supportsTextLayout
+      ? { textLayout: Type.Optional(Type.Array(Type.Any(), { description: 'Recraft V3 text layout: objects with text and a four-point bbox using 0–1 coordinates.' })) }
+      : {}),
+    ...(model?.supportsColorControls
+      ? {
+          colorControls: Type.Optional(Type.Array(Type.Any(), { description: 'Recraft color controls: objects with rgb [r,g,b] and optional weight.' })),
+          backgroundColor: Type.Optional(Type.Any({ description: 'Recraft background color object with rgb [r,g,b] and optional weight.' })),
+        }
       : {}),
     ...(model?.supportsWatermark
       ? { watermark: Type.Optional(Type.Boolean({ description: 'Add the provider AI watermark. Default false.' })) }
       : {}),
     ...(model?.supportsSeries
       ? { seriesMaxImages: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_GENERATED_IMAGES, description: 'Maximum related images for a Seedream series; this is not the same as independent n variants.' })) }
+      : {}),
+    ...(model?.supportsLayerDecomposition
+      ? {
+          layerDecomposition: Type.Optional(Type.Boolean({
+            description: 'Seedream 5.x layer decomposition. Requires exactly one input image; outputs include a base image and editable PNG layers.',
+          })),
+          ...(model.layerMaxImages
+            ? {
+                layerMaxImages: Type.Optional(Type.Integer({
+                  minimum: model.layerMaxImages.min,
+                  maximum: model.layerMaxImages.max,
+                  description: `Maximum total layer outputs including the base image (${model.layerMaxImages.min}-${model.layerMaxImages.max}). Requires layerDecomposition.`,
+                })),
+              }
+            : {}),
+          ...(model.supportsLayerTextRecognition
+            ? {
+                layerTextRecognition: Type.Optional(Type.Boolean({
+                  description: 'Return rich OCR for regular text layers. Requires layerDecomposition.',
+                })),
+              }
+            : {}),
+        }
       : {}),
     resize: Type.Optional(imageResizeSchema()),
     filename: Type.Optional(Type.String({ description: 'Filename prefix (without extension).' })),
@@ -1072,9 +1168,9 @@ export function buildImageGuidelines(caps: ImageToolCapabilities): string[] {
     );
   }
   if (caps.model?.outputFormats?.includes('svg')) {
-    guidelines.push(
-      'Native `outputFormat: "svg"` is a generation-only editable vector: set n to 1, do not combine it with reference images, masks, compression, or SVG edits, and pass `svgModel`/`svgReasoningEffort` only when the account enables SVG model selection. SVG is not an accepted edit input, and saved SVGs are not rasterized for inline preview. Copy an SVG result as the file link in the tool result; never turn it into an image embed.',
-    );
+    guidelines.push(caps.model.supportsSvgAuthor
+      ? 'Native `outputFormat: "svg"` is a generation-only editable vector for this model: set n to 1, do not combine it with reference images, masks, compression, or SVG edits, and pass `svgModel`/`svgReasoningEffort` only when the account enables SVG model selection. Saved SVGs are not rasterized for inline preview. Copy an SVG result as the file link in the tool result; never turn it into an image embed.'
+      : 'Native `outputFormat: "svg"` returns an editable vector. This model controls its own batch size and editing operations; use only the advertised operations and keep the saved SVG as a file link, never an image embed.');
   }
   if (caps.model?.supportsMarkup) {
     guidelines.push(

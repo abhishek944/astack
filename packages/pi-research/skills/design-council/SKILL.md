@@ -49,4 +49,4 @@ Use simple readable files such as `brief.md`, `perspectives.md`, and `decision.m
 
 ## Final response
 
-State the recommendation, why it is preferred, alternatives, unresolved dissent, assumptions, risks, and an implementation handoff.
+State the recommendation, why it is preferred, alternatives, unresolved dissent, assumptions, risks, and an implementation handoff. Compare the recommendation and each serious alternative through the same concrete usage, failure, or operational case from the current system, and label anything you did not observe as illustrative.

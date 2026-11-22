@@ -23,6 +23,7 @@ export declare function submissionResult(state: State): {
     warnings: string[] | undefined;
 };
 export declare function archive(state: State, input: unknown, recordId?: string | null): Promise<Answer>;
+export declare function readArchived(state: State): Promise<Answer>;
 export declare function checkAnswer(file: string, signal?: AbortSignal): Promise<{
     status: "answered";
     answer: Answer;

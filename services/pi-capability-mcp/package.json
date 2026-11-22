@@ -1,0 +1,39 @@
+{
+  "name": "pi-capability-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Dedicated hosted HTTP MCP service for Pi image, web and classifier capabilities",
+  "keywords": [
+    "mcp",
+    "http",
+    "bullmq",
+    "pi"
+  ],
+  "bin": {
+    "pi-capability-mcp": "./dist/service.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/service.js"
+  },
+  "dependencies": {
+    "@abhishek944/pi-classifier": "file:../../packages/pi-classifier",
+    "@abhishek944/pi-image-gen": "file:../../packages/pi-image-gen",
+    "@earendil-works/pi-ai": "1.0.4",
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "bullmq": "5.76.4",
+    "ioredis": "5.10.1",
+    "pi-web-access": "0.46.0",
+    "typebox": "1.3.27"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

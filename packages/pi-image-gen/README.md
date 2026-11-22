@@ -7,28 +7,40 @@ Supported **generation** providers:
 | Provider                       | Model id (alias)                              | Authentication        |
 | ------------------------------ | --------------------------------------------- | --------------------- |
 | ChatGPT Codex                  | `gpt-image-2` on route `codex-subscription` (`gpt-image-2-codex`, `codex`, and `openai-codex` remain legacy aliases) | Pi `/login` → ChatGPT Plus/Pro (Codex) |
-| OpenAI                         | `gpt-image-2`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst` | `OPENAI_API_KEY`      |
-| Azure OpenAI | Azure GPT Image deployment name (`azure-openai-api`); GPT Image 1 / 1-mini / 1.5 / 2 / 2.5 Flare / Sunburst | `AZURE_OPENAI_API_KEY` |
-| Google Gemini ("Nano Banana")  | `gemini-3-pro-image` (alias `nano-banana-pro`), `gemini-3.1-flash-image` (alias `nano-banana-2`), `gemini-3.1-flash-lite-image` (alias `nano-banana-2-lite`), `gemini-2.5-flash-image` (alias `nano-banana`) | `GEMINI_API_KEY` |
-| Alibaba DashScope (Qwen-Image) | `qwen-image-3.0-pro`, `qwen-image-3.0`, `qwen-image-2.0-pro`, `qwen-image-2.0` | `DASHSCOPE_API_KEY`   |
-| Volcengine Ark (ByteDance Seedream) | `doubao-seedream-5-0-pro-260628` (alias `seedream-5-pro`, retired id `doubao-seedream-5-0-pro-260128` still resolves), `doubao-seedream-5-0-260128` (aliases `seedream-5`, `seedream`; the same model also answers to `doubao-seedream-5-0-lite-260128` / `seedream-5-lite`), `doubao-seedream-4-5-251128` (alias `seedream-4-5`), `doubao-seedream-4-0-250828` (alias `seedream-4`) | `ARK_API_KEY`         |
+| OpenAI                         | `gpt-image-2`, `gpt-image-2-2026-04-21`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst` | `OPENAI_API_KEY`      |
+| Azure OpenAI | Azure GPT Image deployment name (`azure-openai-api`); GPT Image 1-mini / 1.5 / 2 / 2 / snapshot / 2.5 Flare / Sunburst | `AZURE_OPENAI_API_KEY` |
+| Google Gemini ("Nano Banana")  | `gemini-nano-banana-2.1` (alias `nano-banana-2-1`), `gemini-3-pro-image` (alias `nano-banana-pro`), `gemini-3.1-flash-image` (deprecated; alias `nano-banana-2`), `gemini-3.1-flash-lite-image` (alias `nano-banana-2-lite`), `gemini-2.5-flash-image` (retiring; alias `nano-banana`) | `GEMINI_API_KEY` |
+| Alibaba Model Studio (DashScope) | Qwen: `qwen-image-3.0-pro`, `qwen-image-3.0`, `qwen-image-2.1-pro`, `qwen-image-2.1-turbo`, `qwen-image-2.0-pro`, `qwen-image-2.0`; Wan: `wan2.7-image-pro`, `wan2.7-image`; Z-Image: `z-image-turbo` | `DASHSCOPE_API_KEY`   |
+| Volcengine Ark (ByteDance Seedream) | `doubao-seedream-5-5-261028` (alias `seedream-5-5`), `doubao-seedream-5-0-pro-260628` (alias `seedream-5-pro`), `doubao-seedream-5-0-flash-260915` (alias `seedream-5-flash`), `doubao-seedream-5-0-260128` (aliases `seedream-5`, `seedream`), `doubao-seedream-4-5-251128` (alias `seedream-4-5`), `doubao-seedream-4-0-250828` (alias `seedream-4`) | `ARK_API_KEY`         |
 | Meta Model API (Muse Image) | `muse-image-1.0` (aliases `muse-image`, `meta-muse`) | Pi `/login meta` via `pi-meta-oauth`, or `META_API_KEY` |
-| Microsoft MAI (Azure Foundry) | Azure deployment name; MAI-Image-2.5 / Flash / Pro and MAI-Image-2.6 / Flash | `AZURE_MAI_API_KEY` |
+| Microsoft MAI (Azure Foundry) | Azure deployment name; MAI-Image-2.5 / Flash / Pro (retiring), MAI-Image-2.6 / Flash, MAI-Image-2.7 / Flash (preview) | `AZURE_MAI_API_KEY` |
 | OpenRouter                     | any (use `openrouter/<vendor>/<id>`)          | `OPENROUTER_API_KEY`  |
+| Black Forest Labs (FLUX.2)     | `flux-2-pro` (alias `flux-2-pro-preview`), `flux-2-flex`, `flux-2-max`, `flux-2-klein-4b`, `flux-2-klein-9b` (alias `flux-2-klein-9b-preview`) | `BFL_API_KEY` |
+| Adobe Firefly Services         | `firefly-image5` (aliases `firefly_image`, `firefly-image`) | Client ID required (`FIREFLY_SERVICES_CLIENT_ID`), plus either `FIREFLY_SERVICES_CLIENT_SECRET` or `FIREFLY_SERVICES_ACCESS_TOKEN` |
+| Stability AI                   | `stable-image-core`, `stable-image-ultra`, `sd3.5-large`, `sd3.5-large-turbo`, `sd3.5-medium` | `STABILITY_API_KEY` |
+| Recraft                        | `recraftv4_1*`, `recraftv4*`, `recraftv3`/`recraftv3_vector`, `recraftv2`/`recraftv2_vector` (raster and native SVG) | `RECRAFT_API_TOKEN` |
 | Custom providers               | whatever you declare in settings              | (your choice, via `$VAR`) |
 
 Upstream API docs (handy when debugging gateway behavior or adding new models):
 
 - OpenAI GPT Image — [generation guide](https://developers.openai.com/api/docs/guides/image-generation), [gpt-image-2](https://developers.openai.com/api/docs/models/gpt-image-2), [2.5 Flare](https://developers.openai.com/api/docs/models/gpt-image-2.5-flare), [2.5 Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst), [2.6 Flare](https://developers.openai.com/api/docs/models/gpt-image-2.6-flare), [2.6 Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.6-sunburst)
 - Azure OpenAI — [image generation guide](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/dall-e), [v1 preview REST endpoints](https://learn.microsoft.com/en-us/azure/foundry/openai/reference-preview-latest)
-- Google Gemini image generation — [ai.google.dev/gemini-api/docs/image-generation](https://ai.google.dev/gemini-api/docs/image-generation)
-- Alibaba Qwen-Image 3.0 (generation & editing) — [help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference](https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference)
+- Google Gemini image generation — [ai.google.dev/gemini-api/docs/image-generation](https://ai.google.dev/gemini-api/docs/image-generation), [Nano Banana 2.1](https://ai.google.dev/gemini-api/docs/models/gemini-nano-banana-2.1), [deprecations](https://ai.google.dev/gemini-api/docs/deprecations), [GenerateContent `ImageConfig`](https://ai.google.dev/api/generate-content#ImageConfig)
+- Alibaba Qwen-Image generation and editing — [Qwen Image API reference](https://www.alibabacloud.com/help/en/model-studio/qwen-image-generation-and-editing-api-reference), [model selection](https://www.alibabacloud.com/help/en/model-studio/image-model/)
 - Alibaba DashScope Qwen-Image 2.0 (text-to-image) — [help.aliyun.com/zh/model-studio/qwen-image-api](https://help.aliyun.com/zh/model-studio/qwen-image-api)
 - Alibaba DashScope Qwen-Image-Edit — [help.aliyun.com/zh/model-studio/qwen-image-edit-api](https://help.aliyun.com/zh/model-studio/qwen-image-edit-api)
-- Volcengine Ark Seedream — [volcengine.com/docs/82379/1824121](https://www.volcengine.com/docs/82379/1824121)
-- Microsoft MAI Image — [Azure Foundry generation and edits API](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image)
-- Meta Muse Image cookbook — [github.com/meta-models/meta-model-cookbook/tree/main/05_muse_image](https://github.com/meta-models/meta-model-cookbook/tree/main/05_muse_image)
-- OpenRouter image API — [openrouter.ai/docs/api/api-reference/images/create-images](https://openrouter.ai/docs/api/api-reference/images/create-images)
+- Volcengine Ark Seedream — [image generation API](https://ark.volcengine.com/region:cn-beijing/docs/image-generation-api), [5.5 guide](https://ark.volcengine.com/region:cn-beijing/docs/seedream-5-5), [5.0 pro/flash guide](https://ark.volcengine.com/region:cn-beijing/docs/seedream-5-0-pro)
+- Microsoft MAI Image — [Azure Foundry generation and edits API](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image), [retirement schedule](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule)
+- Meta Muse Image — [official image generation guide](https://dev.meta.ai/docs/image-generation)
+- OpenRouter image API — [generation guide](https://openrouter.ai/docs/guides/overview/multimodal/image-generation), [API reference](https://openrouter.ai/docs/api/api-reference/images/generate-an-image), [changelog](https://openrouter.ai/docs/changelog)
+- Black Forest Labs FLUX.2 — [integration guide](https://docs.bfl.ml/api_integration/integration_guidelines), [text-to-image](https://docs.bfl.ml/flux_2/flux2_text_to_image), [image editing](https://docs.bfl.ml/flux_2/flux2_image_editing), [get result](https://docs.bfl.ml/api-reference/utility/get-result)
+- Adobe Firefly Image5 — [feature guide](https://developer.adobe.com/firefly-services/docs/firefly-api/guides/how-tos/cm-generate-image/feature-guide), [authentication](https://developer.adobe.com/firefly-services/docs/firefly-api/getting-started/), [async APIs](https://developer.adobe.com/firefly-services/docs/firefly-api/guides/how-tos/using-async-apis)
+- Stability AI — [API reference](https://docs.stability.ai/api-reference), [Stable Image Core](https://docs.stability.ai/api-reference/generate/stable-image-core), [Stable Diffusion 3.5](https://docs.stability.ai/api-reference/generate/stable-diffusion-35)
+- Recraft — [agent API reference](https://www.recraft.ai/docs/api-reference/agents.md), [OpenAPI](https://www.recraft.ai/docs/api-reference/openapi.json)
+- Alibaba Wan 2.7 and Z-Image — [Wan API reference](https://www.alibabacloud.com/help/en/model-studio/wan-image-generation-and-editing-api-reference), [Z-Image API reference](https://www.alibabacloud.com/help/en/model-studio/z-image-api-reference)
+- OpenAI model lifecycle — [deprecations](https://developers.openai.com/api/docs/deprecations.md)
+
+`/image-gen list` annotates models with provider-published lifecycle dates and replacements. Deprecated models stay selectable for existing configurations; already-shutdown ids are removed (for example Azure `gpt-image-1`).
 
 Built-in API-key routes read `providers.<id>.apiKey` in local `settings.json` first, then fall back to the environment variables shown above; they do not read keys saved by Pi's general `/login` flow. Subscription routes are separate: Meta can use a Pi credential created by the [`pi-meta-oauth`](https://github.com/BlockedPath/pi-meta-oauth) package, while Codex uses Pi's ChatGPT Plus/Pro login. Meta API billing also accepts `META_API_KEY`; legacy `MODEL_API_KEY` remains accepted.
 
@@ -119,7 +131,7 @@ That's it. From the agent: `image_generate({ prompt: "a cyberpunk cat" })`.
       { "provider": "gemini-api", "model": "nano-banana" },
       { "provider": "openai-api", "model": "gpt-image-2" }
     ],
-    "outputDir": ".pi/images",
+    "outputDir": "var/pi-image-gen/images",
     "requestTimeoutMs": 120000,
     "openRouterDiscovery": true,
     "spriteGeneration": {
@@ -129,7 +141,7 @@ That's it. From the agent: `image_generate({ prompt: "a cyberpunk cat" })`.
       "defaultFormat": "apng",
       "frameDurationMs": 120,
       "strictValidation": true,
-      "outputDir": ".pi/images/sprites",
+      "outputDir": "var/pi-image-gen/sprites",
       "maxFrames": 16
     },
 
@@ -166,12 +178,14 @@ That's it. From the agent: `image_generate({ prompt: "a cyberpunk cat" })`.
 | `compare` | Provider/model pairs used only by explicit comparison requests. The default is not implicitly included. |
 | `defaultProvider` | Legacy authentication-specific default route; used when `default` is absent. |
 | `defaultModel` | Legacy model id or alias; ordinary generation needs this or a valid `default`. |
-| `outputDir`       | Where to write generated images. Relative paths resolve against the session cwd. Default `.pi/images`. |
+| `outputDir`       | Where to write generated images. Relative paths resolve against the session cwd. Default `var/pi-image-gen/images`. |
 | `requestTimeoutMs` | End-to-end deadline including inputs and downloads. `1000`–`900000`; default `120000`. |
 | `openRouterDiscovery` | Best-effort discovery of the selected OpenRouter model's supported parameters. Default `true`; failure falls back safely. |
-| `providers`       | Per-built-in-provider override. Set `apiKey`, `baseUrl`, or `headers` to point at a proxy or non-standard env var. |
+| `providers`       | Per-built-in-provider override. Set `apiKey`, `baseUrl`, or `headers` to point at a proxy or non-standard env var. Firefly also accepts `apiSecret` or `accessToken`; the client id in `apiKey` remains required by the Firefly API. |
 | `customProviders` | User-defined providers — see below. Built-in route ids such as `openai-api` and `meta-subscription` are reserved and cannot be shadowed. |
 | `spriteGeneration` | Optional sprite-sheet processing settings. Disabled by default; see below. Invalid values fail closed to safe defaults. |
+
+Unconfigured generated output defaults to the repository-relative `var/pi-image-gen/` tree (`images`, `sprites`, `search`) so future artifacts stay inside the project's `var/` instead of `.pi/`. This applies only when neither settings nor a per-call `outputDir` supplies a destination: explicit values are honored exactly, including absolute paths outside the repository. Existing files under `.pi/images` are left in place and are not migrated automatically. Add `var/` to a project's ignore rules if it does not already ignore it.
 
 In global and agent settings, `apiKey`, `baseUrl`, and `headers` values support `$VAR` and `${VAR}` environment interpolation. Fallbacks require the braced form (for example, `${FOO:-default}`); `$FOO:-default` is not supported. Project settings keep all of these placeholders literal.
 
@@ -257,7 +271,7 @@ image_search({ query: "red panda in a tree", limit: 5 })
 Every search downloads and validates candidates; only still JPEG, PNG and WebP are supported. Failed/unsupported candidates are excluded from `images` and listed in `rejected` with reasons. Download failure never starts a provider fallback or another search.
 
 - `resize`: optional `{ width, height, fit?: "contain" | "cover" }`. Both dimensions must be integers from 1–8192, with at most 40 million pixels. `contain` (default) preserves proportions and pads transparently; `cover` explicitly crops. Output is PNG, with the original saved unchanged.
-- `outputDir`: optional download directory; default `<cwd>/.pi/images/search`. The library resolves relative paths against `options.cwd` (or the process cwd).
+- `outputDir`: optional download directory; default `<cwd>/var/pi-image-gen/search`. The library resolves relative paths against `options.cwd` (or the process cwd).
 - No provider/model overrides are accepted by the tools.
 - The whole ordinary search, including fallback and downloads, shares one deadline: `requestTimeoutMs` defaults to 30000, allowed 1000–120000.
 - Configured fallback runs only for missing credentials or HTTP 401/403/404/429. Empty results are successful and do **not** trigger fallback. Timeout, transport errors, invalid responses and other HTTP failures stop the search; there is no blind retry.
@@ -326,7 +340,7 @@ export OPENAI_API_KEY=sk-...
 { "pi-image-gen": { "defaultProvider": "openai-api", "defaultModel": "gpt-image-2.5-flare" } }
 ```
 
-Choose `gpt-image-2.5-flare` for fast everyday generation or `gpt-image-2.5-sunburst` when editing precision matters most. Both expose `low`, `medium`, `high`, `xhigh`, `max`, and `auto` quality. Their `-2026-09-08` snapshots are also built in. The older `gpt-image-2` remains available.
+Choose `gpt-image-2.5-flare` for fast everyday generation or `gpt-image-2.5-sunburst` when editing precision matters most. Both expose `low`, `medium`, `high`, `xhigh`, `max`, and `auto` quality. Their `-2026-09-08` snapshots are also built in. `gpt-image-2` and its `gpt-image-2-2026-04-21` snapshot remain available but retire on 2027-02-10; the replacement is GPT Image 2.6.
 
 GPT Image 2.6 adds `gpt-image-2.6-flare` (fast iteration) and `gpt-image-2.6-sunburst` (detailed visual work). Both add `complexity` (`low`/`medium`/`high`, default `high`, no separate fee), native animated GIF output (`outputFormat: "gif"` with `frameCount` and `frameDurationMs`), native editable SVG output (`outputFormat: "svg"`; `n` must be 1), optional SVG author controls (`svgModel`/`svgReasoningEffort` when the account has SVG model selection enabled), and markup-guided edits (`markup`). They list `low`/`medium`/`high`/`auto` quality. GIF and SVG are generation-only Image API features: the edit endpoint does not support them, and they cannot be combined with reference images, masks, `outputCompression`, streaming, partial images, or prompt rewriting. Both features are account-gated (GIF preview access and SVG model selection); the provider returns the authoritative error when access is absent. The API reference and SDK bound `frameCount` to 2–16; the guide currently says 2–64, and this extension follows the API reference/SDK until the sources agree.
 
@@ -337,8 +351,10 @@ export GEMINI_API_KEY=...
 ```
 
 ```json
-{ "pi-image-gen": { "defaultModel": "nano-banana" } }
+{ "pi-image-gen": { "defaultModel": "gemini-nano-banana-2.1" } }
 ```
+
+Google recommends Nano Banana 2.1 for new projects. It exposes `1K`/`2K`/`4K` and 14 aspect ratios. `gemini-3.1-flash-image` is deprecated in favor of 2.1, and `gemini-2.5-flash-image` retires on 2027-03-15. The 3.1 Flash tiny tier is the REST literal `512`.
 
 ### 3. Alibaba DashScope (Qwen-Image)
 
@@ -349,6 +365,8 @@ export DASHSCOPE_API_KEY=...
 ```json
 { "pi-image-gen": { "defaultModel": "qwen-image-2.0" } }
 ```
+
+`qwen-image-2.1-pro` and `qwen-image-2.1-turbo` are also built in. They accept up to 10 references and may emit alpha automatically; negative prompts remain a 3.0-only control.
 
 For the international DashScope endpoint, override the base URL:
 
@@ -373,7 +391,9 @@ export ARK_API_KEY=...
 { "pi-image-gen": { "defaultModel": "seedream" } }
 ```
 
-> Supported `size` values are model-dependent, and the tool schema tells the agent the exact form for the active model: a tier token (`1K`/`1.5K`/`2K`/`3K`/`4K` — the list differs per model) or an explicit `"<w>x<h>"` pixel string, never mixed. Seedream 5.0 / 4.5 enforce a 2K pixel floor (`1024x1024` fails with `InvalidParameter`); 5.0 pro accepts `1K`/`1.5K`/`2K` down to 921,600 px; 4.0 accepts 1K. Full sizing matrix in the [official docs](https://www.volcengine.com/docs/82379/1824121). Seedream has **no `n` parameter**, so `n` is hidden. Supported non-Pro models instead expose `seriesMaxImages` for the API's related `sequential_image_generation` mode; Seedream 5.0 Pro does not support that mode. The extension sends `watermark: false` by default to avoid Seedream's upstream "AI 生成" badge, while an explicit `watermark: true` opts in.
+> Supported `size` values are model-dependent, and the tool schema tells the agent the exact form for the active model: a tier token (`1K`/`1.5K`/`2K`/`3K`/`4K` — the list differs per model) or an explicit `"<w>x<h>"` pixel string, never mixed. Seedream 5.5, 5.0 Pro and 5.0 Flash accept `1K`/`1.5K`/`2K` down to 921,600 px; 5.0 Lite and 4.5 enforce a 2K floor; 4.0 accepts 1K. Full sizing matrix in the [official docs](https://ark.volcengine.com/region:cn-beijing/docs/image-generation-api). Seedream has **no `n` parameter**, so `n` is hidden. Legacy non-Pro models expose `seriesMaxImages`; 5.x models use layer decomposition instead. The extension sends `watermark: false` by default to avoid Seedream's upstream "AI 生成" badge, while an explicit `watermark: true` opts in.
+>
+> Seedream 5.5 (`doubao-seedream-5-5-261028`) and 5.0 Flash (`doubao-seedream-5-0-flash-260915`) are built in. 5.5/5.0 Pro/5.0 Flash expose `background` for RGBA output; `transparent` forces PNG. On 5.0 Pro/Flash, transparent output also requires one transparent input image; 5.5 supports transparent text-to-image. 5.x also exposes `layerDecomposition` with exactly one input image. `layerMaxImages` is a 5.5-only request control, provider-verified as 2–100 including the base. 5.0 Pro/Flash do not expose that control, but their documented layer batches may contain up to 17 outputs (one base plus 16 layers); 5.5 alone adds `layerTextRecognition`. Complete layer batches above the ordinary 10-image ceiling are admitted up to those provider-verified caps. Layer mode cannot be combined with `background`, and layer metadata is not currently surfaced separately; layers are saved in provider order.
 
 The default base URL is `https://ark.cn-beijing.volces.com/api/v3`. To use a different region (e.g. `ap-southeast`), override it:
 
@@ -421,7 +441,7 @@ Legacy `MODEL_API_KEY` is also accepted. Select the funding route explicitly:
 
 With a legacy model-only configuration, an active Meta login still takes precedence and an API key remains the fallback. With an explicit route, `meta-subscription` uses only Pi OAuth and `meta-api` uses only the configured API key.
 
-OAuth credentials are resolved and refreshed through Pi at request time. They are used only for the built-in Meta provider at `api.meta.ai`, never for custom providers or overridden endpoints. Muse Image uses Meta's conversational Responses API. This extension sends `store: false`, so calls do not retain server-side conversation state. Generate from text normally; for editing or composition, pass one or more images through the tool's `image` array. Official cookbook size examples include `1024x1024`, `1536x1024`, and `1024x1536`; these are guidance rather than an exhaustive enum, and Meta validates the requested value. Muse Image produces one output per request, so `n` and `quality` are hidden.
+OAuth credentials are resolved and refreshed through Pi at request time. They are used only for the built-in Meta provider at `api.meta.ai`, never for custom providers or overridden endpoints. The built-in route now uses Muse Image's documented one-shot `POST /v1/images/generations` and `POST /v1/images/edits` endpoints; custom `api: meta` providers keep the conversational Responses wire shape. Generate from text normally; for editing or composition, pass one or more images through the tool's `image` array. Official size examples include `1024x1024`, `1536x1024`, and `1024x1536`; these are guidance rather than an exhaustive enum, and Meta validates the requested value. Muse Image produces one output per request, so `n` and `quality` are hidden.
 
 ### 6. OpenRouter (one key, many models)
 
@@ -436,6 +456,28 @@ export OPENROUTER_API_KEY=...
 The string after `openrouter/` is the OpenRouter model slug; pass any image model OpenRouter supports (`google/gemini-3.1-flash-image`, `openai/gpt-image-2`, `bytedance-seed/seedream-4.5`, …).
 
 OpenRouter's image API is **not** OpenAI-compatible despite the family name — it lives at `POST /api/v1/images` (no `/generations` suffix) and uses JSON `input_references` for image-to-image. The extension targets the right endpoint automatically; no wire-shape config needed.
+
+Since OpenRouter's 2026-11-19 response change, inline `b64_json` is optional and signed `data[].url` responses are valid. The extension explicitly sends `response_format: "b64_json"` by default and can request `responseFormat: "url"`. Both `data[].url` and top-level `expires_at` are accepted; a validated expiry appears as `metadata.expiresAt` (Unix seconds). Signed links are bearer URLs and are downloaded once into the saved output.
+
+### 7. Additional direct providers
+
+Built-in routes `bfl-api`, `adobe-firefly-api`, `stability-api`, and `recraft-api` use their providers' native contracts. FLUX.2 and Firefly submit async jobs and poll the URL returned by the submit response. Stability uses documented multipart `/v2beta` endpoints. Recraft uses its dedicated JSON REST API for generation, native SVG models, image-to-image, inpaint, outpaint, background operations, vectorization, and processing tools.
+
+```sh
+export BFL_API_KEY=...
+export FIREFLY_SERVICES_CLIENT_ID=...
+export FIREFLY_SERVICES_CLIENT_SECRET=... # or FIREFLY_SERVICES_ACCESS_TOKEN
+export STABILITY_API_KEY=...
+export RECRAFT_API_TOKEN=...
+```
+
+```json
+{ "pi-image-gen": { "default": { "provider": "recraft-api", "model": "recraftv4_1" } } }
+```
+
+Gemini 2.1 / 3.1 Flash models additionally expose `thinkingLevel`, `includeThoughts`, `searchGrounding`, and `imageSearchGrounding` through `generateContent`. Thought parts are skipped when saving; only the final image is stored. Alibaba `wan2.7-image-pro` and `wan2.7-image` expose verified tier/pixel sizes, `seed`, `watermark`, `thinkingMode`, optional `asyncMode`, and `sequentialMaxImages`; `z-image-turbo` is text-to-image only. Recraft controls such as `operation`, `styleId`, `styleReferenceUrls`, `textLayout`, `colorControls`, and `strength` appear only for models whose official contract supports them.
+
+Firefly always requires the client id (`x-api-key`); supply either the client secret for IMS token exchange or an already acquired access token. A custom provider using `api: "adobe-firefly"` can carry the same credentials through `apiKey`, `apiSecret`, and `accessToken`. For FLUX.2 editing, pass public image URLs: the direct API documents URL references and has no local upload endpoint in the verified contract. Firefly uploads local reference bytes through its documented storage endpoint.
 
 ## Azure OpenAI image deployments
 
@@ -466,7 +508,7 @@ Set `defaultModel` to the **Azure deployment name**, not necessarily the catalog
 - Credentials: `providers.azure-openai.apiKey` first, then local `AZURE_OPENAI_API_KEY`. You can use `${AZURE_OPENAI_API_KEY}` in global/agent settings; project settings do not interpolate environment placeholders. The built-in route sends the key in `api-key` and rejects redirects; it does not read Pi `/login` credentials or refresh Entra tokens.
 - Endpoint: `providers.azure-openai.baseUrl` first, then local `AZURE_OPENAI_ENDPOINT`. An HTTPS resource root, `/openai/v1` base, or full v1 `/images/generations` or `/images/edits` URL is accepted. No userinfo, query parameters, fragments, project path, or legacy deployment-scoped URL is accepted. Only configure an endpoint you trust: credentials are sent there.
 - Requests use the existing OpenAI image API wire format: JSON generations and multipart edits, both with `?api-version=preview`. The integration does not call the legacy `/openai/deployments/...` API and requires no Azure SDK.
-- Catalog profiles: `gpt-image-1`, `gpt-image-1-mini`, `gpt-image-1.5`, `gpt-image-2`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`. These only work when deployed in your resource. Arbitrary deployment names are passed through unchanged and receive common GPT Image control advice rather than a guessed model version. Catalog-named deployments receive their known quality/size profile. DALL-E 3 is retired and is not advertised.
+- Catalog profiles: `gpt-image-1-mini`, `gpt-image-1.5`, `gpt-image-2`, `gpt-image-2-2026-04-21`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`. These only work when deployed in your resource. `gpt-image-1` shut down on 2026-10-23 and is no longer advertised; 1-mini and 1.5 retire on 2026-12-01, and 2/2 snapshot on 2027-02-10. Arbitrary deployment names are passed through unchanged and receive common GPT Image control advice rather than a guessed model version. Catalog-named deployments receive their known quality/size profile. DALL-E 3 is retired and is not advertised.
 - Supports generation, reference-image editing, masks, quality, PNG/JPEG output, background and JPEG compression controls. Microsoft's image guide excludes WebP output for Azure; direct OpenAI's formats are unchanged. Model-specific options and numeric limits remain Azure's authority. GPT Image 2.5 profiles expose `xhigh` and `max` in addition to the common quality values. This extension keeps its existing 20MB-per-input and 128MB-combined safety ceilings.
 
 See [Microsoft's image generation guide](https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/dall-e) for regional/model access and deployment requirements.
@@ -505,21 +547,23 @@ After loading the updated extension, select the deployment with:
 /image-gen use mai-api your-mai-deployment
 ```
 
-Microsoft's current documented catalog (all preview, Global Standard):
+Microsoft's current documented catalog:
 
-| Catalog model | Deployment version |
-| --- | --- |
-| `MAI-Image-2.5` | `2026-06-02` |
-| `MAI-Image-2.5-Flash` | `2026-06-02` |
-| `MAI-Image-2.5-Pro` | `2026-06-19` |
-| `MAI-Image-2.6` | `2026-07-31` |
-| `MAI-Image-2.6-Flash` | `2026-07-31` |
+| Catalog model | Deployment version | Lifecycle |
+| --- | --- | --- |
+| `MAI-Image-2.5` | `2026-06-02` | Retires 2026-11-24 |
+| `MAI-Image-2.5-Flash` | `2026-06-02` | Retires 2026-11-24 |
+| `MAI-Image-2.5-Pro` | `2026-06-19` | Retires 2026-11-24 |
+| `MAI-Image-2.6` | `2026-07-31` | GA; retires 2027-05-01 |
+| `MAI-Image-2.6-Flash` | `2026-07-31` | GA; retires 2027-05-01 |
+| `MAI-Image-2.7` | `2026-11-02` | Preview |
+| `MAI-Image-2.7-Flash` | `2026-11-02` | Preview |
 
 The version is selected when deploying in Azure; it is not a generation-request setting. Arbitrary deployment names (including older deployments) are passed through unchanged. Catalog-named deployments receive the known model's size advice; arbitrary deployment names receive family-level guidance without guessing their version.
 
-- Text-to-image: `POST /mai/v1/images/generations`; `size: "1024x1024"` becomes integer `width` and `height`. Each dimension must be at least 768. MAI 2.5 permits at most 1,048,576 total pixels; MAI 2.6 permits at most 2,359,296. The provider enforces the deployed model's numeric limits.
+- Text-to-image: `POST /mai/v1/images/generations`; `size: "1024x1024"` becomes integer `width` and `height`. Each dimension must be at least 768. MAI 2.5 permits at most 1,048,576 total pixels; MAI 2.6 permits at most 2,359,296. Microsoft's inspected 2.7 documentation does not publish a pixel ceiling, so no local maximum is invented; Azure validates the deployed model's limits.
 - Editing: `POST /mai/v1/images/edits` with multipart form data and repeated `image` fields. Current documented models accept up to five PNG/JPEG references. **Omit `size` for edits**; the documented edits API has no width/height control. Older deployments may not support edits.
-- Output is a base64-encoded PNG, saved through the existing image pipeline. No `n` greater than 1, `quality`, `background`, mask, output-format/compression, or seed controls are exposed. PNG output does not guarantee transparency; the sprite pipeline still requires real alpha.
+- Output is a base64-encoded PNG, saved through the existing image pipeline. No `n` greater than 1, `quality`, mask, output-format/compression, or seed controls are exposed. PNG output does not guarantee transparency; the sprite pipeline still requires real alpha. MAI 2.7 deployments expose `background: "transparent"` for documented transparent generation; earlier deployments reject this control.
 - MAI 2.6-specific `auto_aspect_ratio` and `web_grounding` controls are not exposed by this integration.
 
 See [Microsoft's MAI image API reference](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image) for availability, quotas, and current preview limitations.
@@ -659,7 +703,7 @@ If a custom provider has no `models` list, you can still address it with `<provi
       "defaultFormat": "apng",
       "frameDurationMs": 120,
       "strictValidation": true,
-      "outputDir": ".pi/images/sprites",
+      "outputDir": "var/pi-image-gen/sprites",
       "maxFrames": 16
     }
   }
@@ -705,7 +749,7 @@ The generated sheet must be a readable PNG with usable alpha, and its width and 
 Each call reserves a new run directory and never overwrites an earlier run:
 
 ```text
-.pi/images/sprites/courier-run/
+var/pi-image-gen/sprites/courier-run/
 ├── prompt-used.txt
 ├── raw-sheet.png
 ├── sheet-transparent.png
@@ -727,10 +771,11 @@ image_generate({
   n?: number,                      // per-model ceiling; hidden for Codex, Seedream, and Meta
   size?: string,                   // per-model form (see below); hidden for Gemini models
   aspectRatio?: string,            // Gemini models only — enum from the model's vocabulary
-  imageSize?: string,              // Gemini tier enum; 3.1 Flash also exposes "512px"
+  imageSize?: string,              // Gemini tier enum; 3.1 Flash also exposes "512"
   quality?: 'low'|'medium'|'high'|'xhigh'|'max'|'auto', // exact enum is model-specific
   outputFormat?: 'png'|'jpeg'|'webp'|'gif'|'svg', // verified OpenAI routes; gif/svg generation-only on 2.6
   background?: 'auto'|'transparent'|'opaque',
+  responseFormat?: 'b64_json'|'url',  // OpenRouter only; url expires
   outputCompression?: number,        // 0–100; JPEG/WebP only
   complexity?: 'low'|'medium'|'high', // GPT Image 2.6; independent of quality
   frameCount?: number,               // native GIF: 2–16, default 9
@@ -744,14 +789,17 @@ image_generate({
   promptEnhance?: boolean,
   enableThinking?: boolean,
   watermark?: boolean,
-  seriesMaxImages?: number,          // Seedream related series; distinct from n
+  seriesMaxImages?: number,          // legacy Seedream related series; distinct from n
+  layerDecomposition?: boolean,      // Seedream 5.x; requires exactly one input image
+  layerMaxImages?: number,           // Seedream 5.5 only; 2–100 including the base
+  layerTextRecognition?: boolean,    // Seedream 5.5 rich OCR
   resize?: { width: number, height: number, fit?: 'contain'|'cover' }, // local PNG copy
   filename?: string,               // filename prefix (no extension)
   outputDir?: string,              // override settings.outputDir for this call
 })
 ```
 
-Returns the absolute file path(s) of saved images. Files land in `outputDir` (default `<cwd>/.pi/images`), filename pattern `<filename or model-UTC-stamp>.<ext>`. GIF output is saved byte-for-byte as `.gif`, preserving the complete animation; SVG output is decoded as UTF-8 XML and saved as `.svg`. Result details also include elapsed time, a sanitized provider request id when available, and decoded output dimensions (PNG/JPEG/WebP; GIF and SVG have no header dimensions here). Accounting preserves nested provider counters in `metadata.reportedUsage` (including cached-token details), plus normalized disjoint `metadata.tokenUsage` buckets when the API's semantics are known: `input` excludes `cacheRead` and `cacheWrite`, and `output` includes billable output tokens. SVG responses report the author model's tokens separately under `metadata.reportedUsage.svg_usage`; they are not folded into image `tokenUsage` or cost. Missing counters are not invented from image dimensions.
+Returns the absolute file path(s) of saved images. Files land in `outputDir` (default `<cwd>/var/pi-image-gen/images`), filename pattern `<filename or model-UTC-stamp>.<ext>`. GIF output is saved byte-for-byte as `.gif`, preserving the complete animation; SVG output is decoded as UTF-8 XML and saved as `.svg`. Result details also include elapsed time, a sanitized provider request id when available, and decoded output dimensions (PNG/JPEG/WebP; GIF and SVG have no header dimensions here). Accounting preserves nested provider counters in `metadata.reportedUsage` (including cached-token details), plus normalized disjoint `metadata.tokenUsage` buckets when the API's semantics are known: `input` excludes `cacheRead` and `cacheWrite`, and `output` includes billable output tokens. SVG responses report the author model's tokens separately under `metadata.reportedUsage.svg_usage`; they are not folded into image `tokenUsage` or cost. Missing counters are not invented from image dimensions.
 
 Optional desktop `resize` is local postprocessing, not a provider control: `size`, `aspectRatio` and `imageSize` still select the provider's native output. Resize uses the same 1–8192-edge / 40-million-pixel contract as search and supports still JPEG/PNG/WebP inputs, producing an exact-sized PNG copy. `contain` pads transparently and preserves the whole image; `cover` crops. The returned image `path` identifies the derivative, and `originalPath` identifies the untouched provider original. GIF and SVG output are never locally resized: the original is preserved and `resizeError` explains that animation/vector output cannot be re-encoded this way. Resizing runs after successful original storage, with a separate processing timeout using the configured generation timeout value. If local resizing fails, times out or is cancelled, the original is returned with `resizeError`; do not automatically regenerate paid output. Without `resize`, existing format/output behavior is unchanged. This local option is not exposed by `image_compare`, the portable core or Durable APIs.
 
@@ -770,7 +818,7 @@ Legacy `metadata.usage` retains top-level numeric counters, and legacy numeric `
   - **GPT Image 2.6 Flare/Sunburst**: the same arbitrary `"<w>x<h>"` range as 2.5 plus `"auto"`. For GIF output, `size` describes each frame and the combined frame/dimension/`n` budget must fit the model's limit; reduce `frameCount`, the frame dimensions, or `n` when the provider reports the request is too large.
   - **Meta Muse Image**: passed through the Responses API's `image_generation` tool; official cookbook examples include `1024x1024`, `1536x1024`, and `1024x1536`, but the field remains free-form for provider validation.
   - Omit `size` to use the model's own default (qwen-image-3.0 auto-picks from the prompt).
-- `aspectRatio` / `imageSize` replace `size` for **Gemini** models (they have no pixel-size knob): `aspectRatio` is an enum from the model's vocabulary (10–14 values), `imageSize` an enum of the model's tiers. Gemini 3 Pro exposes `1K`/`2K`/`4K`; Gemini 3.1 Flash also exposes `512px` (the exact upstream literal remains pending live verification). The field is hidden for fixed-resolution models: Gemini 3.1 Flash Lite is fixed at `1K`, and Gemini 2.5 Flash has no tier control.
+- `aspectRatio` / `imageSize` replace `size` for **Gemini** models (they have no pixel-size knob): `aspectRatio` is an enum from the model's vocabulary (10–14 values), `imageSize` an enum of the model's tiers. Gemini 3 Pro and Nano Banana 2.1 expose `1K`/`2K`/`4K`; Gemini 3.1 Flash also exposes the verified REST literal `512`. The field is hidden for fixed-resolution models: Gemini 3.1 Flash Lite is fixed at `1K`, and Gemini 2.5 Flash has no tier control.
 - `n` is model-specific and carries the model's documented ceiling in its description (Qwen 6, GPT Image 2/2.5/2.6 10). The extension enforces a universal maximum of 10 outputs per call. SVG output requires `n: 1`; GIF output may use `n` greater than 1 to request several animations, subject to the provider's total pixel budget. It is **hidden for Codex, Seedream, and Meta Muse Image** — those routes expose no count knob here, and direct callers are rejected if they request more than one output.
 - `image` spells out the active model's documented reference-image contract in its description (formats, max count, per-image byte ceiling, dimension advice): qwen documents ≤ 3 images (JPG/JPEG/PNG/BMP/TIFF/WEBP/GIF, ≤ 10MB each), Seedream ≤ 10–14 (incl. HEIC/HEIF, ≤ 30MB), OpenAI API gpt-image-2 ≤ 16 (png/webp/jpg, ≤ 50MB), Codex ≤ 5 (PNG/WEBP/JPEG, ≤ 20MB), Gemini ≤ 3–14 (≤ 20MB), Meta Muse Image labels the extension's own recognized formats (PNG/JPEG/GIF/WEBP/BMP/TIFF/HEIC/HEIF) because the cookbook does not publish an exhaustive input contract. Provider-documented contracts remain advisory; the extension-wide 16-reference, 20MB-per-input, and 128MB-combined safety ceilings are enforced locally, and providers may enforce stricter rules.
 - `quality` appears **only** for a **built-in gpt-image** route — the built-in OpenAI provider on `gpt-image-*`, or an OpenRouter route whose model id is gpt-image (e.g. `openrouter/openai/gpt-image-2`). GPT Image 2, GPT Image 2.6, and the verified Codex route use `low`/`medium`/`high`/`auto`; GPT Image 2.5 Flare and Sunburst additionally expose `xhigh` and `max` (the API reference documents those two values only for 2.5). It is **omitted from the schema entirely** for:
@@ -783,9 +831,10 @@ Legacy `metadata.usage` retains top-level numeric counters, and legacy numeric `
 Advanced controls are also capability-gated:
 
 - OpenAI API GPT Image routes expose `outputFormat`, `background`, `outputCompression`, and `mask`. GPT Image 2.6 also exposes `complexity`, `frameCount`, `frameDurationMs`, `svgModel`, and `svgReasoningEffort`; 2.5 and 2.6 expose `markup`. `outputFormat` accepts `png`/`jpeg`/`webp` wherever the schema exposes it and additionally `gif`/`svg` on 2.6. GIF and SVG are generation-only and reject reference images, masks, `outputCompression`, streaming, partial images, and prompt rewriting. `svg` requires `n: 1`. `frameCount` is 2–16 per the API reference and SDK; the guide currently says 2–64, and this extension follows the reference/SDK until the sources agree. `frameDurationMs` has a 20 ms floor, default 200 ms, rounding to 10 ms with the SDK's 655,350 ms encoded-delay cap. Pass `svgModel` (and optionally `svgReasoningEffort`) only when the account enables SVG model selection; omit both otherwise. `markup` is a transparent annotation PNG over **the first** input image, needs the same dimensions after orientation, cannot be combined with `mask`, and is subject to the provider's 16,777,216-pixel per-image/annotation limit; this extension's inherited 20 MB per-input ceiling is stricter than the provider's 50 MB annotation limit. GIF-preview access and SVG model selection are account-gated; the provider's error is authoritative. The private Codex subscription route exposes `background` and forwards `auto`, `transparent`, or `opaque`; it returns PNG images and does not expose the other public-API controls. A mask requires an `image` edit target; transparent output requires PNG or WebP.
-- Qwen Image 3 routes expose `negativePrompt`, `seed`, `promptEnhance`, `enableThinking`, and `watermark`.
-- Seedream exposes `watermark`; supported non-Pro models also expose `seriesMaxImages` (1–10). Seedream 5.0 Pro does not support series output. A series is a related set, not independent `n` variants.
-- OpenRouter capability discovery caches the selected model's endpoint metadata for ten minutes and may add format, background, compression, seed, or negative-prompt controls. Discovery has a five-second deadline and safely falls back to the static/generic schema.
+- Qwen Image 3 routes expose `negativePrompt`, `seed`, `promptEnhance`, `enableThinking`, and `watermark`. Qwen 2.1 Pro/Turbo expose `seed`, `promptEnhance`, and `watermark` but not negative prompts.
+- Seedream exposes `watermark`; legacy non-Pro models also expose `seriesMaxImages` (1–10). Seedream 5.x exposes `background` and `layerDecomposition`; only 5.5 exposes `layerMaxImages` (2–100, including the base) and `layerTextRecognition`. Layer output batches may reach 100 outputs on 5.5 and 17 on 5.0 Pro/Flash without being truncated by the ordinary 10-image ceiling. A series is a related set, not independent `n` variants.
+- OpenRouter routes expose `responseFormat`. `b64_json` keeps inline bytes; `url` requests a signed link that expires after up to 24 hours and is reported in `metadata.expiresAt`. Capability discovery caches the selected model's endpoint metadata for ten minutes and may add format, background, compression, seed, or negative-prompt controls. Discovery has a five-second deadline and safely falls back to the static/generic schema.
+- MAI 2.7 deployments expose `background: "transparent"`; earlier deployments do not expose this control.
 - Custom models may opt into the same fields through their `capabilities` declaration. Unsupported accepted parameters are rejected before a paid request rather than silently dropped.
 
 Because the schema is fixed at registration, switching models via `/image-gen reload` re-registers the tool so the parameter set tracks the new provider.
@@ -834,10 +883,10 @@ For **markup-guided edits** on GPT Image 2.5/2.6, pass the original as the first
 
 ```
 image_generate({ prompt: "a beaver chewing wood", filename: "beaver" })
-  → /Users/.../.pi/images/beaver.png
+  → /Users/.../var/pi-image-gen/images/beaver.png
 
-image_generate({ prompt: "now in watercolor style", image: ["/Users/.../.pi/images/beaver.png"] })
-  → /Users/.../.pi/images/gpt-image-2-20260605-...png  (edited)
+image_generate({ prompt: "now in watercolor style", image: ["/Users/.../var/pi-image-gen/images/beaver.png"] })
+  → /Users/.../var/pi-image-gen/images/gpt-image-2-20260605-...png  (edited)
 ```
 
 Provider behavior:
@@ -846,10 +895,10 @@ Provider behavior:
 |---|---|
 | OpenAI (`gpt-image-2`, GPT Image 2.5/2.6 Flare/Sunburst and their snapshots) | `POST /v1/images/edits` (multipart). Supports multi-image, optional masks, and markup on 2.5/2.6. |
 | ChatGPT Codex subscription (`gpt-image-2`) | `POST /backend-api/codex/images/edits` with JSON `images` entries. The model contract documents up to 5 references. |
-| Gemini (`gemini-3-pro-image`, `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, `gemini-2.5-flash-image`) | `inline_data` parts prepended to the user message. Supports multi-image. |
-| DashScope (`qwen-image-3.0-pro`, `qwen-image-3.0`, `qwen-image-2.0-pro`, `qwen-image-2.0`) | `image` parts in `messages[].content`. Up to 3 images. |
+| Gemini (`gemini-nano-banana-2.1`, `gemini-3-pro-image`, `gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, `gemini-2.5-flash-image`) | `inline_data` parts prepended to the user message. Supports multi-image. |
+| DashScope (`qwen-image-3.0-pro`, `qwen-image-3.0`, `qwen-image-2.1-pro`, `qwen-image-2.1-turbo`, `qwen-image-2.0-pro`, `qwen-image-2.0`) | `image` parts in `messages[].content`. Qwen 2.1 supports up to 10 references; other listed models up to 3. |
 | Volcengine Ark (Seedream) | `POST /api/v3/images/generations` with an `image` array in the JSON body. Supports multi-image; no separate edits endpoint. |
-| Meta Muse Image (`muse-image-1.0`) | `POST /v1/responses` with `input_image` content parts. Supports multi-image composition. |
+| Meta Muse Image (`muse-image-1.0`) | Built-in route: `POST /v1/images/edits` with OpenAI-compatible multipart images. Custom `api: meta` providers use `POST /v1/responses` with `input_image` content parts. |
 | OpenRouter | `POST /api/v1/images` with `input_references` JSON. Supports multi-image. |
 
 There is intentionally no `model` parameter on the tool. The primary route comes from `default` (or legacy `defaultProvider`/`defaultModel`); configured fallbacks are the only automatic alternatives.
@@ -888,6 +937,32 @@ The three settings commands update `<cwd>/.pi/settings.json` only for a trusted 
 This package ships an `image-gen` skill (`skills/image-gen/SKILL.md`) that Pi loads on demand. It carries the prompting playbook the one-line tool guidance can't hold: when to use raster generation vs repo-native SVG/CSS, generate-vs-edit intent, `n`-is-variants-not-assets, multi-image role labeling, edit invariants, text-in-image handling, and the labeled prompt schema. The tool works without it; the skill makes the model use the tool well.
 
 The optional `sprite-gen` skill (`skills/sprite-gen/SKILL.md`) explains one-action sheet prompting, reference roles, grid/alpha constraints, validation limits, disabled-state guidance, and explicit retry behavior. The skill may remain discoverable while the tool is disabled; runtime activation is controlled by `spriteGeneration.enabled`.
+
+## Use from other agents (MCP)
+
+The package includes an independent stdio MCP server. It exposes `image_generate`, `image_compare`, `image_search`, and `image_search_compare`, plus `sprite_generate` when `spriteGeneration.enabled` is true. Tool names and settings stay package-owned; there is no gateway and no hosted HTTP endpoint. Provider credentials, routes, and model selection come from this package's normal configuration.
+
+Add it as one MCP server, separate from any classifier or web server:
+
+```json
+{
+  "mcpServers": {
+    "pi-image-gen": {
+      "command": "npx",
+      "args": ["-y", "-p", "@abhishek944/pi-image-gen", "pi-image-gen-mcp"],
+      "cwd": "/work/session"
+    }
+  }
+}
+```
+
+If the package is installed, `pi mcp add pi-image-gen -- pi-image-gen-mcp` uses the installed bin instead. The CLI uses stdio only: stdout carries JSON-RPC and diagnostics go to stderr. It does not listen on a port or expose an HTTP path. `cwd` is optional and sets the directory used for relative reference images, output directories, and defaults under `var/pi-image-gen/`; without it, the MCP child inherits the client session directory. Global and agent settings are read at startup; project settings are not loaded. Restart the server after changing settings.
+
+For an in-process host, `@abhishek944/pi-image-gen/mcp` exports `createImageMcpServer(options)` and the MCP tool definitions. That factory returns a transport-independent MCP `Server`; the package does not ship an HTTP transport.
+
+Generation, comparison, search, and sprite calls may incur provider charges. Reference images and `outputDir` are validated by the owning package; provider-native controls beyond the advertised common fields remain available and are validated there too.
+
+TypeBox is a required peer dependency of the MCP runtime. Standard `npm install` and `npx` include it automatically; do not install the package with `--omit=peer` when using the MCP CLI.
 
 ## Acknowledgements
 

@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import type {
 	ExtensionAPI,
 	ExtensionToolContext,
@@ -13,7 +14,7 @@ import {
 	submitQuestion,
 	watcherCommand,
 } from "./core.js";
-import { type Answer, optionalJson } from "./model.js";
+import { type Answer, classifyPendingPath, optionalJson } from "./model.js";
 
 const block = Type.Union([
 	Type.Object(
@@ -240,11 +241,34 @@ export default function decisions(pi: ExtensionAPI) {
 						if (typeof file === "string") pending.add(file);
 				}
 			}
-		const rearm = [];
-		let unavailable = 0;
+		const sessionId = ctx.sessionManager.getSessionId();
+		// One real project root for this session start; saved references must be canonical
+		// under exactly this root, not merely shaped like a state path somewhere.
+		const root = await realpath(ctx.cwd);
+		const rearm: { questionId: string; status: string }[] = [];
+		const unresolved: { questionId: string; status: string }[] = [];
+		let unattributed = 0;
+		let changed = false;
 		for (const file of [...pending]) {
+			const saved = classifyPendingPath(root, sessionId, file);
+			if (saved.kind === "unattributed") {
+				pending.delete(file);
+				unattributed += 1;
+				changed = true;
+				continue;
+			}
+			const statePath =
+				saved.kind === "active" ? saved.statePath : saved.relocated;
 			try {
-				const state = await loadState(file, ctx.sessionManager.getSessionId());
+				const state = await loadState(statePath, sessionId);
+				// Bind the loaded state to this project and to the exact path requested.
+				if (state.cwd !== root || state.statePath !== statePath)
+					throw new Error("Pending reference does not belong to this project");
+				if (saved.kind === "legacy") {
+					pending.delete(file);
+					pending.add(state.statePath);
+					changed = true;
+				}
 				if (await optionalJson<Answer>(state.responsePath))
 					rearm.push({
 						questionId: state.questionId,
@@ -257,20 +281,29 @@ export default function decisions(pi: ExtensionAPI) {
 							"needs watcher re-arm; local delivery may need identical SubmitQuestion first",
 					});
 			} catch {
-				pending.delete(file);
-				unavailable += 1;
+				// A supported reference is kept, never replaced by a fresh question identity.
+				unresolved.push({
+					questionId: saved.questionId,
+					status:
+						saved.kind === "legacy"
+							? `stored under .pi/decisions at ${saved.statePath}; relocate it with the pi-decisions CLI migrate command, then call WaitForAnswer again`
+							: `saved at ${saved.statePath} but could not be reopened; inspect it or resubmit it with a new questionId`,
+				});
 			}
 		}
-		if (unavailable) remember();
-		if (rearm.length || unavailable)
+		if (changed) remember();
+		if (rearm.length || unresolved.length || unattributed)
 			pi.sendMessage(
 				{
 					customType: "pi-decisions.rearm",
 					content:
 						"Pending browser decisions were reopened. Classic monitors stop on reload/switch/shutdown. Call WaitForAnswer once for each to consume/re-arm: " +
 						JSON.stringify(rearm) +
-						(unavailable
-							? ` ${unavailable} saved questions could not be reopened. Resubmit them with fresh question IDs using the direct interface; existing files were left unchanged.`
+						(unresolved.length
+							? ` Kept, not deleted: ${JSON.stringify(unresolved)}`
+							: "") +
+						(unattributed
+							? ` ${unattributed} saved references did not belong to this project and session; existing files were left unchanged.`
 							: ""),
 					display: true,
 				},

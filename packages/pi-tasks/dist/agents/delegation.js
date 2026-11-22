@@ -44,7 +44,7 @@ export function registerDelegationBridge(pi, state) {
                 if (!TERMINAL_ID.test(input.terminalId))
                     throw new Error("Use the terminalId returned by hc.");
                 state.setDelegatedTime(input.taskId, { reportPath: input.reportPath, elapsedMs: null });
-                state.updateTodo(input.taskId, { status: "blocked", blockedReason: "Waiting for the delegated agent. Resume when its output is available for inspection and verification.", taskInfo: withTerminalLink(todo.taskInfo, input.terminalId, input.monitorId) });
+                state.updateTodo(input.taskId, { status: "blocked", blockedReason: "Waiting for the delegated agent. Resume when its output is available for inspection and verification.", dependentOn: "another-agent", taskInfo: withTerminalLink(todo.taskInfo, input.terminalId, input.monitorId) });
             },
             detach(ctx, input) {
                 requireCurrent(ctx);

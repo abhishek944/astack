@@ -1,3 +1,4 @@
+import { dependentOnLabel } from "./dependency.js";
 import { formatCompletion, taskCompletion, workCompletion } from "./progress.js";
 import { safeMultiline, safeSingleLine } from "./text.js";
 import { finalThoughtsFor } from "./thoughts.js";
@@ -34,7 +35,7 @@ export function formatWorksMarkdown(works: WorkWithTodos[]): string {
         `**Completion:** ${formatCompletion(taskCompletion(todo))}`,
         `**Time:** ${formatTime(taskTime(todo))}${todo.workingSince === undefined ? "" : " (running)"}`,
         "",
-        "**Final thoughts:**",
+        `**Final thoughts${dependentOnLabel(todo.dependentOn) === undefined ? "" : ` (Dependent on: ${dependentOnLabel(todo.dependentOn)})`}:**`,
         "",
         markdownBody(finalThoughtsFor(todo) ?? "No final thoughts recorded."),
         "",

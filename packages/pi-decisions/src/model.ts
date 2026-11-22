@@ -112,16 +112,26 @@ export async function absoluteFile(input: string): Promise<string> {
 		throw new Error("Media path must be a regular file");
 	return file;
 }
+export type StorageLayout = "active" | "legacy";
+const safeComponent = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+// Session-first so every project var/ entry stays attributable to a real session;
+// `pi-decisions` occupies the segment a Work ID uses and cannot collide with W<number>.
+// `legacy` is read-only history for the migration command and is never created here.
+const layouts: Record<StorageLayout, (sessionId: string) => string[]> = {
+	active: (sessionId) => ["var", sessionId, "pi-decisions"],
+	legacy: (sessionId) => [".pi", "decisions", sessionId],
+};
 export async function sessionStorage(
 	cwd: string,
 	sessionId: string,
 	create = false,
+	layout: StorageLayout = "active",
 ) {
-	if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(sessionId))
+	if (!safeComponent.test(sessionId))
 		throw new Error("Missing or unsafe session identity");
 	const root = await realpath(cwd);
 	let storageDir = root;
-	for (const segment of [".pi", "decisions", sessionId]) {
+	for (const segment of layouts[layout](sessionId)) {
 		storageDir = path.join(storageDir, segment);
 		if (create) {
 			try {
@@ -138,11 +148,94 @@ export async function sessionStorage(
 				"Question storage must be a real directory inside the project",
 			);
 	}
-	return { cwd: root, storageDir };
+	return { cwd: root, storageDir, layout };
+}
+export function questionPaths(storageDir: string, id: string) {
+	const questionDir = path.join(storageDir, questionId(id));
+	return {
+		questionDir,
+		statePath: path.join(questionDir, "state.json"),
+		responsePath: path.join(questionDir, "response.json"),
+		bundleDir: path.join(questionDir, "public"),
+	};
+}
+export type PendingPath =
+	| { kind: "active"; questionId: string; statePath: string }
+	| { kind: "legacy"; questionId: string; statePath: string; relocated: string }
+	| { kind: "unattributed" };
+function canonicalQuestionPath(
+	root: string,
+	sessionId: string,
+	layout: StorageLayout,
+	id: string,
+): string {
+	return path.join(root, ...layouts[layout](sessionId), id, "state.json");
+}
+function savedQuestionId(
+	root: string,
+	sessionId: string,
+	saved: string,
+	layout: StorageLayout,
+): string | undefined {
+	if (!path.isAbsolute(saved) || path.normalize(saved) !== saved) return;
+	if (path.basename(saved) !== "state.json") return;
+	const id = path.basename(path.dirname(saved));
+	if (!safeComponent.test(id)) return;
+	return canonicalQuestionPath(root, sessionId, layout, id) === saved
+		? id
+		: undefined;
+}
+// Session entries written before the var/ layout recorded absolute `.pi/decisions`
+// pathnames. A saved reference belongs to this project only when it is exactly the
+// canonical active or legacy state pathname under the current real project root for the
+// current session; anything else is reported, never translated or loaded. Legacy state is
+// never read, and delivery keeps using the active layout exclusively.
+export function classifyPendingPath(
+	root: string,
+	sessionId: string,
+	saved: string,
+): PendingPath {
+	const active = savedQuestionId(root, sessionId, saved, "active");
+	if (active) return { kind: "active", questionId: active, statePath: saved };
+	const legacy = savedQuestionId(root, sessionId, saved, "legacy");
+	if (!legacy) return { kind: "unattributed" };
+	return {
+		kind: "legacy",
+		questionId: legacy,
+		statePath: saved,
+		relocated: canonicalQuestionPath(root, sessionId, "active", legacy),
+	};
+}
+function unsupportedFormat(): Error {
+	return new Error(
+		"Unsupported saved question format. Submit with a new questionId; existing files were not changed.",
+	);
+}
+// The single ownership rule: a saved state must describe exactly the canonical paths
+// derived from its own project, session and question identity.
+function assertOwnership(
+	state: State,
+	canonical: string,
+	storageDir: string,
+	sessionId: string,
+): void {
+	const paths = questionPaths(storageDir, state.questionId);
+	if (
+		state.statePath !== canonical ||
+		paths.statePath !== canonical ||
+		state.storageDir !== storageDir ||
+		state.responsePath !== paths.responsePath ||
+		state.bundleDir !== paths.bundleDir ||
+		!["local", "here.now"].includes(state.backend) ||
+		!["single", "multiple", "review"].includes(state.question.mode) ||
+		state.question.questionId !== state.questionId ||
+		state.sessionId !== sessionId
+	)
+		throw new Error("State paths/backend are not owned by this question");
 }
 export function questionId(value: unknown): string {
 	const id = string(value, "questionId");
-	if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(id))
+	if (!safeComponent.test(id))
 		throw new Error("questionId must be a safe filename component");
 	return id;
 }
@@ -171,31 +264,47 @@ export async function loadState(
 ): Promise<State> {
 	const canonical = await realpath(file);
 	const state = await json<State>(canonical);
-	if (state.version !== 2)
-		throw new Error(
-			"Unsupported saved question format. Submit with a new questionId; existing files were not changed.",
-		);
-	if (state.statePath !== canonical) throw new Error("Invalid state identity");
-	const storage = await sessionStorage(
-		state.cwd,
-		expectedSession ?? state.sessionId,
-	);
-	const questionDir = path.join(
-		storage.storageDir,
-		questionId(state.questionId),
-	);
-	if (
-		path.join(questionDir, "state.json") !== canonical ||
-		state.storageDir !== storage.storageDir ||
-		state.responsePath !== path.join(questionDir, "response.json") ||
-		state.bundleDir !== path.join(questionDir, "public") ||
-		!["local", "here.now"].includes(state.backend) ||
-		!["single", "multiple", "review"].includes(state.question.mode) ||
-		state.question.questionId !== state.questionId ||
-		state.sessionId !== (expectedSession ?? state.sessionId)
-	)
-		throw new Error("State paths/backend are not owned by this question");
+	if (state.version !== 2) throw unsupportedFormat();
+	const sessionId = expectedSession ?? state.sessionId;
+	const storage = await sessionStorage(state.cwd, sessionId);
+	assertOwnership(state, canonical, storage.storageDir, sessionId);
 	return state;
+}
+async function requireProject(cwd: string): Promise<void> {
+	const info = await stat(cwd).catch((e: NodeJS.ErrnoException) => {
+		if (e.code === "ENOENT") return null;
+		throw e;
+	});
+	if (!info?.isDirectory())
+		throw new Error("Saved question project directory is missing");
+}
+// Migration-only reader: resolves whichever layout currently holds the file. Delivery
+// paths keep using the strict active-layout loadState above.
+export async function inspectState(
+	file: string,
+): Promise<{ state: State; layout: StorageLayout; canonical: string }> {
+	const canonical = await realpath(file);
+	const state = await json<State>(canonical);
+	if (state.version !== 2) throw unsupportedFormat();
+	await requireProject(state.cwd);
+	let unowned: Error | undefined;
+	for (const layout of ["active", "legacy"] as const) {
+		let storage: Awaited<ReturnType<typeof sessionStorage>>;
+		try {
+			storage = await sessionStorage(state.cwd, state.sessionId, false, layout);
+		} catch (e) {
+			if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
+			throw e;
+		}
+		try {
+			assertOwnership(state, canonical, storage.storageDir, state.sessionId);
+		} catch (e) {
+			unowned = e as Error;
+			continue;
+		}
+		return { state, layout, canonical };
+	}
+	throw unowned ?? new Error("Invalid state identity");
 }
 export function normalize(
 	state: State,

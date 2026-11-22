@@ -21,19 +21,23 @@ import type {
 } from '../types.js';
 import { withDefaultPath } from '../url.js';
 import { coreMetadata, parseReportedCost, preferredReportedCost } from '../core/usage.js';
-import { credentialRedirectMode, hasProviderAuthentication, jsonHeaders } from './openai.js';
+import {
+  credentialRedirectMode,
+  hasProviderAuthentication,
+  jsonHeaders,
+  openaiAdapter,
+} from './openai.js';
 
 /**
- * Meta Model API image generation via the conversational Responses API.
+ * Meta Model API image generation.
  *
- * Muse Image does not expose an OpenAI Images endpoint. Text-only generation
- * sends a string input; editing and composition send one user message whose
- * content contains input_text followed by input_image data URLs. Setting
- * store=false keeps this stateless: callers can iterate by passing the prior
- * output back through the image parameter instead of retaining server state.
+ * The built-in official route uses Muse Image's documented one-shot
+ * OpenAI-compatible `/v1/images/generations` and `/v1/images/edits` endpoints.
+ * Custom `api: meta` providers keep the conversational Responses wire shape.
+ * Responses requests set store=false so callers iterate by passing the prior
+ * output back through `image` instead of retaining server state.
  *
- * Official cookbook:
- * https://github.com/meta-models/meta-model-cookbook/tree/main/05_muse_image
+ * Official docs: https://dev.meta.ai/docs/image-generation
  */
 export const metaAdapter: ImageProviderAdapter = {
   async generate(
@@ -62,6 +66,13 @@ export const metaAdapter: ImageProviderAdapter = {
     const apiKey = provider.authMode === 'oauth' ? oauthKey : (oauthKey ?? configuredKey);
     if (provider.authMode === 'oauth' && !oauthKey) throw missingKeyError(provider);
     if (!apiKey && !hasProviderAuthentication(provider)) throw missingKeyError(provider);
+    if (provider.builtIn && canUseMetaOAuth(provider) && apiKey) {
+      const { customAuth: _customAuth, ...directProvider } = provider;
+      return openaiAdapter.generate(
+        { ...directProvider, api: 'openai', apiKey, authMode: 'api-key' },
+        remoteModelId, params, fetchImpl, signal, inputs, runtime,
+      );
+    }
     let input: unknown = params.prompt;
     if (inputs && inputs.length > 0) {
       const content: Array<Record<string, string>> = [

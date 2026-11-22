@@ -1,0 +1,154 @@
+{
+  "version": 2,
+  "sessionId": "01a1afcd-1f6e-766b-9c90-76e9eacb97e1",
+  "cwd": "/Users/abhishektatikella/Documents/astack",
+  "storageDir": "/Users/abhishektatikella/Documents/astack/.pi/decisions/01a1afcd-1f6e-766b-9c90-76e9eacb97e1",
+  "questionId": "scheduler-form-01a1afcd-B1",
+  "revision": "5c900c9708c1db6f39017bc8e3a9cd1a4f19b643cd891c72d4ca7ec05813b03a",
+  "backend": "local",
+  "question": {
+    "questionId": "scheduler-form-01a1afcd-B1",
+    "mode": "single",
+    "question": "Which New task form organization fits this right-hand panel best?",
+    "content": [
+      {
+        "type": "text",
+        "text": "I recommend B: quiet sections make the form easier to scan without adding navigation or hiding settings. The tradeoff is a little more vertical space than the current form. All six views use the actual 368 × 964 panel size."
+      },
+      {
+        "type": "text",
+        "text": "Your header/footer changes and real model dropdown are fixed requirements, not choices. A is the actual current capture for comparison; B–F show those changes. Folder Choose… already opens the system folder picker. “Pi default” preserves the current blank model setting; the implemented dropdown will search real configured Pi models, not a hardcoded list. This question decides only how the form is organized."
+      }
+    ],
+    "options": [
+      {
+        "id": "A",
+        "label": "A · Current real baseline",
+        "content": [
+          {
+            "type": "text",
+            "text": "Keep the existing flat field order. Least structural change, but related fields have little separation. Your fixed header/footer and model changes still apply."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B1-A.png",
+            "alt": "Actual current native New scheduled task panel, with flat field stack"
+          }
+        ]
+      },
+      {
+        "id": "B",
+        "label": "B · Quiet section stack — recommended",
+        "content": [
+          {
+            "type": "text",
+            "text": "Task, Location, Schedule, and Runner sections with subtle dividers. Easy to scan while keeping every setting visible."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B1-B.png",
+            "alt": "New task form grouped into quiet Task, Location, Schedule, and Runner sections"
+          }
+        ]
+      },
+      {
+        "id": "C",
+        "label": "C · Compact label rows",
+        "content": [
+          {
+            "type": "text",
+            "text": "Labels sit beside controls for a dense settings-style form. Shorter scan, but less room for long folders and prompts."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B1-C.png",
+            "alt": "New task form with compact left labels and right controls"
+          }
+        ]
+      },
+      {
+        "id": "D",
+        "label": "D · Expandable group cards",
+        "content": [
+          {
+            "type": "text",
+            "text": "Separate cards can collapse after setup; shown fully expanded here. Strong boundaries, with extra borders and interaction."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B1-D.png",
+            "alt": "New task form in four expanded collapsible cards"
+          }
+        ]
+      },
+      {
+        "id": "E",
+        "label": "E · Read it as a recipe",
+        "content": [
+          {
+            "type": "text",
+            "text": "Run, In, Every, Using groups read like a task recipe. More conversational, but less like the surrounding settings UI."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B1-E.png",
+            "alt": "New task form organized as a Run, In, Every, Using recipe"
+          }
+        ]
+      },
+      {
+        "id": "F",
+        "label": "F · Numbered planning rail",
+        "content": [
+          {
+            "type": "text",
+            "text": "A vertical numbered guide explains the setup sequence without separate pages. Clear progression, at the cost of horizontal space."
+          },
+          {
+            "type": "image",
+            "path": "/Users/abhishektatikella/Documents/astack/var/01a1a7d0-7833-7709-90c1-2a80d6691eca/W1/T7/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/W1/T1/screenshots/B1-F.png",
+            "alt": "New task form with numbered vertical planning rail and all settings visible"
+          }
+        ]
+      }
+    ],
+    "label": "Schedulers · Level 1 · Form organization",
+    "recommended": "B"
+  },
+  "responsePath": "/Users/abhishektatikella/Documents/astack/.pi/decisions/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/scheduler-form-01a1afcd-B1/response.json",
+  "statePath": "/Users/abhishektatikella/Documents/astack/.pi/decisions/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/scheduler-form-01a1afcd-B1/state.json",
+  "bundleDir": "/Users/abhishektatikella/Documents/astack/.pi/decisions/01a1afcd-1f6e-766b-9c90-76e9eacb97e1/scheduler-form-01a1afcd-B1/public",
+  "files": [
+    {
+      "path": "index.html",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "path": "assets/0484326f8357c4bda8205868fb2c50c6ca82c5784e8f7db64093e1ae91ebe7a8.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "assets/926e1746a1561e185888eb320cae0be52602ed0852bb989985f33468e43076cb.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "assets/8855a4e2aa53f8671f51c797285ff205256a895eea65e775492468814f12c1ff.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "assets/894eb30a5a38c63ef5104120b531b1af64bc0a006f1dc8b95c9c6f0338dfed53.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "assets/bc924db2b326d979bdaa1f1a52247f1da840cdb433a29ad679f887f16e3796d5.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "assets/c16dba2d4035dbdc7fa60928b32a2485bfae9bbbea710cfa7771f3240ed90c71.png",
+      "contentType": "image/png"
+    }
+  ],
+  "status": "ready",
+  "capability": "2rwVpOH-jxv4O4N4qCnkL5xGtBasoLWmRyXJH41THf8",
+  "url": "http://127.0.0.1:62342/"
+}

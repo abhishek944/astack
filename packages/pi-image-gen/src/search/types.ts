@@ -20,7 +20,7 @@ export type ImageSearchParams = {
   limit?: number;
   /** Optional exact-sized PNG copy of validated downloads. */
   resize?: ImageResize;
-  /** Download directory, relative to options.cwd; default .pi/images/search. */
+  /** Download directory, relative to options.cwd; default var/pi-image-gen/search. */
   outputDir?: string;
 };
 export type ImageSearchRejection = { imageUrl: string; reason: string };

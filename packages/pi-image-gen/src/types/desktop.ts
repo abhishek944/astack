@@ -17,7 +17,11 @@ export type BuiltInProviderRouteId =
   | 'ark-api'
   | 'meta-subscription'
   | 'meta-api'
-  | 'mai-api';
+  | 'mai-api'
+  | 'bfl-api'
+  | 'adobe-firefly-api'
+  | 'stability-api'
+  | 'recraft-api';
 
 export type CustomImageProvider = {
   /**
@@ -37,6 +41,10 @@ export type CustomImageProvider = {
    * Required unless the api does not need one.
    */
   apiKey?: string;
+  /** OAuth client secret or equivalent second credential for server-to-server APIs. */
+  apiSecret?: string;
+  /** Pre-acquired access token for APIs that accept externally managed tokens. */
+  accessToken?: string;
   /** Authentication policy. Omitted values preserve the adapter's legacy default. */
   auth?: CustomProviderAuth;
   /** Optional display name. */
@@ -66,6 +74,10 @@ export type CustomImageModel = {
 /** Per-built-in-provider override (api key, base url, custom headers). */
 export type BuiltInProviderOverride = {
   apiKey?: string;
+  /** Adobe Firefly IMS client secret. */
+  apiSecret?: string;
+  /** Adobe Firefly access token when one is already available. */
+  accessToken?: string;
   baseUrl?: string;
   headers?: Record<string, string>;
 };
@@ -87,7 +99,7 @@ export type ImageGenSettings = {
   defaultModel?: string;
   /**
    * Where to write generated images. Relative paths resolve against the session cwd.
-   * Default: `.pi/images`.
+   * Default: `var/pi-image-gen/images`.
    */
   outputDir?: string;
   /** Request deadline in milliseconds. Default 120000; allowed 1000–900000. */
@@ -105,6 +117,8 @@ export type ImageGenSettings = {
 export type GenerationMetadata = {
   durationMs: number;
   requestId?: string;
+  /** Unix seconds when a provider return URL expires. */
+  expiresAt?: number;
   /** Legacy top-level numeric usage; use reportedUsage for nested cache details. */
   usage?: Record<string, number>;
   reportedUsage?: ReportedUsage;

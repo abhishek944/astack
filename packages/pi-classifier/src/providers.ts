@@ -9,8 +9,12 @@ import {
   type ClassifierResult,
   type QuestionContent,
   type PreparedInput,
+  type PreparedMedia,
   type Question,
   type ResolvedModel,
+  type TextSpan,
+  type WebFetchedResult,
+  type WebSearchResult,
 } from "./types.js";
 
 /**
@@ -40,6 +44,8 @@ export async function classifyWithProvider(
       return classifyPerplexity(route, input, apiKey, signal);
     case "system-one":
       return classifySystemOne(route, input, apiKey, signal);
+    case "liquid-system-one":
+      return classifyLiquid(route, input, apiKey, signal);
     case "microsoft-system-one":
       return classifyMicrosoft(route, input, apiKey, signal);
     case "cloudflare-system-one":
@@ -175,6 +181,37 @@ function labelProbabilities(
 }
 
 /** Probability mass must be close to 1; it is never renormalized on the caller's behalf. */
+function independentLabelProbabilities(
+  label: string,
+  id: string,
+  value: unknown,
+  labels: string[],
+): Record<string, number> {
+  if (!isRecord(value))
+    fail(label + " returned invalid probabilities for " + id + ".");
+  const result = Object.create(null) as Record<string, number>;
+  for (const [key, entry] of Object.entries(value)) {
+    if (!labels.includes(key))
+      fail(
+        label +
+          " returned an unknown option in the probabilities for " +
+          id +
+          ".",
+      );
+    result[key] = probability(
+      label,
+      entry,
+      "probability for " + id + "." + key,
+    );
+  }
+  for (const key of labels) {
+    if (!Object.hasOwn(result, key))
+      fail(label + " did not return a probability for " + id + "." + key + ".");
+  }
+  // Liquid multi-select questions treat each label as its own yes/no decision.
+  return result;
+}
+
 function checkDistribution(
   label: string,
   id: string,
@@ -245,6 +282,54 @@ function scoreValue(
   return Math.min(maximum, Math.max(0, value));
 }
 
+function nonNegativeInteger(label: string, value: unknown, field: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0)
+    fail(label + " returned an invalid " + field + ".");
+  return value as number;
+}
+
+function codePointSlice(source: string, start: number, end: number): string {
+  const characters = Array.from(source);
+  if (start > end || end > characters.length) return "";
+  return characters.slice(start, end).join("");
+}
+
+function parseTextSpans(
+  label: string,
+  id: string,
+  value: unknown,
+  sources: { state?: string; snippets?: string[] },
+): TextSpan[] {
+  if (!Array.isArray(value)) fail(label + " returned invalid spans for " + id + ".");
+  return value.map((entry, index) => {
+    if (!isRecord(entry))
+      fail(label + " returned an invalid span for " + id + ".");
+    const start = nonNegativeInteger(label, entry.start, "span offset for " + id);
+    const end = nonNegativeInteger(label, entry.end, "span offset for " + id);
+    if (typeof entry.text !== "string" || end < start)
+      fail(label + " returned an invalid span for " + id + ".");
+    let searchResult: number | undefined;
+    if (entry.search_result !== undefined) {
+      searchResult = nonNegativeInteger(
+        label, entry.search_result, "search result index for " + id,
+      );
+      if (sources.snippets === undefined || searchResult >= sources.snippets.length)
+        fail(label + " returned an unknown search result for " + id + ".");
+    }
+    const source = searchResult === undefined ? sources.state : sources.snippets![searchResult];
+    if (source === undefined || codePointSlice(source, start, end) !== entry.text)
+      fail(label + " returned a span that does not match its source for " + id + ".");
+    const span: TextSpan = {
+      start,
+      end,
+      text: entry.text,
+      score: probability(label, entry.score, "span score for " + id + "." + index),
+    };
+    if (searchResult !== undefined) span.searchResult = searchResult;
+    return span;
+  });
+}
+
 function parseBox(
   label: string,
   id: string,
@@ -283,6 +368,7 @@ function parseTypedAnswer(
   id: string,
   question: Question,
   answer: unknown,
+  sources: { state?: string; snippets?: string[] } = {},
 ): Answer {
   if (!isRecord(answer))
     fail(label + " returned an invalid answer for " + id + ".");
@@ -332,6 +418,11 @@ function parseTypedAnswer(
       ),
     };
   }
+  if (question.type === "locate") {
+    if (answer.type !== "locate")
+      fail(label + " did not return a locate answer for " + id + ".");
+    return { type: "locate", spans: parseTextSpans(label, id, answer.spans, sources) };
+  }
   if (answer.type !== "box")
     fail(label + " did not return a box answer for " + id + ".");
   return parseBox(label, id, answer.box, answer.confidence);
@@ -371,6 +462,7 @@ function parseTypedAnswers(
   label: string,
   value: unknown,
   questions: Record<string, Question>,
+  sources: { state?: string; snippets?: string[] } = {},
 ): Record<string, Answer> {
   if (!isRecord(value)) fail(label + " returned an unexpected response.");
   // Question IDs may be "__proto__", so answers are collected without a prototype.
@@ -381,7 +473,7 @@ function parseTypedAnswers(
     answers[id] = validateDecision(
       label,
       id,
-      parseTypedAnswer(label, id, question, value[id]),
+      parseTypedAnswer(label, id, question, value[id], sources),
     );
   }
   return answers;
@@ -618,6 +710,15 @@ function systemOneQuestions(
       result[id] = { type: "box", instructions: content(question.instructions) };
       continue;
     }
+    if (question.type === "locate") {
+      result[id] = { type: "locate", instructions: content(question.instructions) };
+      continue;
+    }
+    if (question.type !== "bool" && question.type !== "choice" && question.type !== "score")
+      throw new ClassifierError(
+        "capability",
+        "The selected route does not support " + question.type + " questions.",
+      );
     const wire: Record<string, unknown> = {
       type: question.type === "bool" ? "noul" : question.type,
       instructions: content(question.instructions),
@@ -647,6 +748,77 @@ function perplexityState(input: PreparedInput): unknown {
   ];
 }
 
+function webEntry(entry: unknown, field: string): WebFetchedResult {
+  if (
+    !isRecord(entry) ||
+    typeof entry.title !== "string" ||
+    typeof entry.url !== "string" ||
+    typeof entry.snippet !== "string"
+  )
+    fail(PERPLEXITY_LABEL + " returned an invalid " + field + " entry.");
+  try {
+    const url = new URL(entry.url);
+    if (!["http:", "https:"].includes(url.protocol)) throw new Error();
+  } catch {
+    fail(PERPLEXITY_LABEL + " returned an invalid URL in " + field + ".");
+  }
+  return { title: entry.title, url: entry.url, snippet: entry.snippet };
+}
+
+function providerDate(value: unknown, field: string): string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))
+    fail(PERPLEXITY_LABEL + " returned an invalid date in " + field + ".");
+  return value;
+}
+
+function parseSearchResults(value: unknown): WebSearchResult[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 100)
+    fail(PERPLEXITY_LABEL + " returned invalid search_results.");
+  return value.map((entry) => {
+    const base = webEntry(entry, "search_results");
+    const result: WebSearchResult = { ...base };
+    if (isRecord(entry) && entry.date !== undefined)
+      result.date = providerDate(entry.date, "search_results");
+    if (isRecord(entry) && entry.last_updated !== undefined)
+      result.lastUpdated = providerDate(entry.last_updated, "search_results");
+    return result;
+  });
+}
+
+function parseFetchedResults(value: unknown): WebFetchedResult[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 1)
+    fail(PERPLEXITY_LABEL + " returned invalid fetched_results.");
+  return value.map((entry) => webEntry(entry, "fetched_results"));
+}
+
+function withWebGroundingCost(
+  cost: ClassifierResult["cost"],
+  questionCount: number,
+  fetched: number,
+): ClassifierResult["cost"] {
+  if (cost.status !== "estimated") return cost;
+  const searchFeeMaximum = questionCount * 0.001;
+  const fetchFee = fetched * 0.0005;
+  return {
+    ...cost,
+    nonToken: {
+      currency: "USD",
+      webGrounding: {
+        status: "estimated_maximum",
+        searchesRequested: questionCount,
+        searchFeeMaximum,
+        successfulFetches: fetched,
+        fetchFee,
+        totalMaximum: searchFeeMaximum + fetchFee,
+        note:
+          "Perplexity bills one Fast Search per question before duplicate-query sharing and failed-search exclusions are known; exact billed searches are not returned. The token estimate already includes fetched page text and search evidence.",
+      },
+    },
+  };
+}
+
 async function classifyPerplexity(
   route: ResolvedModel,
   input: PreparedInput,
@@ -654,25 +826,44 @@ async function classifyPerplexity(
   signal?: AbortSignal,
 ): Promise<ClassifierResult> {
   const state = perplexityState(input);
+  const payload: Record<string, unknown> = {
+    model: route.model,
+    state,
+    questions: systemOneQuestions(input.questions, false),
+  };
+  if (input.mode !== undefined) payload.mode = input.mode;
+  if (input.maxStaleness !== undefined) payload.max_staleness = input.maxStaleness;
   const { body, requestId } = await postJson(
     route,
     "decisions",
-    {
-      model: route.model,
-      state,
-      questions: systemOneQuestions(input.questions, false),
-    },
+    payload,
     apiKey,
     signal,
   );
   if (!isRecord(body))
     fail(PERPLEXITY_LABEL + " returned an unexpected response.");
-  return finish(
+  const searches = parseSearchResults(body.search_results);
+  const fetched = parseFetchedResults(body.fetched_results);
+  const snippets = searches.map((result) => result.snippet);
+  const sources: { state?: string; snippets: string[] } = { snippets };
+  if (typeof input.state === "string") sources.state = input.state;
+  const result = finish(
     route,
-    parseTypedAnswers(PERPLEXITY_LABEL, body.answers, input.questions),
+    parseTypedAnswers(
+      PERPLEXITY_LABEL,
+      body.answers,
+      input.questions,
+      sources,
+    ),
     body.usage,
     requestId,
   );
+  if (input.mode === "web_grounding") {
+    result.webGrounding = { searchResults: searches };
+    if (fetched.length > 0) result.webGrounding.fetchedResults = fetched;
+    result.cost = withWebGroundingCost(result.cost, Object.keys(input.questions).length, fetched.length);
+  }
+  return result;
 }
 
 /* Microsoft Foundry Decision-1 (text/JSON, API-key authentication) -------- */
@@ -805,10 +996,14 @@ async function classifySystemOne(
 /* Cloudflare Workers AI (Clef and third-party System One envelopes) ------- */
 
 function clefBodyModel(model: string): string | undefined {
-  return /^@cf\/cloudflare\/(clef(?:-flash)?)$/.exec(model)?.[1];
+  return /^@cf\/cloudflare\/(clef(?:-flash|-omni)?)$/.exec(model)?.[1];
 }
 
-function unwrapCloudflare(
+function cloudflareMedia(media: PreparedMedia[]): { content_type: string; base64: string }[] {
+  return media.map((entry) => ({ content_type: entry.mimeType, base64: entry.data }));
+}
+
+export function unwrapCloudflare(
   label: string,
   body: unknown,
 ): Record<string, unknown> {
@@ -853,12 +1048,16 @@ async function classifyCloudflare(
         return { content_type: image.mimeType, base64: image.data };
       });
     }
+    const audio = input.media.filter((media) => media.type === "audio");
+    const videos = input.media.filter((media) => media.type === "video");
+    if (audio.length) payload.audio = cloudflareMedia(audio);
+    if (videos.length) payload.videos = cloudflareMedia(videos);
     path = "run/" + route.model;
   } else {
-    if (input.images.length > 0)
+    if (input.images.length > 0 || input.media.length > 0)
       throw new ClassifierError(
         "capability",
-        "The selected route does not support images for this model.",
+        "The selected route does not support media for this model.",
       );
     payload = {
       model: route.model,
@@ -889,4 +1088,249 @@ async function classifyCloudflare(
     usage,
     requestId,
   );
+}
+
+/* Liquid d1.2 System One extension --------------------------------------- */
+
+function liquidUnsupported(feature: string): never {
+  throw new ClassifierError(
+    "capability",
+    "The selected route does not support " + feature + ".",
+  );
+}
+
+function liquidQuestion(id: string, question: Question): Record<string, unknown> {
+  const wire: Record<string, unknown> = {
+    type: question.type === "bool" ? "noul" : question.type,
+    instructions: textContent(question.instructions),
+  };
+  switch (question.type) {
+    case "bool":
+      if (question.criteria)
+        wire.criteria = Object.fromEntries(
+          Object.entries(question.criteria).map(([key, value]) => [key, textContent(value)]),
+        );
+      return wire;
+    case "choice":
+    case "multi_choice":
+      wire.type = "choice";
+      wire.criteria = Object.fromEntries(
+        Object.entries(question.criteria).map(([key, value]) => [key, textContent(value)]),
+      );
+      if (question.type === "multi_choice") wire.multiple = true;
+      return wire;
+    case "score":
+      wire.criteria = question.criteria.map(textContent);
+      return wire;
+    case "number":
+      if (question.unit !== undefined) wire.unit = question.unit;
+      if (question.range !== undefined) wire.range = question.range;
+      if (question.step !== undefined) wire.step = question.step;
+      return wire;
+    case "spans":
+    case "boxes":
+      if (question.max !== undefined) wire.max = question.max;
+      return wire;
+    case "estimate":
+      wire.type = "number";
+      wire.range = question.range;
+      if (question.step !== undefined) wire.step = question.step;
+      if (question.unit !== undefined) wire.unit = question.unit;
+      return wire;
+    case "text":
+    case "date":
+    case "box":
+      return wire;
+    case "locate":
+      return liquidUnsupported("locate questions on Liquid routes");
+  }
+}
+
+function stateText(state: PreparedInput["state"]): string {
+  return typeof state === "string" ? state : JSON.stringify(state, null, 2);
+}
+
+function optionalCharSpan(
+  label: string,
+  value: unknown,
+  field: string,
+  text: string,
+): [number, number] | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return charSpan(label, value, field, text);
+}
+
+function charSpan(label: string, value: unknown, field: string, text: string): [number, number] {
+  if (!Array.isArray(value) || value.length !== 2 ||
+      value.some((entry) => !Number.isSafeInteger(entry) || (entry as number) < 0))
+    fail(label + " returned an invalid " + field + ".");
+  const start = value[0] as number;
+  const end = value[1] as number;
+  if (end < start || codePointSlice(text, start, end).length === 0 && end !== start)
+    fail(label + " returned an invalid " + field + ".");
+  return [start, end];
+}
+
+function optionalFound(label: string, answer: Record<string, unknown>, id: string): number | undefined {
+  return answer.found === undefined ? undefined : probability(label, answer.found, "found for " + id);
+}
+
+function parseLiquidAnswer(
+  label: string,
+  id: string,
+  question: Question,
+  answer: unknown,
+  text: string,
+): Answer | undefined {
+  if (!isRecord(answer)) fail(label + " returned an invalid answer for " + id + ".");
+  if (answer.type === "refusal") return { type: "refusal" };
+  if (question.type === "bool" || question.type === "choice" || question.type === "score")
+    return validateDecision(label, id, parseTypedAnswer(label, id, question, answer));
+  const found = optionalFound(label, answer, id);
+  if (question.type === "text") {
+    if (typeof answer.text !== "string") fail(label + " returned an invalid text answer for " + id + ".");
+    const result: Extract<Answer, { type: "text" }> = { type: "text", text: answer.text };
+    const span = optionalCharSpan(label, answer.span, "span for " + id, text);
+    if (span !== undefined) result.span = span;
+    if (found !== undefined) result.found = found;
+    return result;
+  }
+  if (question.type === "number") {
+    if (answer.number !== null && (typeof answer.number !== "number" || !Number.isFinite(answer.number)))
+      fail(label + " returned an invalid number answer for " + id + ".");
+    const value = typeof answer.number === "number" ? answer.number : null;
+    const result: Extract<Answer, { type: "number" }> = { type: "number", value };
+    if (typeof answer.unit === "string" || answer.unit === null) result.unit = answer.unit;
+    if (typeof answer.text === "string" || answer.text === null) result.text = answer.text;
+    const span = optionalCharSpan(label, answer.span, "span for " + id, text);
+    if (span !== undefined) result.span = span;
+    if (found !== undefined) result.found = found;
+    return result;
+  }
+  if (question.type === "date") {
+    if (answer.date !== null && (typeof answer.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(answer.date)))
+      fail(label + " returned an invalid date answer for " + id + ".");
+    const date = typeof answer.date === "string" ? answer.date : null;
+    const result: Extract<Answer, { type: "date" }> = { type: "date", date };
+    if (typeof answer.text === "string" || answer.text === null) result.text = answer.text;
+    const span = optionalCharSpan(label, answer.span, "span for " + id, text);
+    if (span !== undefined) result.span = span;
+    if (found !== undefined) result.found = found;
+    return result;
+  }
+  if (question.type === "spans") {
+    if (!Array.isArray(answer.spans) || !Array.isArray(answer.presence) ||
+        !Number.isSafeInteger(answer.count) || (answer.count as number) < 0 ||
+        typeof answer.at_least !== "boolean")
+      fail(label + " returned an invalid spans answer for " + id + ".");
+    const presence = answer.presence.map((entry) => probability(label, entry, "presence for " + id));
+    return {
+      type: "spans",
+      spans: answer.spans.map((entry) => {
+        if (!isRecord(entry) || typeof entry.text !== "string")
+          fail(label + " returned an invalid span for " + id + ".");
+        return {
+          text: entry.text,
+          span: charSpan(label, entry.span, "span for " + id, text),
+          found: probability(label, entry.found, "span found for " + id),
+        };
+      }),
+      count: answer.count as number,
+      atLeast: answer.at_least,
+      presence,
+    };
+  }
+  if (question.type === "boxes") {
+    if (!Array.isArray(answer.boxes) || !Array.isArray(answer.presence) ||
+        !Number.isSafeInteger(answer.count) || (answer.count as number) < 0 ||
+        typeof answer.at_least !== "boolean")
+      fail(label + " returned an invalid boxes answer for " + id + ".");
+    const presence = answer.presence.map((entry) => probability(label, entry, "presence for " + id));
+    return {
+      type: "boxes",
+      boxes: answer.boxes.map((entry) => {
+        const parsed = parseBox(label, id, isRecord(entry) ? entry.box : undefined, isRecord(entry) ? entry.found : undefined);
+        if (parsed.type !== "box") fail(label + " returned an invalid box for " + id + ".");
+        return {
+          box: parsed.box,
+          found: parsed.confidence,
+          confidence: probability(label, isRecord(entry) ? entry.confidence : undefined, "box confidence for " + id),
+        };
+      }),
+      count: answer.count as number,
+      atLeast: answer.at_least,
+      presence,
+    };
+  }
+  if (question.type === "estimate") {
+    const value = answer.number;
+    if (typeof value !== "number" || !Number.isFinite(value) || !Array.isArray(answer.interval) ||
+        answer.interval.length !== 2 ||
+        answer.interval.some((entry) => typeof entry !== "number" || !Number.isFinite(entry)) ||
+        (answer.interval[0] as number) > value || value > (answer.interval[1] as number))
+      fail(label + " returned an invalid estimate for " + id + ".");
+    const result: Extract<Answer, { type: "estimate" }> = {
+      type: "estimate",
+      value,
+      interval: [answer.interval[0] as number, answer.interval[1] as number],
+    };
+    if (typeof answer.unit === "string") result.unit = answer.unit;
+    return result;
+  }
+  if (question.type === "multi_choice") {
+    if (!Array.isArray(answer.choices) || !isRecord(answer.probabilities))
+      fail(label + " returned an invalid multi-choice answer for " + id + ".");
+    const labels = Object.keys(question.criteria);
+    const choices = independentLabelProbabilities(label, id, answer.probabilities, labels);
+    for (const choice of answer.choices) {
+      if (typeof choice !== "string" || !Object.hasOwn(question.criteria, choice))
+        fail(label + " returned an unknown choice for " + id + ".");
+    }
+    return { type: "multi_choice", choices: answer.choices as string[], probabilities: choices };
+  }
+  if (question.type === "box") {
+    if (answer.box === null || (found !== undefined && found < 0.5)) return { type: "no_match" };
+    const parsed = parseBox(label, id, answer.box, answer.confidence);
+    if (parsed.type !== "box") fail(label + " returned an invalid box for " + id + ".");
+    return found === undefined ? parsed : { ...parsed, found };
+  }
+  return liquidUnsupported("question type " + question.type);
+}
+
+async function classifyLiquid(
+  route: ResolvedModel,
+  input: PreparedInput,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<ClassifierResult> {
+  if (Object.values(input.questions).some((question) => question.type === "locate"))
+    return liquidUnsupported("locate questions on Liquid routes");
+  const payload: Record<string, unknown> = {
+    model: route.model,
+    state: input.state,
+    questions: Object.fromEntries(
+      Object.entries(input.questions).map(([id, question]) => [id, liquidQuestion(id, question)]),
+    ),
+  };
+  if (input.images.length) {
+    payload.images = input.images.map((image) => {
+      if ("url" in image) throw new ClassifierError("capability", "Liquid requires local images.");
+      return { content_type: image.mimeType, base64: image.data };
+    });
+  }
+  const audio = input.media.filter((media) => media.type === "audio");
+  if (audio.length)
+    payload.audio = audio.map((media) => ({ content_type: media.mimeType, base64: media.data }));
+  const { body, requestId } = await postJson(route, "systemone", payload, apiKey, signal);
+  if (!isRecord(body)) fail("Liquid Decisions returned an unexpected response.");
+  const text = stateText(input.state);
+  const answers = Object.create(null) as Record<string, Answer>;
+  for (const [id, question] of Object.entries(input.questions)) {
+    if (!isRecord(body.answers) || !Object.hasOwn(body.answers, id))
+      fail("Liquid Decisions did not return an answer for " + id + ".");
+    const parsed = parseLiquidAnswer("Liquid Decisions", id, question, body.answers[id], text);
+    if (parsed !== undefined) answers[id] = parsed;
+  }
+  return finish(route, answers, body.usage, requestId);
 }

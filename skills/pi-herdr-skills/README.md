@@ -92,18 +92,19 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | `browser-use` | Automates browser navigation, forms, screenshots, testing, and extraction. Selected by default, or beside Aside with `--browser both` (isolated testing only). |
 | `commit-and-merge` | Commits real changes and merges into the default branch when explicitly requested. |
 | `computer-use` | Operates desktop apps through local Cua Driver MCP with grounded input, screenshot forwarding, and verified outcomes. |
-| `implement` | Coordinates every tracked Work with session/Work/Task artifact paths, self-versus-delegate decisions, checks, and proportionate review while preserving specialized scope. A UI-changing implementation also hands its changed surface to `ui-ux-followthrough` after functional verification, unless the user opted out or asked for read-only review. |
+| `implement` | Coordinates every tracked Work with session/Work/Task artifact paths, self-versus-delegate decisions, checks, and proportionate review while preserving specialized scope. A UI-changing implementation also hands its changed surface to `ui-ux-testing` in fix-or-flag mode after functional verification, unless the user opted out or asked for read-only review. |
+| `page-performance` | Discovers and refreshes application pages, observes requests and load timings, investigates evidenced slowdowns, and verifies authorized fixes with comparable runtime evidence. |
 | `retro` | Reviews a coding session for ways to improve the agent's working environment; invoke explicitly with `/skill:retro`. |
 | `talk-human` | Writes clear, friendly, concise replies with plain language and exact technical detail. |
 | `ui-conventions` | Finds the UI components, tokens and interaction patterns a repository already has before creating or restyling a control; respects project instructions and existing design systems without forcing migrations. |
 | `ui-copy` | Writes and reviews interface text: cuts filler and restated labels while keeping required warnings, error text, labels and accessibility instructions. |
 | `typescript-best-practices` | Applies type-system rules to TypeScript work: discriminated unions, branded types, boundary validation, exhaustive variants, and schema-derived types. |
 
-These ten skills are the complete set this installer owns. Exactly one of the two browser skills is installed by default, so the default install is nine skills; `--browser both` installs all ten, and every non-browser skill is always installed. Some of them depend on other installed skills by name. Install the complete set rather than copying only `implement`, unless a host deliberately selects another browser backend with `--browser aside` or `--browser none`.
+These eleven skills are the complete set this installer owns. Exactly one of the two browser skills is installed by default, so the default install is ten skills; `--browser both` installs all eleven, and every non-browser skill is always installed. Some of them depend on other installed skills by name. Install the complete set rather than copying only `implement`, unless a host deliberately selects another browser backend with `--browser aside` or `--browser none`.
 
 ### Package-owned skills
 
-The diagram, review and policy skills moved out of this repository into skill-only Astack packages. Names, helpers and licenses are preserved; `ui-ux-testing` now has a read-only audit contract, and its post-implementation repair owner ships beside it in `pi-review` rather than here. They are not part of this installer or its checksum manifest. Install each package and reload Pi:
+The diagram, review and policy skills moved out of this repository into skill-only Astack packages. Names, helpers and licenses are preserved; `ui-ux-testing` in `pi-review` owns both the read-only audit contract and the authorized post-implementation disposition workflow. They are not part of this installer or its checksum manifest. Install each package and reload Pi:
 
 ```bash
 pi install /path/to/astack/packages/pi-visuals
@@ -117,7 +118,7 @@ pi install git:github.com/abhishek944/pi-herdr
 | Package | Skills | Notes |
 | --- | --- | --- |
 | `pi-visuals` | `archify`, `visual-explainer` | Bundles the complete pinned Archify runtime, assets and notices. `visual-explainer` routes standalone technical diagrams to `archify`. |
-| `pi-review` | `agent-review`, `awesome-logging-standards`, `codebase-design`, `no-arbitrary-limits`, `no-unit-tests`, `security-audit`, `ui-ux-testing`, `ui-ux-followthrough` | `codebase-design` is the design reference for `design-council`, `implement` and `agent-review`. `security-audit` keeps Cloudflare's MIT-licensed guidance, schema, validators, license and pinned provenance. `no-unit-tests` and `no-arbitrary-limits` stay general task policies, not review-only rules. `ui-ux-testing` is a read-only audit that reports findings and suggested fixes; the caller owns fixes and delegation. `ui-ux-followthrough` owns the authorized post-implementation disposition of those findings, and flag-mode review of a named UI surface with no prior implementation, adding no permission. |
+| `pi-review` | `agent-review`, `awesome-logging-standards`, `codebase-design`, `no-arbitrary-limits`, `no-unit-tests`, `security-audit`, `ui-ux-testing` | `codebase-design` is the design reference for `design-council`, `implement` and `agent-review`. `security-audit` keeps Cloudflare's MIT-licensed guidance, schema, validators, license and pinned provenance. `no-unit-tests` and `no-arbitrary-limits` stay general task policies, not review-only rules. `ui-ux-testing` has a read-only review mode that reports findings and suggested fixes, plus an authorized post-implementation fix-or-flag mode that auto-fixes only clear in-scope defects, presents grounded decisions through `ui-ux-grill-me`, and rechecks every fix independently. |
 | `pi-herdr` | `herdr`, `model-routing-policy` | Eight `Agent*` tools plus the editable routing defaults, described under [Herdr Core setup](#herdr-core-setup). |
 | `pi-research` | `research`, `read-flows`, `design-council` | Also provides the one-shot `/ask` command and its reusable read-only guard. |
 | `pi-grill-me` | `grill-me`, `ui-ux-grill-me` | Browser-based plan and UI/UX interviews with recorded answers. |
@@ -125,7 +126,7 @@ pi install git:github.com/abhishek944/pi-herdr
 
 Before migrating, inspect and back up the matching `~/.agents/skills/<name>/` directories, then remove them after verifying the package-owned skills load. The installer cannot remove directories that are no longer in its source tree. Pi keeps the first discovered skill and warns about a duplicate name, so do not keep both copies.
 
-The `ui-ux-testing` skill moved into `pi-review` on 2026-11-04 and is now read-only: it reports verified defects and suggested fixes, while the caller owns scope, fixes and delegation. Remove its old global copy with the other package-owned skills. On 2026-11-17 the post-implementation workflow moved into that package as `ui-ux-followthrough`, which owns the repair decision without changing the audit's read-only contract.
+The `ui-ux-testing` skill moved into `pi-review` on 2026-11-04 and became a read-only audit that reports verified defects and suggested fixes. Remove its old global copy with the other package-owned skills. On 2026-11-17 an authorized post-implementation disposition workflow was added in that package. The two workflows were later consolidated into one `ui-ux-testing` skill: its review mode stays read-only, while fix-or-flag mode applies only after implementation authorization or an explicit user selection.
 
 `here-now` is retired. Its skill and provenance files were removed from this repository and from active global installs. The independent here.now delivery backend inside `pi-decisions` is a separate component: it keeps its own configuration, credentials and documented behavior.
 
@@ -215,8 +216,8 @@ These skills apply across tasks, so each shared concern needs one owner. The own
 | Module responsibilities, interfaces, abstractions | `codebase-design` | Design reference; advice does not authorize implementation, tests or dependencies. |
 | Existing UI controls, tokens and interaction patterns | `ui-conventions` | Discovery and reuse; no restyle, migration, consolidation or refactor permission. |
 | Text inside a product UI | `ui-copy` | Not chat replies, documentation, release notes or marketing pages. |
-| UI audit and evidence | `ui-ux-testing` | Read-only for production source; reports findings, never fixes them. |
-| Post-implementation UI disposition | `ui-ux-followthrough` | Fixes only clear in-scope defects against the existing design system; anything subjective needs the user. |
+| UI audit and evidence | `ui-ux-testing` | Its review mode is read-only for production source and reports findings without fixing them. |
+| Post-implementation UI disposition | `ui-ux-testing` | Its authorized fix-or-flag mode fixes only clear in-scope defects against the existing design system; anything subjective needs the user. |
 | Independent review of changes | `agent-review` | Read-only, and used when risk, breadth, uncertainty or the user warrants it, not by default. |
 | Subagent lifecycle and presentation | `herdr` | Starts, monitors and cleans up Core workers; Work/Todo records stay in `implement`. |
 | Subagent model, thinking level and Fast mode | `model-routing-policy` | Subagents only; explicit user choices override its defaults. |

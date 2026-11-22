@@ -1,3 +1,5 @@
+import type { TaskDependency } from "./dependency.js";
+export type { TaskDependency } from "./dependency.js";
 export type TodoStatus = "active" | "blocked" | "completed" | "cancelled";
 export interface Work {
     workId: string;
@@ -23,6 +25,8 @@ export interface Todo {
     status: TodoStatus;
     /** Current obstacle and resume condition; cleared when leaving blocked. */
     blockedReason?: string | null;
+    /** The only two valid blocked dependencies; absent on nonblocked and legacy tasks. */
+    dependentOn?: TaskDependency;
     completionPercent?: number | null;
     /** Accumulated measured time; missing/null means historical time is unknown. */
     elapsedMs?: number | null;
@@ -61,7 +65,7 @@ export type TaskEvent = {
     type: "todo-updated";
     at: number;
     taskId: string;
-    patch: Partial<Pick<Todo, "taskName" | "taskInfo" | "finalThoughts" | "status" | "blockedReason" | "completionPercent">>;
+    patch: Partial<Pick<Todo, "taskName" | "taskInfo" | "finalThoughts" | "status" | "blockedReason" | "dependentOn" | "completionPercent">>;
 } | {
     version: 1;
     type: "todo-time";

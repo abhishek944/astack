@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { isTaskDependency } from "./dependency.js";
 import { taskOwner } from "./ownership.js";
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 const TERMINAL_ID = /^(?:[A-Za-z0-9][A-Za-z0-9._-]*\/)?t[0-9a-z]+$/;
@@ -44,6 +45,7 @@ export function validateSnapshot(value, sessionId) {
             || Number(todo.taskId.slice(1)) >= value.nextTaskId
             || (todo.blockedReason !== undefined && todo.blockedReason !== null && !text(todo.blockedReason))
             || (todo.status !== "blocked" && todo.blockedReason != null)
+            || (todo.dependentOn !== undefined && (todo.status !== "blocked" || !isTaskDependency(todo.dependentOn)))
             || (todo.completionPercent != null && (!integer(todo.completionPercent) || todo.completionPercent > 100))
             || (todo.status === "completed" && todo.completionPercent !== 100)
             || (todo.status !== "completed" && todo.completionPercent === 100)

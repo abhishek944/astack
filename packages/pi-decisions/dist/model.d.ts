@@ -91,14 +91,40 @@ export declare function string(value: unknown, name: string): string;
 export declare function hash(bytes: string | Buffer): string;
 export declare function inside(root: string, file: string): boolean;
 export declare function absoluteFile(input: string): Promise<string>;
-export declare function sessionStorage(cwd: string, sessionId: string, create?: boolean): Promise<{
+export type StorageLayout = "active" | "legacy";
+export declare function sessionStorage(cwd: string, sessionId: string, create?: boolean, layout?: StorageLayout): Promise<{
     cwd: string;
     storageDir: string;
+    layout: StorageLayout;
 }>;
+export declare function questionPaths(storageDir: string, id: string): {
+    questionDir: string;
+    statePath: string;
+    responsePath: string;
+    bundleDir: string;
+};
+export type PendingPath = {
+    kind: "active";
+    questionId: string;
+    statePath: string;
+} | {
+    kind: "legacy";
+    questionId: string;
+    statePath: string;
+    relocated: string;
+} | {
+    kind: "unattributed";
+};
+export declare function classifyPendingPath(root: string, sessionId: string, saved: string): PendingPath;
 export declare function questionId(value: unknown): string;
 export declare function json<T>(file: string): Promise<T>;
 export declare function optionalJson<T>(file: string): Promise<T | undefined>;
 export declare function save(file: string, value: unknown): Promise<void>;
 export declare function privateDirectory(dir: string): Promise<void>;
 export declare function loadState(file: string, expectedSession?: string): Promise<State>;
+export declare function inspectState(file: string): Promise<{
+    state: State;
+    layout: StorageLayout;
+    canonical: string;
+}>;
 export declare function normalize(state: State, input: unknown, recordId?: string | null): Answer;

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Require an explicit `dependentOn` classification on every newly blocked task: `"user-decision"` for a user response, decision, or permission, or `"another-agent"` for another agent's output or review. Validate it in the desktop and Durable tools, clear it when leaving blocked, and keep legacy blocked records valid without inventing a value. Show `Dependent on` beside Final thoughts in `/works`, the native Tasks pane, tool listings, and copied Markdown. Automatic delegation uses `"another-agent"`, and tracking guidance no longer uses blocked status for external obstacles that fit neither category.
+- Avoid rendering `Dependent on: null` in native task details for active, completed, cancelled, and legacy blocked tasks; the label appears only for a stored two-value dependency.
+
 ## 0.16.0 - 2026-11-14
 
 - Make `finalThoughts` the only user-visible task text and keep `taskInfo` as hidden coordination metadata in the tools, the Durable document, saved records, markdown, the panel and the native Herdr view. A blocked task shows its blocked reason, a completed task states its verified result, and a status change clears an unsupplied thought so an old note cannot hide a new blocker.

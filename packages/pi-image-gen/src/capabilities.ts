@@ -61,26 +61,69 @@ export function capabilitiesForApi(
     delete clean.sizes;
     delete clean.sizeRange;
   } else {
-    delete clean.aspectRatios;
+    if (api !== 'adobe-firefly' && api !== 'stability' && api !== 'recraft') delete clean.aspectRatios;
     delete clean.imageSizes;
   }
   if (api !== 'openai' && api !== 'openrouter' && api !== 'codex') {
     delete clean.qualityValues;
+  }
+  if (api !== 'openai' && api !== 'openrouter' && api !== 'codex' && api !== 'ark' && api !== 'mai') {
     delete clean.backgroundValues;
   }
-  if (api !== 'openai' && api !== 'openrouter') {
-    delete clean.outputFormats;
-    delete clean.supportsOutputCompression;
+  if (api !== 'openrouter' && api !== 'recraft') delete clean.responseFormats;
+  if (api !== 'ark') {
+    delete clean.supportsLayerDecomposition;
+    delete clean.supportsLayerTextRecognition;
+    delete clean.layerMaxImages;
+    delete clean.layerOutputMax;
   }
+  if (api !== 'gemini') {
+    delete clean.thinkingLevels;
+    delete clean.supportsSearchGrounding;
+    delete clean.supportsImageSearchGrounding;
+  }
+  if (api === 'dashscope' && clean.supportsEnableThinking === undefined && clean.supportsThinking) {
+    clean.supportsEnableThinking = true;
+  }
+  if (api === 'gemini' && clean.supportsThoughtOutput === undefined && clean.supportsThinking) {
+    clean.supportsThoughtOutput = true;
+  }
+  delete clean.supportsThinking;
+  if (api !== 'dashscope') {
+    delete clean.supportsAsyncMode;
+    delete clean.supportsSequentialSets;
+    delete clean.sequentialMaxImages;
+    delete clean.supportsEnableThinking;
+  }
+  if (api !== 'gemini') delete clean.supportsThoughtOutput;
+  if (api !== 'adobe-firefly') {
+    delete clean.resolutionLevels;
+    delete clean.promptReasonerValues;
+  }
+  if (api !== 'recraft') {
+    delete clean.operations;
+    delete clean.supportsStyleReferences;
+    delete clean.styleMatchValues;
+    delete clean.supportsTextLayout;
+    delete clean.supportsColorControls;
+    delete clean.supportsSvgEdits;
+    delete clean.supportsSvgVariants;
+  }
+  if (api !== 'openai') delete clean.supportsSvgAuthor;
+  if (api !== 'stability' && api !== 'recraft') delete clean.supportsStrength;
+  if (api !== 'openai' && api !== 'openrouter' && api !== 'bfl' && api !== 'stability' && api !== 'recraft') {
+    delete clean.outputFormats;
+  }
+  if (api !== 'openai' && api !== 'openrouter') delete clean.supportsOutputCompression;
   if (api !== 'openai') {
     // Only the OpenAI Images adapter carries the 2.6 controls: native GIF/SVG output,
-    // complexity planning and markup edits. A compatible gateway may still accept raster
-    // encodings, but never advertise a knob this adapter would silently drop.
+    // complexity planning and markup edits. Other adapters keep only their verified encodings.
     if (clean.outputFormats) {
-      const raster = clean.outputFormats.filter(
-        (format) => format === 'png' || format === 'jpeg' || format === 'webp',
-      );
-      if (raster.length) clean.outputFormats = raster;
+      const allowed = api === 'recraft'
+        ? ['png', 'jpeg', 'webp', 'svg']
+        : ['png', 'jpeg', 'webp'];
+      const filtered = clean.outputFormats.filter((format) => allowed.includes(format));
+      if (filtered.length) clean.outputFormats = filtered;
       else delete clean.outputFormats;
     }
     delete clean.complexityValues;
@@ -92,25 +135,29 @@ export function capabilitiesForApi(
   ) {
     delete clean.supportsOutputCompression;
   }
-  if (api !== 'openai') delete clean.supportsMask;
-  if (api !== 'dashscope' && api !== 'openrouter') {
+  if (api !== 'openai' && api !== 'recraft') delete clean.supportsMask;
+  if (api !== 'dashscope' && api !== 'openrouter' && api !== 'stability' && api !== 'recraft') {
     delete clean.supportsNegativePrompt;
+  }
+  if (api !== 'dashscope' && api !== 'openrouter' && api !== 'stability' && api !== 'recraft' && api !== 'bfl' && api !== 'adobe-firefly') {
     delete clean.supportsSeed;
   }
-  if (api !== 'dashscope') {
+  if (api !== 'dashscope' && api !== 'recraft' && api !== 'bfl') {
     delete clean.supportsPromptEnhance;
-    delete clean.supportsThinking;
   }
   if (api !== 'dashscope' && api !== 'ark') delete clean.supportsWatermark;
   if (api !== 'ark') delete clean.supportsSeries;
-  if (api === 'mai') clean.nMax = 1;
+  if (api === 'mai' || api === 'bfl' || api === 'adobe-firefly' || api === 'stability') clean.nMax = 1;
   return clean;
 }
 
 export function genericCapabilitiesForApi(api: ApiStyle): ImageModelCapabilities {
   return {
     ...(api === 'gemini' ? { aspectRatios: ['auto'] } : {}),
-    nMax: api === 'ark' || api === 'meta' || api === 'mai' ? 1 : MAX_GENERATED_IMAGES,
+    ...(api === 'openrouter' || api === 'recraft'
+      ? { responseFormats: ['b64_json', 'url'] as Array<'b64_json' | 'url'> }
+      : {}),
+    nMax: api === 'ark' || api === 'meta' || api === 'mai' || api === 'bfl' || api === 'adobe-firefly' || api === 'stability' ? 1 : MAX_GENERATED_IMAGES,
     nMaxSource: 'extension',
     maxReferenceImages: api === 'mai' ? 5 : MAX_REFERENCE_IMAGE_INPUTS,
     inputFormats: api === 'mai' ? ['PNG', 'JPEG'] : ['PNG', 'JPEG', 'GIF', 'WEBP'],
@@ -203,6 +250,25 @@ export function referenceImageDescription(caps: ImageModelCapabilities): string 
 }
 
 /**
+ * Maximum outputs admitted for one provider response. Normal routes keep the
+ * package-wide 10-image ceiling; layer decomposition uses the provider's
+ * verified cap from the route capabilities, not an invented local number.
+ */
+export function outputImageLimit(
+  params: Pick<GenerateImageParams, 'layerDecomposition' | 'layerMaxImages'>,
+  capabilities?: ImageModelCapabilities,
+): number {
+  if (params.layerDecomposition && capabilities?.supportsLayerDecomposition) {
+    const outputMax = capabilities.layerOutputMax ?? capabilities.layerMaxImages?.max;
+    if (outputMax != null) {
+      return params.layerMaxImages != null ? Math.min(params.layerMaxImages, outputMax) : outputMax;
+    }
+  }
+  if (params.layerDecomposition && params.layerMaxImages != null) return params.layerMaxImages;
+  return MAX_GENERATED_IMAGES;
+}
+
+/**
  * Pre-flight guards against parameter combinations OUR adapters would
  * silently drop — the provider never sees them, so it cannot be the backstop
  * (a pixel size passed to a Gemini aspect-ratio model, or aspectRatio/
@@ -249,11 +315,12 @@ export function validateGenerateParams(
   }
   const unsupported: Array<[unknown, boolean | undefined, string]> = [
     [params.outputFormat, Boolean(caps.outputFormats?.length), 'outputFormat'],
+    [params.responseFormat, Boolean(caps.responseFormats?.length), 'responseFormat'],
     [params.complexity, Boolean(caps.complexityValues?.length), 'complexity'],
     [params.frameCount, Boolean(caps.outputFormats?.includes('gif')), 'frameCount'],
     [params.frameDurationMs, Boolean(caps.outputFormats?.includes('gif')), 'frameDurationMs'],
-    [params.svgModel, Boolean(caps.outputFormats?.includes('svg')), 'svgModel'],
-    [params.svgReasoningEffort, Boolean(caps.outputFormats?.includes('svg')), 'svgReasoningEffort'],
+    [params.svgModel, caps.supportsSvgAuthor, 'svgModel'],
+    [params.svgReasoningEffort, caps.supportsSvgAuthor, 'svgReasoningEffort'],
     [params.markup, caps.supportsMarkup, 'markup'],
     [params.background, Boolean(caps.backgroundValues?.length), 'background'],
     [params.outputCompression, caps.supportsOutputCompression, 'outputCompression'],
@@ -261,9 +328,27 @@ export function validateGenerateParams(
     [params.negativePrompt, caps.supportsNegativePrompt, 'negativePrompt'],
     [params.seed, caps.supportsSeed, 'seed'],
     [params.promptEnhance, caps.supportsPromptEnhance, 'promptEnhance'],
-    [params.enableThinking, caps.supportsThinking, 'enableThinking'],
+    [params.enableThinking, caps.supportsEnableThinking, 'enableThinking'],
+    [params.thinkingLevel, Boolean(caps.thinkingLevels?.length), 'thinkingLevel'],
+    [params.includeThoughts, caps.supportsThoughtOutput, 'includeThoughts'],
+    [params.searchGrounding, caps.supportsSearchGrounding, 'searchGrounding'],
+    [params.imageSearchGrounding, caps.supportsImageSearchGrounding, 'imageSearchGrounding'],
+    [params.asyncMode, caps.supportsAsyncMode, 'asyncMode'],
+    [params.sequentialMaxImages, caps.supportsSequentialSets, 'sequentialMaxImages'],
+    [params.resolutionLevel, Boolean(caps.resolutionLevels?.length), 'resolutionLevel'],
+    [params.promptReasoner, Boolean(caps.promptReasonerValues?.length), 'promptReasoner'],
+    [params.strength, caps.supportsStrength, 'strength'],
+    [params.operation, Boolean(caps.operations?.length), 'operation'],
+    [params.styleId, caps.supportsStyleReferences, 'styleId'],
+    [params.styleReferenceUrls, caps.supportsStyleReferences, 'styleReferenceUrls'],
+    [params.styleMatch, Boolean(caps.styleMatchValues?.length), 'styleMatch'],
+    [params.textLayout, caps.supportsTextLayout, 'textLayout'],
+    [params.colorControls, caps.supportsColorControls, 'colorControls'],
+    [params.backgroundColor, caps.supportsColorControls, 'backgroundColor'],
     [params.watermark, caps.supportsWatermark, 'watermark'],
     [params.seriesMaxImages, caps.supportsSeries, 'seriesMaxImages'],
+    [params.layerDecomposition, caps.supportsLayerDecomposition, 'layerDecomposition'],
+    [params.layerTextRecognition, caps.supportsLayerTextRecognition, 'layerTextRecognition'],
   ];
   for (const [value, supported, name] of unsupported) {
     if (value !== undefined && !supported) {
@@ -273,18 +358,48 @@ export function validateGenerateParams(
   if (params.outputFormat && !caps.outputFormats?.includes(params.outputFormat)) {
     throw new ImageGenError(`${modelId} does not support output format ${params.outputFormat}.`, 'outputFormat invalid');
   }
+  if (params.responseFormat && !caps.responseFormats?.includes(params.responseFormat)) {
+    throw new ImageGenError(`${modelId} does not support response format ${params.responseFormat}.`, 'responseFormat invalid');
+  }
   if (params.complexity && !caps.complexityValues?.includes(params.complexity)) {
     throw new ImageGenError(`${modelId} does not support complexity ${params.complexity}.`, 'complexity invalid');
   }
+  if (params.thinkingLevel && !caps.thinkingLevels?.includes(params.thinkingLevel)) {
+    throw new ImageGenError(`${modelId} does not support thinkingLevel ${params.thinkingLevel}.`, 'thinkingLevel invalid');
+  }
+  if (params.imageSearchGrounding && params.searchGrounding === false) {
+    throw new ImageGenError('imageSearchGrounding requires searchGrounding to remain enabled.', 'image search grounding without search grounding');
+  }
+  if (params.resolutionLevel && !caps.resolutionLevels?.includes(params.resolutionLevel)) {
+    throw new ImageGenError(`${modelId} does not support resolutionLevel ${params.resolutionLevel}.`, 'resolutionLevel invalid');
+  }
+  if (params.promptReasoner && !caps.promptReasonerValues?.includes(params.promptReasoner)) {
+    throw new ImageGenError(`${modelId} does not support promptReasoner ${params.promptReasoner}.`, 'promptReasoner invalid');
+  }
+  if (params.styleMatch && !caps.styleMatchValues?.includes(params.styleMatch)) {
+    throw new ImageGenError(`${modelId} does not support styleMatch ${params.styleMatch}.`, 'styleMatch invalid');
+  }
+  if (params.operation && !caps.operations?.includes(params.operation)) {
+    throw new ImageGenError(`${modelId} does not support operation ${params.operation}.`, 'operation invalid');
+  }
+  if (params.strength != null && (!Number.isFinite(params.strength) || params.strength < 0 || params.strength > 1)) {
+    throw new ImageGenError('strength must be a number from 0 to 1.', 'strength invalid');
+  }
   const format = params.outputFormat;
-  if ((format === 'gif' || format === 'svg') && params.image && params.image.length > 0) {
+  if (format === 'gif' && params.image && params.image.length > 0) {
     throw new ImageGenError(
-      `${format.toUpperCase()} output is generation-only; the image edit endpoint does not support it.`,
-      `${format} output requires generation`,
+      'GIF output is generation-only; the image edit endpoint does not support it.',
+      'gif output requires generation',
     );
   }
-  if (format === 'svg' && (params.n ?? 1) !== 1) {
-    throw new ImageGenError('SVG output requires n to be 1.', 'svg requires n=1');
+  if (format === 'svg' && params.image && params.image.length > 0 && !caps.supportsSvgEdits) {
+    throw new ImageGenError(
+      `${modelId} does not support SVG editing.`,
+      'svg editing unsupported',
+    );
+  }
+  if (format === 'svg' && (params.n ?? 1) !== 1 && !caps.supportsSvgVariants) {
+    throw new ImageGenError('SVG output requires n to be 1 for this model.', 'svg requires n=1');
   }
   if (params.frameCount != null) {
     if (format !== 'gif') {
@@ -350,11 +465,50 @@ export function validateGenerateParams(
   if (params.seed != null && (!Number.isSafeInteger(params.seed) || params.seed < 0 || params.seed > 2_147_483_647)) {
     throw new ImageGenError('seed must be an integer from 0 to 2147483647.', 'seed invalid');
   }
+  if (params.sequentialMaxImages != null) {
+    const bounds = caps.sequentialMaxImages;
+    if (!bounds || !Number.isInteger(params.sequentialMaxImages) ||
+        params.sequentialMaxImages < bounds.min || params.sequentialMaxImages > bounds.max) {
+      throw new ImageGenError(
+        bounds
+          ? `sequentialMaxImages must be an integer from ${bounds.min} to ${bounds.max}.`
+          : `${modelId} does not support sequentialMaxImages.`,
+        'sequentialMaxImages invalid',
+      );
+    }
+  }
+  if (params.operation && params.operation !== 'generate' && (!params.image || params.image.length === 0)) {
+    throw new ImageGenError(`${params.operation} requires at least one input image.`, 'operation needs image');
+  }
+  if ((params.operation === 'inpaint' || params.operation === 'generateBackground' || params.operation === 'eraseRegion') && !params.mask) {
+    throw new ImageGenError(`${params.operation} requires a mask image.`, 'operation needs mask');
+  }
   if (params.enableThinking === true && params.promptEnhance === false) {
     throw new ImageGenError('enableThinking requires promptEnhance to remain enabled.', 'thinking requires prompt enhancement');
   }
   if (params.seriesMaxImages != null && (!Number.isInteger(params.seriesMaxImages) || params.seriesMaxImages < 1 || params.seriesMaxImages > MAX_GENERATED_IMAGES)) {
     throw new ImageGenError(`seriesMaxImages must be an integer from 1 to ${MAX_GENERATED_IMAGES}.`, 'seriesMaxImages invalid');
+  }
+  if (params.layerDecomposition && (!params.image || params.image.length !== 1)) {
+    throw new ImageGenError('layerDecomposition requires exactly one input image.', 'layer decomposition needs one image');
+  }
+  if (params.layerDecomposition && params.background !== undefined) {
+    throw new ImageGenError('layerDecomposition cannot be combined with background.', 'layer decomposition with background');
+  }
+  if ((params.layerMaxImages !== undefined || params.layerTextRecognition !== undefined) && !params.layerDecomposition) {
+    throw new ImageGenError('Layer options require layerDecomposition.', 'layer options without decomposition');
+  }
+  if (params.layerMaxImages !== undefined) {
+    const bounds = caps.layerMaxImages;
+    if (!bounds || !Number.isInteger(params.layerMaxImages) ||
+        params.layerMaxImages < bounds.min || params.layerMaxImages > bounds.max) {
+      throw new ImageGenError(
+        bounds
+          ? `layerMaxImages must be an integer from ${bounds.min} to ${bounds.max}.`
+          : `${modelId} does not support layerMaxImages.`,
+        'layerMaxImages invalid',
+      );
+    }
   }
 }
 
@@ -446,6 +600,10 @@ export function sanitizeCapabilities(
         if (stringArray(value) && value.every((v) => v === 'auto' || v === 'transparent' || v === 'opaque')) clean.backgroundValues = value as Array<'auto' | 'transparent' | 'opaque'>;
         else drop(key, value, 'an array containing auto, transparent, or opaque');
         break;
+      case 'responseFormats':
+        if (stringArray(value) && value.every((v) => v === 'b64_json' || v === 'url')) clean.responseFormats = value as Array<'b64_json' | 'url'>;
+        else drop(key, value, 'an array containing b64_json or url');
+        break;
       case 'supportsOutputCompression':
       case 'supportsMask':
       case 'supportsMarkup':
@@ -455,9 +613,67 @@ export function sanitizeCapabilities(
       case 'supportsThinking':
       case 'supportsWatermark':
       case 'supportsSeries':
+      case 'supportsLayerDecomposition':
+      case 'supportsLayerTextRecognition':
+      case 'supportsSearchGrounding':
+      case 'supportsImageSearchGrounding':
+      case 'supportsAsyncMode':
+      case 'supportsSequentialSets':
+      case 'supportsStrength':
+      case 'supportsStyleReferences':
+      case 'supportsTextLayout':
+      case 'supportsColorControls':
+      case 'supportsEnableThinking':
+      case 'supportsThoughtOutput':
+      case 'supportsSvgEdits':
+      case 'supportsSvgVariants':
+      case 'supportsSvgAuthor':
         if (typeof value === 'boolean') (clean as Record<string, unknown>)[key] = value;
         else drop(key, value, 'a boolean');
         break;
+      case 'layerMaxImages': {
+        const bounds = value as { min?: unknown; max?: unknown } | null;
+        if (bounds && typeof bounds === 'object' &&
+            Number.isInteger(bounds.min) && (bounds.min as number) >= 1 &&
+            Number.isInteger(bounds.max) && (bounds.max as number) >= (bounds.min as number)) {
+          clean.layerMaxImages = { min: bounds.min as number, max: bounds.max as number };
+        } else drop(key, value, 'an object with integer min and max layer counts');
+        break;
+      }
+      case 'layerOutputMax':
+        if (Number.isInteger(value) && (value as number) >= 1) clean.layerOutputMax = value as number;
+        else drop(key, value, 'a positive integer');
+        break;
+      case 'thinkingLevels':
+        if (stringArray(value) && value.every((v) => v === 'minimal' || v === 'low' || v === 'medium' || v === 'high' || v === 'xhigh')) {
+          clean.thinkingLevels = value as Array<'minimal' | 'low' | 'medium' | 'high' | 'xhigh'>;
+        } else drop(key, value, 'an array of Gemini thinking levels');
+        break;
+      case 'resolutionLevels':
+        if (stringArray(value)) clean.resolutionLevels = value;
+        else drop(key, value, 'an array of resolution levels');
+        break;
+      case 'promptReasonerValues':
+        if (stringArray(value) && value.every((v) => v === 'speed' || v === 'quality')) {
+          clean.promptReasonerValues = value as Array<'speed' | 'quality'>;
+        } else drop(key, value, 'an array containing speed or quality');
+        break;
+      case 'operations':
+        if (stringArray(value)) clean.operations = value as NonNullable<ImageModelCapabilities['operations']>;
+        else drop(key, value, 'an array of operation names');
+        break;
+      case 'styleMatchValues':
+        if (stringArray(value)) clean.styleMatchValues = value;
+        else drop(key, value, 'an array of style match modes');
+        break;
+      case 'sequentialMaxImages': {
+        const bounds = value as { min?: unknown; max?: unknown } | null;
+        if (bounds && typeof bounds === 'object' && Number.isInteger(bounds.min) && (bounds.min as number) >= 1 &&
+            Number.isInteger(bounds.max) && (bounds.max as number) >= (bounds.min as number)) {
+          clean.sequentialMaxImages = { min: bounds.min as number, max: bounds.max as number };
+        } else drop(key, value, 'an object with integer min and max image counts');
+        break;
+      }
       case 'referenceLimitsSource':
         if (value === 'provider' || value === 'extension') clean.referenceLimitsSource = value;
         else drop(key, value, '"provider" or "extension"');

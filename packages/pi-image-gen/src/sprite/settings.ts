@@ -1,4 +1,5 @@
 import { ImageGenError } from '../errors.js';
+import { DEFAULT_SPRITE_OUTPUT_DIR } from '../output-defaults.js';
 import type { SpriteGenerateParams, SpritePlan, NormalizedSpriteSettings, SpriteGenerationSettings } from './types.js';
 
 export const HARD_MAX_SPRITE_FRAMES = 16;
@@ -9,7 +10,7 @@ export const DEFAULT_SPRITE_SETTINGS: NormalizedSpriteSettings = {
   defaultFormat: 'apng',
   frameDurationMs: 120,
   strictValidation: true,
-  outputDir: '.pi/images/sprites',
+  outputDir: DEFAULT_SPRITE_OUTPUT_DIR,
   maxFrames: HARD_MAX_SPRITE_FRAMES,
 };
 

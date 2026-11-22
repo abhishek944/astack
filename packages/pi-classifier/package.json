@@ -1,14 +1,17 @@
 {
   "name": "@abhishek944/pi-classifier",
   "version": "0.4.1",
-  "description": "Config-driven typed classification for Pi via Microsoft Decision-1, OpenAI Decisions, Perplexity, TypeSafe Jev and Cloudflare Clef, with selective fallback and explicit comparisons.",
+  "description": "Config-driven typed classification and extraction for Pi via Microsoft Decision-1, OpenAI Decisions, Perplexity, TypeSafe Jev, Liquid d1.2, Cloudflare Clef and Clairic, with selective fallback and explicit comparisons.",
   "keywords": [
     "pi-package",
     "pi",
     "classifier",
     "decisions",
     "jev",
-    "clef"
+    "liquid",
+    "clef",
+    "clairic",
+    "mcp"
   ],
   "license": "Apache-2.0",
   "repository": {
@@ -26,6 +29,9 @@
   "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "pi-classifier-mcp": "./dist/mcp-cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -38,6 +44,10 @@
     "./durable": {
       "types": "./dist/durable.d.ts",
       "import": "./dist/durable.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp-server.d.ts",
+      "import": "./dist/mcp-server.js"
     }
   },
   "files": [
@@ -64,6 +74,7 @@
   },
   "dependencies": {
     "@amaster.ai/pi-shared": "^0.1.10",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "sharp": "^0.35.5"
   },
   "peerDependencies": {

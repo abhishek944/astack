@@ -93,7 +93,7 @@ const images = createImageExtension(
       { provider: 'gemini-api', model: 'nano-banana' },
       { provider: 'openai-api', model: 'gpt-image-2' },
     ],
-    outputDir: '.pi/images',
+    outputDir: 'var/pi-image-gen/images',
   },
   {
     searchSettings: {

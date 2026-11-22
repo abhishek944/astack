@@ -31,13 +31,13 @@ Herdr's Routing panel edits this block; it is the policy, and `notes` carries th
       "fast": "off"
     },
     {
-      "model": "openai-codex/gpt-6.1-sol",
+      "model": "opencode-go/hy4-flash-free",
       "when": "All subagents in `ui-ux-testing` sessions, including audit, component consistency, source investigation, synthesis and caller-requested read-only rechecks, except workers doing computer-use or browser-testing execution",
-      "thinking": "medium",
+      "thinking": "max",
       "fast": "off"
     },
     {
-      "model": "opencode-go/deepseek-v4.1-flash",
+      "model": "opencode-go/hy4-flash-free",
       "when": "Implementation, research, exploration, design, other non-review work",
       "thinking": "max",
       "fast": "off"
@@ -59,9 +59,9 @@ Herdr's Routing panel edits this block; it is the policy, and `notes` carries th
     "Production database access takes precedence over every other rule here, including the `grill-me`, `ui-ux-grill-me`, `ui-ux-testing` and computer-use/browser-testing rules.",
     "Production database access means the subagent runs or authors queries, migrations, schema or data changes against a production database, or debugs production data. Local, development, and staging databases do not count.",
     "Computer-use execution means the subagent directly interacts with or inspects a live desktop or computer for its assigned workflow, not necessarily testing. Browser-testing execution means the subagent actually runs or drives a browser test, including combined Aside + computer work. Source or existing screenshot-artifact review, synthesis, planning, and interview conduction by themselves do not count; a worker that actually performs computer use is not excluded because its surrounding workflow is an interview.",
-    "The computer-use/browser-testing rule applies only to those executing workers. Other workers in a `grill-me`, `ui-ux-grill-me`, or `ui-ux-testing` session keep their session rule.",
-    "The `grill-me` and `ui-ux-grill-me` session rule takes precedence over the `ui-ux-testing` rule and responsibility-based defaults, including for ordinary non-review subagents. It does not override the computer-use/browser-testing rule for workers that actually execute.",
-    "The `ui-ux-testing` session rule takes precedence over generic implementation/research and review/critique defaults for every worker assigned to its read-only audit or caller-requested recheck workflow. It does not override the computer-use/browser-testing rule for workers that actually execute. Production database access and enclosing `grill-me`/`ui-ux-grill-me` sessions still use their higher-priority rules.",
+    "The computer-use/browser-testing rule applies only to those executing workers. Other workers assigned to a `grill-me`, `ui-ux-grill-me`, or read-only `ui-ux-testing` audit phase keep their session rule.",
+    "The `grill-me` and `ui-ux-grill-me` session rule takes precedence over the `ui-ux-testing` audit rule and responsibility-based defaults, including for ordinary non-review subagents. It does not override the computer-use/browser-testing rule for workers that actually execute.",
+    "The `ui-ux-testing` audit rule takes precedence over generic implementation/research and review/critique defaults for workers assigned to its read-only audit, consistency, source investigation, synthesis or independent recheck phase. It does not apply to implementation or repair owners in a `ui-ux-testing` fix-or-flag session; they use normal implementation or review defaults. Flag interviews keep the `ui-ux-grill-me` rule, and workers actually executing browser or computer use keep the execution rule. Production database access and enclosing `grill-me`/`ui-ux-grill-me` sessions still use their higher-priority rules.",
     "Explicit user choices override these defaults.",
     "If a subagent malfunctions, stalls, stops unexpectedly, gives incorrect responses, or produces poor-quality work, feel free to replace it or switch its model, while respecting explicit user choices and the production database access requirement.",
     "`default` is not a delegation choice and does not compete with the rules above. It names the model and thinking level the pi-herdr usage fallback switches to when the current model's plan usage is exhausted, so interrupted work can resume; the user authorizes that switch to override every responsibility-specific rule above. It never chooses the model for a new subagent while usage is available.",

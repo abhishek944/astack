@@ -150,7 +150,6 @@ export default class Activity extends View {
     const row = h_flex().w_full().min_w(0).items_center().gap(narrow ? 6 : 8)
       .child(div().w(12).flex_none().text_size(12).text_color(t.muted).child(glyph))
       .child(div().min_w(0).truncate().font_medium().text_size(narrow ? 11 : 12.5).text_color(t.foreground).child(label))
-      .child(div().flex_none().text_size(narrow ? 9 : 11).text_color(t.dim).child("· " + loop.id))
       .child(div().flex_1().min_w(0))
       .child(div().flex_none().max_w(narrow ? 125 : 240).truncate().text_size(narrow ? 10 : 11).text_color(t.muted).child(caption));
     const facts = [status, `${loop.fireCount ?? 0}${loop.maxFires === undefined ? "" : "/" + loop.maxFires} fires`];

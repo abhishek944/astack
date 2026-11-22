@@ -130,6 +130,7 @@ export type ReportedCost = {
 /** Extra provider metadata carrier; validated again by `readCoreRawMetadata`. */
 export type CoreRawMetadataFields = {
   requestId?: string;
+  expiresAt?: number;
   usage?: unknown;
   reportedUsage?: unknown;
   reportedCost?: ReportedCost;
@@ -153,6 +154,7 @@ export function coreMetadata(fields: CoreRawMetadataFields): RawGenerationMetada
 
 export type CoreRawMetadata = {
   requestId?: string;
+  expiresAt?: number;
   reportedUsage?: ReportedUsage;
   reportedCost?: ReportedCost;
 };
@@ -167,6 +169,9 @@ export function readCoreRawMetadata(
   const raw = metadata as unknown as CoreRawMetadataFields;
   const requestId =
     typeof raw.requestId === 'string' && REQUEST_ID_RE.test(raw.requestId) ? raw.requestId : undefined;
+  const expiresAt =
+    typeof raw.expiresAt === 'number' && Number.isSafeInteger(raw.expiresAt) && raw.expiresAt >= 0
+      ? raw.expiresAt : undefined;
   const reportedUsage = sanitizeReportedUsage(raw.reportedUsage ?? raw.usage);
   let reportedCost = sanitizeReportedCost(raw.reportedCost);
   if (!reportedCost && typeof raw.cost === 'number') {
@@ -175,6 +180,7 @@ export function readCoreRawMetadata(
   }
   return {
     ...(requestId ? { requestId } : {}),
+    ...(expiresAt !== undefined ? { expiresAt } : {}),
     ...(reportedUsage ? { reportedUsage } : {}),
     ...(reportedCost ? { reportedCost } : {}),
   };

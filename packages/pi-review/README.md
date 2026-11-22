@@ -1,7 +1,8 @@
 # pi-review
 
 Eight skill-only Pi workflows for reviewing changes, designing modules, auditing security, auditing
-UI/UX, applying authorized UI follow-through and keeping implementation scope honest:
+UI/UX, finding small quality-of-life improvements, applying authorized UI fixes or flags and keeping
+implementation scope honest:
 
 | Skill | Purpose |
 | --- | --- |
@@ -11,8 +12,8 @@ UI/UX, applying authorized UI follow-through and keeping implementation scope ho
 | `awesome-logging-standards` | Guides structured application and error logs, redaction, request summaries, and TypeScript/Node.js or Effect integration. |
 | `no-unit-tests` | Prevents unit-test creation, editing or execution unless the user explicitly asks for unit tests. |
 | `no-arbitrary-limits` | Prevents unrequested capacity limits and implementation-time questions about optional limits, and reports optional controls after completion. |
-| `ui-ux-testing` | Runs a read-only UI/UX audit with parallel auditors and reports verified defects, evidence, suggested fixes and a fix class per finding; the caller owns scope, fixes and delegation. |
-| `ui-ux-followthrough` | Owns post-implementation UI disposition and flag-mode review of a named UI surface: runs a read-only audit, then auto-fixes clear in-scope defects after an implementation or flags a user-specified UI scope through `ui-ux-grill-me` before any fix; each grounded decision branch is presented as soon as its own evidence and dependencies close, while the remaining audit keeps running, so the user never waits for the full audit or synthesis report. A named review with no prior implementation starts read-only, and it adds no permission and rechecks at runtime. |
+| `ui-ux-testing` | Runs a read-only UI/UX audit with parallel auditors and reports verified defects, evidence, rendered contrast and outer-frame findings, suggested fixes and a fix class per finding. In its authorized post-implementation fix-or-flag mode, it auto-fixes only clear in-scope defects or presents user-specified decisions through `ui-ux-grill-me` as each branch becomes grounded, with an independent runtime recheck for every fix. Review mode makes no production edits. |
+| `ui-ux-qol` | Repeats small, evidence-backed UI/UX quality-of-life discovery for a named surface. It deduplicates candidates in a package-owned repository ledger, stays read-only for production UI and provider calls, and hands human-selected branches to `ui-ux-grill-me` and `implement`. |
 
 This package contains only skill instructions and their bundled references, companion documents,
 schema, validators and licenses. It registers no extension code or custom tools.
@@ -21,14 +22,20 @@ schema, validators and licenses. It registers no extension code or custom tools.
 
 Requires Pi 1.4.0 or newer and Node.js 22 or newer. `security-audit` full audits additionally
 require independent agents and an OS-enforced sandbox before executing target code.
-`ui-ux-testing` audits also require an accessible application and authorized browser or desktop
-automation; the audit reports findings without editing production source. `ui-ux-followthrough`
-builds on that audit inside an authorized implementation task and adds no permission of its own;
-its flag mode additionally needs `ui-ux-grill-me`, which requires `pi-decisions`,
-`pi-loop-monitor` and browser automation, plus Herdr Core and continuous monitoring for delegated
-owners. Flag mode presents each decision branch as soon as that branch's evidence is verified and
-its dependencies are resolved, shares the returned decision URL immediately, and keeps the
-remaining read-only audit running rather than holding choices until a synthesis or final report.
+`ui-ux-testing` audits require an accessible application and authorized browser or desktop
+automation; review mode reports findings without editing production source. Its fix-or-flag mode
+runs inside an authorized implementation task and adds no permission of its own; flag mode
+additionally needs `ui-ux-grill-me`, which requires `pi-decisions`, `pi-loop-monitor` and browser
+automation, plus Herdr Core and continuous monitoring for delegated owners. Flag mode presents each
+decision branch as soon as that branch's evidence is verified and its dependencies are resolved,
+shares the returned decision URL immediately, and keeps the remaining read-only audit running
+rather than holding choices until a synthesis or final report.
+
+`ui-ux-qol` requires the same read-only target access and uses `ui-conventions` and `ui-copy` as
+evidence sources. Presenting candidates needs `ui-ux-grill-me`, `pi-decisions`, and
+`pi-loop-monitor`. Recurring discovery is owned by the parent session through `pi-loop-monitor`; the
+skill never creates loops or uses a scheduler. Its ledger lives at
+`var/pi-review/ui-ux-qol/state.json` in the target repository.
 
 From an Astack checkout:
 
@@ -50,13 +57,13 @@ intended.
 
 ### Migrating from the shared skills repository
 
-All seven migrated skills were previously owned by the `pi-herdr-skills` shared skill repository and
-its global installer. This package is now their source of truth. Names and audit coverage are
-preserved; `ui-ux-testing` now reports verified findings and suggested fixes without editing
-production source or implementing them, and `ui-ux-followthrough` is new to this package: it owns
-the authorized disposition of those findings without moving repair permission into the audit.
+All seven original migrated skills were previously owned by the `pi-herdr-skills` shared skill repository and
+its global installer. This package is now their source of truth. `ui-ux-testing` keeps its read-only
+review mode, which reports verified findings and suggested fixes without editing production source,
+and now also carries the authorized post-implementation disposition workflow so one skill owns both
+the audit and its tightly controlled fix-or-flag decisions.
 
-If the old global copies exist, inspect and back up `~/.agents/skills/<skill>/` for these seven
+If the old global copies exist, inspect and back up `~/.agents/skills/<skill>/` for those seven
 names, then remove those directories after the package is configured. The shared installer does not
 remove retired directories automatically. Do not keep both the global copies and the package
 loaded: Pi keeps the first discovered skill and warns about the duplicate name.
@@ -74,6 +81,6 @@ tooling.
 ## Licensing
 
 The package's original packaging and documentation, including `agent-review`, `no-unit-tests`,
-`no-arbitrary-limits`, `ui-ux-testing` and `ui-ux-followthrough`, are MIT licensed; see
-[LICENSE](LICENSE). Redistributed material keeps its upstream terms and bundled license texts. See
+`no-arbitrary-limits` and `ui-ux-testing`, are MIT licensed; see [LICENSE](LICENSE). Redistributed
+material keeps its upstream terms and bundled license texts. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
