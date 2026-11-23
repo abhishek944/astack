@@ -1,0 +1,85 @@
+{
+  "name": "@abhishek944/pi-embeddings",
+  "version": "0.1.0",
+  "description": "Config-driven text embeddings for Pi and MCP with local, OpenAI, Sarvam and gateway routes, ordered fallback and explicit comparisons.",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "embeddings",
+    "mcp",
+    "openai",
+    "sarvam",
+    "embeddinggemma",
+    "litellm"
+  ],
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "pi-embeddings-mcp": "dist/mcp-cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas.d.ts",
+      "import": "./dist/schemas.js"
+    },
+    "./extension": {
+      "types": "./dist/extension.d.ts",
+      "import": "./dist/extension.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp-server.d.ts",
+      "import": "./dist/mcp-server.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": [
+      "./dist/extension.js"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "check": "npm run typecheck && npm run build && npm pack --dry-run"
+  },
+  "dependencies": {
+    "@amaster.ai/pi-shared": "^0.1.10",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "js-tiktoken": "1.0.21"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=1.2.0",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "1.5.2",
+    "@types/node": "24.19.2",
+    "typebox": "1.3.27",
+    "typescript": "5.9.3"
+  }
+}
