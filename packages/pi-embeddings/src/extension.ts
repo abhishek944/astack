@@ -5,7 +5,10 @@ import {
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
 import { EmbeddingsError } from './errors.js';
-import { createEmbeddingsRuntime, type EmbeddingsRuntime } from './runtime.js';
+import {
+  createEmbeddingsRuntimeWithDiagnostics,
+  type EmbeddingsRuntimeWithDiagnostics,
+} from './runtime.js';
 import { loadEmbeddingSettings, validateEmbeddingSettings } from './settings.js';
 import { updateProjectEmbeddingSettings } from './settings-write.js';
 import {
@@ -16,16 +19,12 @@ import {
 import {
   EMBED_COMPARE_TOOL,
   EMBED_TOOL,
-  EMBEDDINGS_DESCRIBE_TOOL,
   EMBED_COMPARE_TOOL_DESCRIPTION,
   EMBED_TOOL_DESCRIPTION,
-  EMBEDDINGS_DESCRIBE_TOOL_DESCRIPTION,
   embedCompareOutput,
   embedCompareParameters,
   embedOutput,
   embedParameters,
-  embeddingsDescribeOutput,
-  embeddingsDescribeParameters,
 } from './tool-contracts.js';
 
 const summary = (result: {
@@ -44,17 +43,17 @@ const signalOptions = (signal: AbortSignal | undefined) =>
 
 export default function piEmbeddingsExtension(pi: ExtensionAPI): void {
   let settings: EmbeddingSettings | undefined;
-  let runtime: EmbeddingsRuntime | undefined;
+  let runtime: EmbeddingsRuntimeWithDiagnostics | undefined;
   let cwd = process.cwd();
 
   const refresh = async (next: EmbeddingSettings, nextCwd = cwd): Promise<void> => {
     await runtime?.close();
     settings = next;
     cwd = nextCwd;
-    runtime = createEmbeddingsRuntime({ settings: next, cwd: nextCwd });
+    runtime = createEmbeddingsRuntimeWithDiagnostics({ settings: next, cwd: nextCwd });
   };
 
-  const currentRuntime = (ctx: ExtensionContext): EmbeddingsRuntime => {
+  const currentRuntime = (ctx: ExtensionContext): EmbeddingsRuntimeWithDiagnostics => {
     if (runtime === undefined || cwd !== ctx.cwd)
       throw new EmbeddingsError('configuration-invalid');
     return runtime;
@@ -79,7 +78,7 @@ export default function piEmbeddingsExtension(pi: ExtensionAPI): void {
       promptGuidelines: [
         'Provider, model, credentials and caller storage policy are fixed by trusted settings and cannot be overridden through this tool.',
         'Use embed_compare only when the user explicitly asks to compare configured embedding routes.',
-        'Describe reports configuration and readiness; it does not reserve a generating space or prove a caller can store the result.',
+        'The embed result reports the actual generating provider, model and space, including mixed fallback generations.',
       ],
       parameters: embedParameters,
       outputSchema: embedOutput,
@@ -130,49 +129,15 @@ export default function piEmbeddingsExtension(pi: ExtensionAPI): void {
     })
   );
 
-  pi.registerTool(
-    defineTool({
-      name: EMBEDDINGS_DESCRIBE_TOOL,
-      label: 'Describe embeddings',
-      description: EMBEDDINGS_DESCRIBE_TOOL_DESCRIPTION,
-      promptSnippet:
-        'Report the configured embedding route, complete generating space and redacted readiness diagnostics without inference.',
-      promptGuidelines: [
-        'Describe is information, not a reservation or a storage-compatibility decision.',
-        'Do not treat ready as proof that an inference call succeeded or that a caller can persist the returned vectors.',
-      ],
-      parameters: embeddingsDescribeParameters,
-      outputSchema: embeddingsDescribeOutput,
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      async execute(_id, _params, _signal, _onUpdate, ctx) {
-        try {
-          const described = currentRuntime(ctx).describe();
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `${described.selected.provider}/${described.selected.model}; ready: ${described.ready}.`,
-              },
-            ],
-            details: described,
-            structuredContent: described,
-          };
-        } catch (error) {
-          throw new Error(codeOf(error));
-        }
-      },
-    })
-  );
-
   pi.registerCommand('embeddings', {
     description:
-      'Embeddings: /embeddings list | doctor | reload | use <provider> <model> | compare <text>. list, doctor and describe make no inference calls.',
+      'Embeddings: /embeddings list | doctor | reload | use <provider> <model> | compare <text>. list and doctor make no inference calls.',
     handler: async (args: string | undefined, ctx: ExtensionContext) => {
       const raw = (args ?? '').trim();
       const parts = raw.split(/\s+/).filter(Boolean);
       const command = parts[0] ?? 'list';
       try {
-        if (command === 'list' || command === 'doctor' || command === 'describe' || command === 'status') {
+        if (command === 'list' || command === 'doctor' || command === 'status') {
           if (parts.length !== 1) throw new EmbeddingsError('configuration-invalid');
           const active = currentRuntime(ctx);
           const described = active.describe();

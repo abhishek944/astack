@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Added verified built-in routes for Vercel AI Gateway, Google Gemini Decision 1, Inception Mercury Decide, Parallel Decisions, OpenRouter alpha Decisions and Extractions, LiteLLM extraction, and self-hosted llama.cpp/vLLM/Strands/Laya/Nimble System One runtimes with explicit capability tiers.
+- Added Microsoft Foundry Decision-1.1 image assets and Entra bearer auth, TypeSafe long context, Liquid JSON `path` metadata, Clairic image rotation, OpenAI native `input_json`/boolean choices/score descriptions/image detail/prompt-cache controls, and per-route question/media limits.
+- Generalized `classify_extract` to direct Cloudflare Clairic, OpenRouter alpha Extractions and LiteLLM `/v1/extraction`; added an Inception `extract` question primitive and Parallel request-wide citations.
+- Reported gateway/provider charges separately as `providerCost` without replacing the token estimate. Perplexity `maxStaleness` was removed because upstream documents it as ignored.
+- Corrected the legacy `openrouter` alias, native Gemini text blocks, Gemini/local A/V gates, shared images with OpenAI conversations, Inception extract sources and mixed questions, OpenRouter hosted URLs and `d1.2-ultra` images, cache breakpoints, OpenAI's 400-question limit, boolean NONE sentinels, and per-route extraction media and field schemas.
+- Tightened OpenRouter extraction validation to the published model tiers and rejected nested image references, mixed ScaleDown text/asset requests and multi-asset ScaleDown requests before dispatch.
+- Added `providers.cloudflare.gatewayId` for Cloudflare decision and extraction routes; it emits the documented `cf-aig-gateway-id` header and takes precedence over an equivalent custom header.
+- Fixed OpenAI Decisions image input to include the documented `type: "message"` item field, which keeps the payload compatible with LiteLLM's `/v1/decisions` route.
+- Documented verified LiteLLM decision gateways, OpenRouter pricing/choice overrides and Cloudflare gateway settings without adding unverified endpoint support or prices. The LiteLLM example uses `customProviders` because unknown route IDs under `providers` are rejected.
+- Added Sarvam Prism through `sarvam-api` / `sarvam-prism` with `SARVAM_API_KEY`, the documented `api-subscription-key` header, `noul`/choice/score mapping, validated probabilities and safe provider error details. The route is text-only, explicit selection is required, and USD pricing needs an override because the published rate is in INR.
+- Sarvam error field paths and request IDs are omitted when they echo the active API key, and Sarvam score answers now require the documented probability distribution without changing other providers' optional-probability behavior. Response-header request IDs are sanitized for Sarvam only, then fall back to the body request ID.
 - Added Perplexity Decider v1.3 and Flash v1.3 to the built-in catalog, pricing and 255-choice limits. `latest` aliases now resolve to v1.3 upstream.
 - Added Perplexity `locate` answers with Unicode-character spans and explicit `web_grounding`/`maxStaleness` support, including search evidence and documented non-token fee accounting.
 - Added Liquid `d1.2` and `d1.2-ultra` with typed text/number/date reads, `spans`, `box`/`boxes`, ranged estimates, multi-select choices, top-level image/audio uploads and public pricing.

@@ -23,13 +23,10 @@ import {
 import {
   EMBED_COMPARE_TOOL,
   EMBED_TOOL,
-  EMBEDDINGS_DESCRIBE_TOOL,
   EMBED_COMPARE_TOOL_DESCRIPTION,
   EMBED_TOOL_DESCRIPTION,
-  EMBEDDINGS_DESCRIBE_TOOL_DESCRIPTION,
   embedCompareParameters,
   embedParameters,
-  embeddingsDescribeParameters,
 } from './tool-contracts.js';
 
 const require = createRequire(import.meta.url);
@@ -145,12 +142,6 @@ export async function createEmbeddingsMcpServer(
         inputSchema: embedCompareParameters,
         annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
       },
-      {
-        name: EMBEDDINGS_DESCRIBE_TOOL,
-        description: EMBEDDINGS_DESCRIBE_TOOL_DESCRIPTION,
-        inputSchema: embeddingsDescribeParameters,
-        annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      },
     ],
   }));
 
@@ -171,16 +162,6 @@ export async function createEmbeddingsMcpServer(
           }
           const compared = await runtime.compare(args, { signal: extra.signal, context });
           return jsonResult(compared, `Compared ${compared.entries.length} configured embedding route(s).`);
-        }
-        case EMBEDDINGS_DESCRIBE_TOOL: {
-          const problems = validationProblems(embeddingsDescribeParameters, args);
-          if (problems.length > 0)
-            return errorResult(`Invalid arguments for ${request.params.name}:\n- ${problems.join('\n- ')}`);
-          const described = runtime.describe();
-          return jsonResult(
-            described,
-            `Embedding route ${described.selected.provider}/${described.selected.model}; ready: ${described.ready}.`
-          );
         }
         default:
           throw new McpError(ErrorCode.InvalidParams, `Unknown tool: ${request.params.name}`);

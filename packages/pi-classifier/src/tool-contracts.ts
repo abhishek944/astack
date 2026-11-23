@@ -131,6 +131,7 @@ const question = Type.Union([
         shortText,
         { minProperties: 1 },
       ),
+      booleanValues: Type.Optional(Type.Boolean()),
     },
     { additionalProperties: false },
   ),
@@ -142,6 +143,7 @@ const question = Type.Union([
         minItems: 2,
         maxItems: 10,
       }),
+      descriptions: Type.Optional(Type.Array(Type.String({ maxLength: 4096 }))),
     },
     { additionalProperties: false },
   ),
@@ -149,6 +151,18 @@ const question = Type.Union([
     {
       type: Type.Literal("box"),
       instructions: instructionContent,
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("extract"),
+      instructions: Type.Optional(instructionContent),
+      criteria: Type.Record(Type.String({ minLength: 1, maxLength: 128 }), shortText, { minProperties: 1, maxProperties: 26 }),
+      source: Type.Optional(Type.String({ minLength: 1, maxLength: 4096 })),
+      threshold: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+      snapToWords: Type.Optional(Type.Boolean()),
+      debug: Type.Optional(Type.Boolean()),
     },
     { additionalProperties: false },
   ),
@@ -229,12 +243,35 @@ export const classifyParameters = Type.Object(
     questions: Type.Record(
       Type.String({ pattern: "^[a-zA-Z0-9_-]{1,64}$" }),
       question,
-      { minProperties: 1, maxProperties: 32 },
+      { minProperties: 1, maxProperties: 1000 },
     ),
     mode: Type.Optional(
       Type.Literal("web_grounding"),
     ),
-    maxStaleness: Type.Optional(Type.Integer({ minimum: 0 })),
+    conversation: Type.Optional(
+      Type.Array(Type.Unknown({
+        description: "An OpenAI Decisions input item: message, function_call, function_call_output, custom_tool_call or custom_tool_call_output.",
+      })),
+    ),
+    imageDetail: Type.Optional(
+      Type.Union([
+        Type.Literal("auto"),
+        Type.Literal("low"),
+        Type.Literal("high"),
+        Type.Literal("original"),
+      ]),
+    ),
+    promptCache: Type.Optional(
+      Type.Object(
+        {
+          key: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+          mode: Type.Optional(Type.Union([Type.Literal("implicit"), Type.Literal("explicit")])),
+          ttl: Type.Optional(Type.Literal("30m")),
+          breakpoints: Type.Optional(Type.Boolean()),
+        },
+        { additionalProperties: false },
+      ),
+    ),
     media: Type.Optional(
       Type.Array(
         Type.Object(
@@ -266,9 +303,9 @@ export const classifyParameters = Type.Object(
           ),
         ]),
         {
-          maxItems: 8,
+          maxItems: 128,
           description:
-            "Legacy local paths are shared in order. Named {id,path} or {id,url} images must be referenced using {$image:id} in state or supported question content. URLs are OpenAI-only and sent to the provider, never fetched locally. No inline base64 or symlinks. Limits: Perplexity and Liquid 8 images, Clef 4, others 5.",
+            "Legacy local paths are shared in order. Named {id,path} or {id,url} images must be referenced using {$image:id} in state or supported question content. URLs are OpenAI-only and sent to the provider, never fetched locally. No inline base64 or symlinks. The selected route enforces its documented image limit; this envelope accepts 128.",
         },
       ),
     ),
@@ -327,10 +364,16 @@ export const classifyOutput = Type.Object({
       }),
       Type.Object({ type: Type.Literal("locate"), spans: Type.Array(textSpan) }),
       Type.Object({
+        type: Type.Literal("extract"),
+        spans: Type.Record(Type.String(), Type.Array(textSpan)),
+        notStated: Type.Record(Type.String(), Type.Number({ minimum: 0, maximum: 1 })),
+      }),
+      Type.Object({
         type: Type.Literal("text"),
         text: Type.String(),
         span: Type.Optional(Type.Union([charSpan, Type.Null()])),
         found: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+        path: Type.Optional(Type.String()),
       }),
       Type.Object({
         type: Type.Literal("number"),
@@ -339,6 +382,7 @@ export const classifyOutput = Type.Object({
         text: Type.Optional(Type.Union([Type.String(), Type.Null()])),
         span: Type.Optional(Type.Union([charSpan, Type.Null()])),
         found: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+        path: Type.Optional(Type.String()),
       }),
       Type.Object({
         type: Type.Literal("date"),
@@ -346,6 +390,7 @@ export const classifyOutput = Type.Object({
         text: Type.Optional(Type.Union([Type.String(), Type.Null()])),
         span: Type.Optional(Type.Union([charSpan, Type.Null()])),
         found: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+        path: Type.Optional(Type.String()),
       }),
       Type.Object({
         type: Type.Literal("spans"),
@@ -427,6 +472,29 @@ export const classifyOutput = Type.Object({
       ]),
     }),
   ]),
+  providerCost: Type.Optional(
+    Type.Object(
+      {
+        currency: Type.Literal("USD"),
+        total: Type.Number({ minimum: 0 }),
+        source: Type.Union([Type.Literal("provider"), Type.Literal("gateway")]),
+        note: Type.Optional(Type.String()),
+      },
+      { additionalProperties: false },
+    ),
+  ),
+  citations: Type.Optional(
+    Type.Array(
+      Type.Object(
+        {
+          url: Type.String(),
+          title: Type.Optional(Type.String()),
+          excerpts: Type.Optional(Type.Array(Type.String())),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  ),
   requestId: Type.Optional(Type.String()),
   webGrounding: Type.Optional(
     Type.Object(
@@ -666,7 +734,23 @@ export const classifyExtractParameters = Type.Object(
       extractionFieldDefinition,
       { minProperties: 1 },
     ),
-    images: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 4096 }), { maxItems: 4 })),
+    images: Type.Optional(
+      Type.Array(
+        Type.Union([
+          Type.String({ minLength: 1, maxLength: 4096 }),
+          Type.Object(
+            {
+              path: Type.String({ minLength: 1, maxLength: 4096 }),
+              rotation: Type.Optional(Type.Union([
+                Type.Literal(0), Type.Literal(90), Type.Literal(180), Type.Literal(270),
+              ])),
+            },
+            { additionalProperties: false },
+          ),
+        ]),
+        { maxItems: 4 },
+      ),
+    ),
     documents: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 4096 }), { maxItems: 4 })),
     referenceDate: Type.Optional(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })),
     options: Type.Optional(
@@ -695,6 +779,7 @@ export const classifyExtractOutput = Type.Object({
   truncated: Type.Boolean(),
   usage: Type.Optional(classifyOutput.properties.usage),
   cost: classifyOutput.properties.cost,
+  providerCost: classifyOutput.properties.providerCost,
   requestId: Type.Optional(Type.String()),
   stateText: Type.Optional(Type.String()),
 });

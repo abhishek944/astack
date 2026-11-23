@@ -10,6 +10,7 @@ import {
   type EmbeddingCompareResult,
   type EmbeddingContext,
   type EmbeddingErrorCode,
+  type EmbeddingGeneration,
   type EmbeddingOutcome,
   type EmbeddingRequest,
   type EmbeddingResult,
@@ -44,6 +45,38 @@ const unstarted = (index: number): EmbeddingOutcome => ({
 
 const preparedTokenCount = (input: PreparedInput): number =>
   input.kind === 'tokens' ? input.tokens.length : (input.tokenCount ?? 0);
+
+const generationKey = (generation: EmbeddingGeneration): string =>
+  `${generation.provider}\u0000${generation.model}\u0000${JSON.stringify(generation.space)}`;
+
+/**
+ * Record the complete set of actual generations. Singular metadata is set only when one generation
+ * produced every vector; a mixed fallback never collapses into a guessed route or space.
+ */
+const generationsOf = (outcomes: readonly EmbeddingOutcome[]): EmbeddingGeneration[] => {
+  const byKey = new Map<string, EmbeddingGeneration>();
+  for (const outcome of outcomes) {
+    if (outcome.status !== 'success') continue;
+    const generation: EmbeddingGeneration = {
+      provider: outcome.route,
+      model: outcome.model,
+      space: outcome.space,
+    };
+    byKey.set(generationKey(generation), generation);
+  }
+  return [...byKey.values()];
+};
+
+const resultMetadata = (outcomes: readonly EmbeddingOutcome[]) => {
+  const generations = generationsOf(outcomes);
+  const only = generations.length === 1 ? generations[0] : undefined;
+  return {
+    provider: only?.provider ?? null,
+    model: only?.model ?? null,
+    space: only?.space ?? null,
+    generations,
+  };
+};
 
 /**
  * Runs one ordinary call or one explicit comparison entry. Successful inputs are never replayed on a
@@ -207,9 +240,11 @@ export async function executeEmbeddings(args: ExecuteArgs): Promise<EmbeddingRes
               attemptId: failureByIndex.get(index)?.attemptId ?? null,
             };
   }
+  const allOutcomes = outcomes.map((outcome, index) => outcome ?? unstarted(index));
   return {
     schemaVersion: EMBEDDINGS_PROTOCOL_VERSION,
-    outcomes: outcomes.map((outcome, index) => outcome ?? unstarted(index)),
+    ...resultMetadata(allOutcomes),
+    outcomes: allOutcomes,
     attempts,
   };
 }
@@ -231,6 +266,10 @@ export async function executeCompare(args: {
         status: 'cancelled',
         result: {
           schemaVersion: EMBEDDINGS_PROTOCOL_VERSION,
+          provider: null,
+          model: null,
+          space: null,
+          generations: [],
           outcomes: args.request.inputs.map((_input, offset) => cancelled(offset)),
           attempts: [],
         },

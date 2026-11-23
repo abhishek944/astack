@@ -1,4 +1,11 @@
-import { acquireProvider, routeDiagnostics, routeKey, spaceForRoute, type AcquiredProvider } from './providers.js';
+import {
+  acquireProvider,
+  routeDiagnostics,
+  routeKey,
+  spaceForRoute,
+  type AcquiredProvider,
+  type EmbeddingDiagnostic,
+} from './providers.js';
 import { configuredDefault, configuredRoutes, validateEmbeddingSettings } from './settings.js';
 import { executeCompare, executeEmbeddings } from './execute.js';
 import { EmbeddingsError } from './errors.js';
@@ -6,7 +13,6 @@ import {
   EMBEDDINGS_PROTOCOL_VERSION,
   type EmbeddingCompareResult,
   type EmbeddingContext,
-  type EmbeddingDescribe,
   type EmbeddingRequest,
   type EmbeddingResult,
   type EmbeddingRoute,
@@ -24,16 +30,31 @@ export interface EmbeddingsRuntime {
     request: EmbeddingRequest,
     options?: { signal?: AbortSignal | undefined; context?: EmbeddingContext | undefined }
   ): Promise<EmbeddingCompareResult>;
-  describe(): EmbeddingDescribe;
   close(): Promise<void>;
+}
+
+/** Internal diagnostics for Pi commands and host startup; never registered as a tool. */
+export interface RuntimeDiagnostics {
+  readonly schemaVersion: typeof EMBEDDINGS_PROTOCOL_VERSION;
+  readonly ready: boolean;
+  readonly selected: EmbeddingRoute;
+  readonly space: ReturnType<typeof spaceForRoute> | null;
+  readonly default: EmbeddingRoute;
+  readonly fallback: readonly EmbeddingRoute[];
+  readonly compare: readonly EmbeddingRoute[];
+  readonly diagnostics: readonly EmbeddingDiagnostic[];
+}
+
+export interface EmbeddingsRuntimeWithDiagnostics extends EmbeddingsRuntime {
+  describe(): RuntimeDiagnostics;
 }
 
 const noSignal = (signal: AbortSignal | undefined): AbortSignal => signal ?? new AbortController().signal;
 
-export function createEmbeddingsRuntime(args: {
+function createRuntime(args: {
   settings: EmbeddingSettings;
   cwd?: string | undefined;
-}): EmbeddingsRuntime {
+}): EmbeddingsRuntimeWithDiagnostics {
   const settings = validateEmbeddingSettings(args.settings);
   const defaultRoute = configuredDefault(settings);
   const fallbackRoutes = configuredRoutes(settings, 'fallback');
@@ -121,7 +142,7 @@ export function createEmbeddingsRuntime(args: {
         schemaVersion: EMBEDDINGS_PROTOCOL_VERSION,
         ready: defaultDiagnostics.length === 0,
         selected: defaultRoute,
-        space: spaceForRoute(defaultRoute),
+        space: spaceForRoute(defaultRoute, settings),
         default: defaultRoute,
         fallback: [...fallbackRoutes],
         compare: [...compareRoutes],
@@ -143,4 +164,21 @@ export function createEmbeddingsRuntime(args: {
       return closing;
     },
   };
+}
+
+/** Public factory: callers cannot obtain describe metadata from the runtime API. */
+export function createEmbeddingsRuntime(args: {
+  settings: EmbeddingSettings;
+  cwd?: string | undefined;
+}): EmbeddingsRuntime {
+  const { start, embed, compare, close } = createRuntime(args);
+  return { start, embed, compare, close };
+}
+
+/** Package-internal factory for Pi command output and provider-free host startup checks. */
+export function createEmbeddingsRuntimeWithDiagnostics(args: {
+  settings: EmbeddingSettings;
+  cwd?: string | undefined;
+}): EmbeddingsRuntimeWithDiagnostics {
+  return createRuntime(args);
 }

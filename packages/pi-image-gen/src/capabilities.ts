@@ -64,6 +64,14 @@ export function capabilitiesForApi(
     if (api !== 'adobe-firefly' && api !== 'stability' && api !== 'recraft') delete clean.aspectRatios;
     delete clean.imageSizes;
   }
+  if (api === 'cloudflare') {
+    // The Cloudflare REST adapter forwards only prompt and seed. Local resize is applied after
+    // generation and is deliberately not a provider size control.
+    delete clean.sizes;
+    delete clean.sizeRange;
+    delete clean.aspectRatios;
+    delete clean.imageSizes;
+  }
   if (api !== 'openai' && api !== 'openrouter' && api !== 'codex') {
     delete clean.qualityValues;
   }
@@ -139,7 +147,7 @@ export function capabilitiesForApi(
   if (api !== 'dashscope' && api !== 'openrouter' && api !== 'stability' && api !== 'recraft') {
     delete clean.supportsNegativePrompt;
   }
-  if (api !== 'dashscope' && api !== 'openrouter' && api !== 'stability' && api !== 'recraft' && api !== 'bfl' && api !== 'adobe-firefly') {
+  if (api !== 'dashscope' && api !== 'openrouter' && api !== 'stability' && api !== 'recraft' && api !== 'bfl' && api !== 'adobe-firefly' && api !== 'cloudflare') {
     delete clean.supportsSeed;
   }
   if (api !== 'dashscope' && api !== 'recraft' && api !== 'bfl') {
@@ -147,7 +155,7 @@ export function capabilitiesForApi(
   }
   if (api !== 'dashscope' && api !== 'ark') delete clean.supportsWatermark;
   if (api !== 'ark') delete clean.supportsSeries;
-  if (api === 'mai' || api === 'bfl' || api === 'adobe-firefly' || api === 'stability') clean.nMax = 1;
+  if (api === 'mai' || api === 'bfl' || api === 'adobe-firefly' || api === 'stability' || api === 'cloudflare') clean.nMax = 1;
   return clean;
 }
 
@@ -157,10 +165,10 @@ export function genericCapabilitiesForApi(api: ApiStyle): ImageModelCapabilities
     ...(api === 'openrouter' || api === 'recraft'
       ? { responseFormats: ['b64_json', 'url'] as Array<'b64_json' | 'url'> }
       : {}),
-    nMax: api === 'ark' || api === 'meta' || api === 'mai' || api === 'bfl' || api === 'adobe-firefly' || api === 'stability' ? 1 : MAX_GENERATED_IMAGES,
+    nMax: api === 'ark' || api === 'meta' || api === 'mai' || api === 'bfl' || api === 'adobe-firefly' || api === 'stability' || api === 'cloudflare' ? 1 : MAX_GENERATED_IMAGES,
     nMaxSource: 'extension',
-    maxReferenceImages: api === 'mai' ? 5 : MAX_REFERENCE_IMAGE_INPUTS,
-    inputFormats: api === 'mai' ? ['PNG', 'JPEG'] : ['PNG', 'JPEG', 'GIF', 'WEBP'],
+    maxReferenceImages: api === 'mai' ? 5 : api === 'cloudflare' ? 0 : MAX_REFERENCE_IMAGE_INPUTS,
+    inputFormats: api === 'mai' ? ['PNG', 'JPEG'] : api === 'cloudflare' ? [] : ['PNG', 'JPEG', 'GIF', 'WEBP'],
     inputMaxBytes: MAX_IMAGE_BYTES,
     referenceLimitsSource: 'extension',
   };
@@ -308,8 +316,11 @@ export function validateGenerateParams(
       );
     }
   } else if (params.aspectRatio || params.imageSize) {
+    const hasPixelSizeKnob = Boolean(caps.sizes?.length || caps.sizeRange);
     throw new ImageGenError(
-      `${modelId} does not accept aspectRatio/imageSize — use size instead.`,
+      hasPixelSizeKnob
+        ? `${modelId} does not accept aspectRatio/imageSize — use size instead.`
+        : `${modelId} does not accept aspectRatio/imageSize; omit them and use local resize for exact dimensions.`,
       'aspect knobs unsupported by model',
     );
   }

@@ -1,6 +1,6 @@
 # pi-classifier
 
-A Pi extension for typed, probabilistic decisions across Microsoft Decision-1, OpenAI Decisions, Perplexity Decisions, TypeSafe Jev, Liquid d1.2, Cloudflare Clef/Clef Flash/Clef-omni and SystemOne-compatible gateways. It also exposes Perplexity text-span location and web grounding, plus Cloudflare Clairic structured extraction.
+A Pi extension for typed, probabilistic decisions across Microsoft Foundry Decision-1.1, OpenAI Decisions, Perplexity Decisions, Sarvam Prism, TypeSafe Jev, Liquid d1.2, Cloudflare Clef/Clef Flash/Clef-omni, Google Gemini Decision 1, Inception Mercury Decide, Parallel Decisions, OpenRouter alpha Decisions, Vercel AI Gateway, self-hosted System One runtimes, and Clairic-shaped extraction. It also exposes Perplexity text-span location and web grounding, grounded Parallel citations, and typed reads from supported models.
 
 One configured default, optional selective fallback, and explicit model comparisons. No automatic retries or permission auto-approval.
 
@@ -49,11 +49,13 @@ Use the `pi-classifier` namespace in Pi settings. Like `pi-image-gen`, route sel
     "providers": {
       "openai": { "apiKey": "${OPENAI_API_KEY}" },
       "perplexity": { "apiKey": "${PERPLEXITY_API_KEY}" },
+      "sarvam": { "apiKey": "${SARVAM_API_KEY}" },
       "typesafe": { "apiKey": "${TYPESAFE_API_KEY}" },
       "liquid": { "apiKey": "${LIQUID_API_KEY}" },
       "cloudflare": {
         "apiKey": "${CLOUDFLARE_API_KEY}",
-        "accountId": "${CLOUDFLARE_ACCOUNT_ID}"
+        "accountId": "${CLOUDFLARE_ACCOUNT_ID}",
+        "gatewayId": "${CLOUDFLARE_AI_GATEWAY_ID}"
       },
       "openrouter": { "apiKey": "${OPENROUTER_API_KEY}" }
     }
@@ -81,22 +83,50 @@ Stored API-key values support literal strings and `$NAME`/`${NAME}` references, 
 
 ### Providers and models
 
-| Route            | Provider settings key | Models                                                             | Environment key      |
-| ---------------- | --------------------- | ------------------------------------------------------------------ | -------------------- |
-| `microsoft-api` | `microsoft` | `Microsoft-Decision-1` (select your actual deployment name) | `AZURE_API_KEY` |
-| `openai-api`     | `openai`              | `gpt-6-luna`                                                       | `OPENAI_API_KEY`     |
-| `perplexity-api` | `perplexity`          | `pplx-decider-v1.3`, `pplx-decider-flash-v1.3`, v1.2 models, latest aliases, legacy v1/v1.1 IDs | `PERPLEXITY_API_KEY` |
-| `liquid-api`     | `liquid`              | `d1.2`, `d1.2-ultra`                                               | `LIQUID_API_KEY`     |
-| `typesafe-api`   | `typesafe`            | `jev-latest`, `jev-1.13.0`, `jev-preview`, `jev-1.14.0`            | `TYPESAFE_API_KEY`   |
-| `cloudflare-api` | `cloudflare`          | `@cf/cloudflare/clef`, `@cf/cloudflare/clef-flash`, `@cf/cloudflare/clef-omni`, `typesafe/jev` | `CLOUDFLARE_API_KEY` |
-| `clairic-api`    | `cloudflare`          | `@cf/cloudflare/clairic` (used by `classify_extract`)              | `CLOUDFLARE_API_KEY` |
-| `openrouter-api` | `openrouter`          | `typesafe/jev-1.13`, `~typesafe/jev-latest`                        | `OPENROUTER_API_KEY` |
+| Route | Provider settings key | Models | Credential |
+| --- | --- | --- | --- |
+| `microsoft-api` | `microsoft` | `Microsoft-Decision-1.1`, legacy `Microsoft-Decision-1`; use your deployment name | `AZURE_API_KEY` or Entra token via `authMode: "bearer"` |
+| `openai-api` | `openai` | `gpt-6-luna` | `OPENAI_API_KEY` |
+| `vercel-api` | `vercel` | `openai/gpt-6-luna-decisions`, `typesafe-ai/jev` | `VERCEL_AI_GATEWAY_API_KEY` |
+| `gemini-api` | `gemini` | `gemini-decision-1` | `GEMINI_API_KEY` |
+| `inception-api` | `inception` | `mercury-decide` | `INCEPTION_API_KEY` |
+| `parallel-api` | `parallel` | `parallel-decisions` | `PARALLEL_API_KEY` |
+| `perplexity-api` | `perplexity` | v1.3, Flash v1.3, v1.2, latest aliases, legacy v1/v1.1 IDs | `PERPLEXITY_API_KEY` |
+| `sarvam-api` | `sarvam` | `sarvam-prism` | `SARVAM_API_KEY` |
+| `liquid-api` | `liquid` | `d1.2`, `d1.2-ultra` | `LIQUID_API_KEY` |
+| `typesafe-api` | `typesafe` | `jev-latest`, `jev-1.13.0`, `jev-preview`, `jev-1.14.0` | `TYPESAFE_API_KEY` |
+| `cloudflare-api` | `cloudflare` | Clef, Clef Flash, Clef-omni, `typesafe/jev` | `CLOUDFLARE_API_KEY` |
+| `clairic-api` | `cloudflare` | `@cf/cloudflare/clairic` | `CLOUDFLARE_API_KEY` |
+| `openrouter-api` | `openrouter` | OpenRouter System One Jev models | `OPENROUTER_API_KEY` |
+| `openrouter-decisions-api` | `openrouter` | Jev 1.14/latest, Microsoft, Clef, Liquid, OpenAI, Gemini, HeyGen and other documented slugs | `OPENROUTER_API_KEY` |
+| `openrouter-extractions-api` | `openrouter` | `cloudflare/clairic`, Liquid, Perplexity, ScaleDown and other documented extraction slugs | `OPENROUTER_API_KEY` |
+| `llamacpp-api`, `vllm-api`, `strands-api`, `laya-api`, `nimble-api` | same route key | documented local model IDs; require `baseUrl` | none or runtime key |
 
-Cloudflare also needs `providers.cloudflare.accountId`, the stored `cloudflare-workers-ai` API-key credential's `env.CLOUDFLARE_ACCOUNT_ID`, or `CLOUDFLARE_ACCOUNT_ID`, in that order. Its stored API token lives under `cloudflare-workers-ai`, not `cloudflare`.
+Cloudflare also needs `providers.cloudflare.accountId`, the stored `cloudflare-workers-ai` API-key credential's `env.CLOUDFLARE_ACCOUNT_ID`, or `CLOUDFLARE_ACCOUNT_ID`, in that order. Its stored API token lives under `cloudflare-workers-ai`, not `cloudflare`. Set `providers.cloudflare.gatewayId` to select an AI Gateway for Workers AI requests; the package sends it as `cf-aig-gateway-id`. An explicitly configured `headers["cf-aig-gateway-id"]` still works when `gatewayId` is absent; when both are present, `gatewayId` wins.
 
-A provider's `baseUrl` replaces the API root (before `decisions`, `systemone`, Microsoft's `providers/microsoft/v1/systemone`, or Cloudflare's run path). Authentication/transport headers cannot be overridden. Custom headers are supported. HTTPS is required except for loopback HTTP.
+A provider's `baseUrl` replaces the API root before the adapter's path: `decisions`, `alpha/decisions`, `alpha/extractions`, `systemone`, `v1/systemone`, `extraction`, Microsoft's `providers/microsoft/v1/systemone`, or Cloudflare's run path. Local runtimes take the server root, for example `http://127.0.0.1:8080`. Authentication/transport headers cannot be overridden. Custom headers are supported. HTTPS is required except for loopback HTTP.
 
-New text model IDs on built-in routes can be selected without a package release. They must actually implement that route's API; a normal chat model is not a decision model. New image capabilities require a known model or explicit custom model declaration.
+New text model IDs on built-in routes can be selected without a package release. They must actually implement that route's API; a normal chat model is not a decision model. New image capabilities require a known model or explicit custom model declaration. Set `providers.<id>.limits` only for verified account-specific envelopes; it does not assert unsupported capability.
+
+## Verified capability scope
+
+| Surface | Question primitives | Media | Wallet / cost | Notes |
+| --- | --- | --- | --- | --- |
+| OpenAI Decisions and Vercel AI Gateway | bool, choice, score | text, native JSON, local/hosted images | gateway cost captured when returned | Boolean choice values, score descriptions, image detail and prompt-cache controls are supported on the OpenAI wire.
+| OpenRouter alpha Decisions | bool, choice, score; box only on TypeSafe Jev 1.14/latest | per-adapter image/audio/video/file placement; remote URLs only for documented models | `usage.cost` reported as `providerCost` | Alpha contract; media placement and limits are registry-driven.
+| Google Gemini Decisions | bool, choice, score | text, images, audio, video | no bundled rate | Direct `/v1beta/decisions` with `x-goog-api-key`; question media is rejected upstream.
+| Inception Mercury Decide | bool, choice, score, `extract` | text and inline images; no media with extract | no bundled rate | The Mercury API is documented to shut down after 2026-12-28.
+| Parallel Decisions | bool, choice, score | text/JSON only | no bundled rate | Web grounding is intrinsic; request-wide citations are returned as `citations`.
+| Microsoft Foundry | bool, choice, score; no box | text/JSON and PNG/JPEG assets | account pricing | Entra bearer or API key; no published numeric image/context limits.
+| Perplexity | bool, choice, score, locate | text and images | token estimate plus non-token search fees | `max_staleness` is ignored upstream and is not exposed.
+| Sarvam | bool, choice, score | text only for Prism; Clef images require Provisioned Throughput | INR pricing requires explicit USD override | Clef is not bundled as a default.
+| TypeSafe Jev | bool, choice, score, box on 1.14 | text and images | public USD rate | Images and box need experimental opt-ins; long context is `longContext: true`.
+| Liquid hosted | bool, choice, score and typed reads | text, images, audio | public USD rate | Typed reads need text or OCR text in `state`; JSON states expose RFC 6901 `path`.
+| Cloudflare Clef family | bool, choice, score | text, images; Clef-omni also audio/video | public USD rate | Only Clef-omni's schema exposes `videos`.
+| Local System One runtimes | bool, choice, score | runtime/model specific | `unknown_pricing` | llama.cpp, vLLM, Strands, Laya and Nimble use explicit capability tiers; Transformers/mlx-vlm are in-process runtimes and have no HTTP endpoint in this package.
+| Extraction | Clairic fields | text, images, PDFs on direct Clairic; images on gateways | gateway cost captured when returned | Direct Cloudflare, OpenRouter alpha and LiteLLM extraction routes share validation but use separate transports.
+
+Unresolved by design: no live entitlement, codec, hardware-fit or invoice check was run; OpenRouter alpha shapes and dynamic model catalogs can change; Cloudflare's direct Workers AI REST gateway-header requirement is internally inconsistent in official docs; and Microsoft does not publish a complete answer schema or numeric image limits. These are reported as limits, not filled with guessed support.
 
 ## Use
 
@@ -134,6 +164,8 @@ classify({
 ```
 
 The tool takes no provider/model parameter. Its structured result identifies the configured route and model, typed answers, reported token usage, estimated USD cost (or an explicit unavailable reason) and an available request ID. `bool.probability` is the probability of true; `choice` includes a probability per label and confidence; `score` is a probability-weighted level index (starting at zero), not necessarily an integer. Refusals are explicit typed answers. Token counts are reported when available. Each successful result includes `cost`; classifier spending is not added to Pi's session billing totals. See [Per-call costs](#per-call-costs).
+
+OpenAI-compatible routes can also send `conversation` input items (messages, function calls/outputs and custom tool calls/outputs) when judging a prior exchange. The package validates item types but preserves the documented fields; pair them with a `state` string when you also need shared context. It also sends structured JSON state as native `input_json`, supports boolean-valued two-option choices and score-level descriptions, accepts `imageDetail`, and exposes documented `promptCache` controls. These fields are rejected on routes without the same wire contract.
 
 Provider results are checked for probability ranges/distribution sums and decision consistency (selected choices must be most likely; supplied score distributions must match the expected score within rounding tolerance). Low confidence is a valid answer, not an error. Calibrate thresholds on your own data; scores from different providers are not interchangeable.
 
@@ -252,6 +284,8 @@ This example uses 1,000 Jev input tokens. Amounts are not rounded to cents; doin
 
 Sources: [OpenAI Decisions pricing](https://developers.openai.com/api/docs/guides/decisions#pricing-and-availability), [OpenAI rates](https://developers.openai.com/api/docs/pricing), [TypeSafe models](https://docs.typesafe.ai/models), [Perplexity Decisions](https://docs.perplexity.ai/docs/decisions/quickstart#pricing), [Perplexity changelog](https://docs.perplexity.ai/docs/resources/changelog), [Clef](https://developers.cloudflare.com/workers-ai/models/clef/), [Clef Flash](https://developers.cloudflare.com/workers-ai/models/clef-flash/), [Clef-omni](https://developers.cloudflare.com/workers-ai/models/clef-omni/), [Clairic](https://developers.cloudflare.com/workers-ai/models/clairic/), [Cloudflare Jev](https://developers.cloudflare.com/ai/models/typesafe/jev/), [Liquid d1.2](https://docs.liquid.ai/lfm/models/d1). Aliases can move and public prices can change; explicit overrides take precedence. Perplexity's `pplx-decider-latest` now selects v1.3 and `pplx-decider-flash-latest` selects Flash v1.3; revalidate thresholds tuned on earlier models. Its [model names](https://docs.perplexity.ai/docs/decisions/quickstart#model-names) documentation maps the older v1/v1.1 IDs in the discovery catalog to v1.2 and bills them at its rate. New text model IDs may already be selected through settings, but this cost feature does not change image capability declarations.
 
+Sarvam publishes Prism's rate in INR (₹4 per million input tokens, zero output tokens). This package reports USD, so `sarvam-api` has no bundled rate and returns `cost.reason: "unknown_pricing"` until you set `providers.sarvam.pricing` with a verified USD rate. No exchange rate is invented.
+
 When reported, cache reads and writes are exposed as `usage.cachedInputTokens` and `usage.cacheWriteTokens`. They are **included** in input tokens, not additional tokens. Input cost is `(ordinary input × input rate + cache reads × cached-input rate + cache writes × cache-write rate) / 1,000,000`; output cost uses its separate rate. OpenAI's bundled cached-input rate is $0.01/M and default 30-minute write rate is $0.125/M, with all input rates doubled above 272,000 input tokens. Cloudflare Jev's bundled cached-input rate is zero. Unexpected 12-hour writes are unavailable rather than priced as 30-minute writes.
 
 If pricing or usable token counts are missing, `cost` is `{ "status": "unavailable", "currency": "USD", "reason": "unknown_pricing" }` (or `missing_usage`, `invalid_usage`, `missing_cache_pricing`, `calculation_overflow`). No numeric amounts are returned in that case. Zero means a calculated zero, never an unknown charge. Failed or cancelled calls may still be billable but do not have reliable cost results; a fallback success reports only the successful request, not a total for prior attempts. Comparison callers must not treat a sum of available estimates as complete if any entries failed or have unavailable costs.
@@ -281,12 +315,13 @@ The numbers above are illustrative, **not a claim about Azure pricing**. Use you
 
 ## Choice limits by provider
 
-The artificial **64-choice cap has been removed** from both runtime validation and the tool schema. Known official model routes use their documented 255-option wire maximum. Unknown model/endpoint limits are left to the provider unless you configure `providers.<id>.maxChoices` (also available on custom providers). The package still accepts **1–32 questions per call**. The 128-character limit applies to an option's name, not to the option count.
+The artificial **64-choice cap has been removed** from both runtime validation and the tool schema. Known official model routes use their documented 255-option wire maximum. Unknown model/endpoint limits are left to the provider unless you configure `providers.<id>.maxChoices` (also available on custom providers). The package accepts **1–1000 questions per call** as a documented envelope; each route enforces its own lower limit. The 128-character limit applies to an option's name, not to the option count.
 
 | Provider/model | Documented upstream choice options per question | Evidence/qualification |
 | --- | --- | --- |
 | TypeSafe Jev | Up to 255 | [Choice docs](https://docs.typesafe.ai/primitives/choice); current Jev service documentation |
 | OpenAI Decisions `gpt-6-luna` | 2–255 | [API reference](https://developers.openai.com/api/reference/resources/decisions/methods/create), confirmed from official indexed search results; direct reference fetch returned 404 during this investigation |
+| Sarvam Prism | 2–255 | [Decision API reference](https://docs.sarvam.ai/api-reference/decisions/systemone) |
 | Perplexity v1.3, Flash v1.3, v1.2, Flash v1.2 and documented aliases (including catalog v1/v1.1 IDs) | 1–255 | [Request limits](https://docs.perplexity.ai/docs/decisions/quickstart#request-limits) and [model names](https://docs.perplexity.ai/docs/decisions/quickstart#model-names) |
 | Cloudflare Clef | 2–255 | [Official input schema](https://developers.cloudflare.com/workers-ai/models/clef/schema-input.json) |
 | Cloudflare Clef Flash | 2–255 | [Official input schema](https://developers.cloudflare.com/workers-ai/models/clef-flash/schema-input.json) |
@@ -344,12 +379,11 @@ classify({
 
 Each answer has `{ type: "locate", spans: [{ start, end, text, score, searchResult? }] }`. `end` is exclusive. The package checks each span against the original state or, when `searchResult` is present, against that search result's snippet. No span is fabricated when nothing matches.
 
-Set `mode: "web_grounding"` only when the answer should use public web evidence. Perplexity sends one search query per question containing the question text and the start of `state`, then adds the results to the model's input. A URL-only string `state` is fetched before searching. `maxStaleness` is an optional non-negative age in seconds for that fetched copy.
+Set `mode: "web_grounding"` only when the answer should use public web evidence. Perplexity sends one search query per question containing the question text and the start of `state`, then adds the results to the model's input. A URL-only string `state` is fetched before searching. Perplexity documents `max_staleness` as accepted but currently ignored, so this package does not expose a `maxStaleness` option and does not claim a page-age check.
 
 ```js
 classify({
   mode: "web_grounding",
-  maxStaleness: 86400,
   state: "Claim: the telescope launched in December 2021.",
   questions: { supported: { type: "bool", instructions: "Is the claim supported?" } },
 });
@@ -398,7 +432,7 @@ Local audio may be WAV, MP3, FLAC or OGG; local video may be MP4 or WebM. Contai
 
 ## Cloudflare Clairic extraction
 
-Use **`classify_extract`** for structured extraction. It selects the configured `clairic-api` route and sends `fields`, not classifier questions. The library exports `extract(params, { settings, cwd, signal? })`.
+Use **`classify_extract`** for structured extraction. It selects the configured default route and sends `fields`, not classifier questions; use `clairic-api`, `openrouter-extractions-api` or `litellm-extraction-api` as the default. The library exports `extract(params, { settings, cwd, signal? })`.
 
 ```js
 classify_extract({
@@ -414,7 +448,7 @@ classify_extract({
 
 Clairic field types are `text`, `number`, `compute`, `date`, `time`, `datetime`, `duration`, `boolean`, `enum`, `object`, `list`, `estimate` and `forecast`. The tool validates names and documented field keys, including nested `properties` and `items`. Each result answer contains the provider's `type`, `value`, and any documented metadata it returned, such as `span`, `confidence`, `source`, `mean` or `quantiles`. `truncated: true` means generated fields were incomplete or invalid; do not treat that output as complete.
 
-Caller options use `includeQuantiles` and `returnStateText`; the adapter sends the provider's `include_quantiles` and `return_state_text` wire keys. Images and embedded PDF paths are supported with local files. Clairic accepts PNG/JPEG/WebP images and PDF documents as data URLs or base64 objects; the package sends base64 objects and allows at most four rendered images/PDF pages combined, 4 MiB per file and 8 MiB combined decoded media. Remote URLs and encrypted PDFs are rejected. Exact PDF page rendering and character-offset units remain provider-owned. Current pricing is $0.10 per million input tokens until 2026-12-01 and $0.24 afterward; output generation is not charged separately. Configure an explicit `pricing` override if your account has different rates.
+Caller options use `includeQuantiles` and `returnStateText`; adapters send the documented snake_case wire keys. Direct Clairic accepts PNG/JPEG/WebP images and PDF documents as local files, with optional clockwise `rotation: 0 | 90 | 180 | 270` on an image descriptor. It allows at most four rendered images/PDF pages combined, 4 MiB per file and 8 MiB combined decoded media. OpenRouter Extractions uses `assets` instead, does not accept PDFs on the Clairic model, and enforces per-model field tiers and keys from its native schema. Liquid images require estimate-only fields with text list items; ScaleDown accepts one PDF or image and no simultaneous text state; LiteLLM `/v1/extraction` supports Clairic-shaped fields and images but not PDFs. Remote URLs and encrypted PDFs are rejected. Exact PDF page rendering and character-offset units remain provider-owned. Current direct Clairic pricing is $0.10 per million input tokens until 2026-12-01 and $0.24 afterward; output generation is not charged separately. Configure an explicit `pricing` override if your account has different rates.
 
 ## Microsoft Decision-1 on Foundry
 
@@ -434,7 +468,23 @@ Deploy `Microsoft-Decision-1` in Microsoft Foundry, then configure the **resourc
 }
 ```
 
-The extension appends `/providers/microsoft/v1/systemone` and uses the `api-key` header, not bearer API-key authentication. The catalog name is only a discovery entry: `model` must match your deployment, which may have another name. Microsoft currently supports text/JSON bool (wire type `noul`), choice, and score; images and box are rejected locally. Entra token authentication is not implemented. The selected deployment is reported in results even if Foundry returns a different underlying model name. If Microsoft omits confidence, choice confidence is derived from the selected probability and score confidence from the largest level probability. The official guide does not include a complete response JSON example; verify actual bool/choice/score responses on your deployment before relying on this integration.
+The extension appends `/providers/microsoft/v1/systemone`. It uses the `api-key` header by default; set `providers.microsoft.authMode: "bearer"` when the configured key is an Entra token (`https://cognitiveservices.azure.com` resource). The catalog name is only a discovery entry: `model` must match your deployment, which may have another name. Microsoft Decision-1.1 supports text/JSON bool (wire type `noul`), choice, score and local PNG/JPEG images through the documented `assets` map and `image:<name>` references; box is rejected. The selected deployment is reported in results even if Foundry returns a different underlying model name. If Microsoft omits confidence, choice confidence is derived from the selected probability and score confidence from the largest level probability. Microsoft does not publish a complete answer schema or numeric image/context limits in the current guide; verify those details on your deployment.
+
+## Sarvam Prism
+
+`sarvam-api` calls `POST https://api.sarvam.ai/v2/systemone` with the `api-subscription-key` header. Select it explicitly; installing this package does not change the existing default route. Its only built-in model is `sarvam-prism`.
+
+```json
+{
+  "pi-classifier": {
+    "default": { "provider": "sarvam-api", "model": "sarvam-prism" }
+  }
+}
+```
+
+The credential is `providers.sarvam.apiKey`, Pi's stored `sarvam` API-key credential, or `SARVAM_API_KEY`. Prism supports text/JSON state and `bool` (wire `noul`), `choice`, and `score` questions. It returns a yes probability, a top choice with per-option probabilities, or a probability-weighted score, all checked by the same distribution and consistency rules as other decision providers. Sarvam score answers must include the documented probability distribution. Prism rejects images; the Provisioned Throughput-only `clef` model accepts local base64 images in the documented `images` array. Both models accept `api-subscription-key` by default; set `providers.sarvam.authMode: "bearer"` for a bearer key. Media, web grounding, `locate`, and `box` are rejected locally. Prism choice questions need 2–255 options and Clef needs 1–255; score questions need 2–10 levels.
+
+Provider errors are reported with the standard safe HTTP error plus a whitelisted Sarvam code, field path and request ID when present. Untrusted field paths and request IDs that contain the active API key are omitted, including response-header request IDs before falling back to the body; raw provider text and credentials are never printed. Selecting a custom `baseUrl` does not inherit the bundled USD pricing; set `providers.sarvam.pricing` explicitly if you need a cost estimate. Clef requires Provisioned Throughput access; an unavailable entitlement returns a safe HTTP error rather than a silent fallback.
 
 ## Fallback and explicit comparison
 
@@ -456,9 +506,9 @@ The library exports `compareClassifiers(params, { settings, cwd, signal? })`. Ne
 
 Pass `images: ["photo.png"]`. Images are attached in order alongside state. OpenAI, Perplexity and Clef/Clef Flash support images. Cloudflare-hosted Jev and the built-in OpenRouter route are text-only in this package.
 
-Local image inputs are non-animated PNG/JPEG/WebP regular files inside the session cwd, with no symlink components or inline base64. Safe descriptor-based loading supports macOS (requires the OS `/usr/sbin/lsof`) and Linux (`/proc`). Images are fully decoded locally before upload. Limits: five images on OpenAI/Jev, eight on Perplexity; 5 MiB each, 10 MiB total and 16 megapixels each. Clef has stricter limits: four images, 4 MiB each and 8 MiB total. Perplexity allows at most eight image occurrences in shared state, including repeated references, and requires at most 2048 tiles of 32×32 pixels per image. Images are not silently resized. Text/JSON plus questions remain limited to 2 MiB and 32 questions.
+Local image inputs are non-animated PNG/JPEG/WebP regular files inside the session cwd, with no symlink components or inline base64. Safe descriptor-based loading supports macOS (requires the OS `/usr/sbin/lsof`) and Linux (`/proc`). Images are fully decoded locally before upload. Per-route image limits come from the published contracts: eight on Perplexity and hosted Liquid, four on Clef and Clef-omni, eight on Microsoft per question, 16 on Inception and Mercury/Baseten OpenRouter adapters, 100 on HeyGen, 128 on GPT-6 Luna Decisions, and 128 as the package envelope. Each existing route keeps its documented byte and patch constraints; images are not silently resized. Text/JSON plus questions remain limited to 2 MiB, while the question count uses the documented envelope and each route's lower limit.
 
-Named hosted URLs on OpenAI do not require local file loading and work on other platforms. They are passed directly to the selected OpenAI-compatible endpoint, never downloaded by this package. The provider must be able to access them and enforces remote image format/size limits; local byte/pixel validation cannot inspect them. URLs must use HTTP(S), with no credentials or fragment. Do not send sensitive URLs unless you intend to share them with that endpoint.
+Named hosted URLs on OpenAI and on OpenRouter's documented Gemini/HeyGen Decisions models do not require local file loading. They are passed directly to the selected endpoint, never downloaded by this package; OpenRouter adapters place them in top-level `state` image parts and reject other placements. The provider must be able to access them and enforces remote image format/size limits; local byte/pixel validation cannot inspect them. URLs must use HTTP(S), with no credentials or fragment. Do not send sensitive URLs unless you intend to share them with that endpoint.
 
 TypeSafe Jev images are experimental and require opt-in. Use PNG/JPEG. Each side must be **280–1568 pixels**, with total area 78,400–2,458,624 pixels; resize or pad beforehand. These limits also apply to custom SystemOne image routes using Jev's assets protocol:
 
@@ -522,7 +572,7 @@ Declare these images in the surrounding request's `images` list. The same conten
 | Named references in shared state | Yes, opt-in | Yes | Yes | No |
 | Images in question instructions | Yes, opt-in | Yes | No | No |
 | Images in criteria | Yes, opt-in | No | No | No |
-| Named hosted URL descriptors | No | Yes | No | No |
+| Named hosted URL descriptors | No | Yes | No | No; OpenRouter Gemini/HeyGen accept them as top-level state image parts |
 | Top-level image/audio media | No | No | No | Clef-omni audio/video and Liquid images/audio use provider-specific base64 objects |
 
 For OpenAI, replace a named local descriptor with `{"id":"target","url":"https://example.com/reference.jpg"}` and reference it in state or instructions. Nested JSON state is represented as text fragments interleaved with the referenced images; it is not an upstream JSON object containing embedded native parts. Unsupported placements fail locally before a request, including on fallback and comparison routes. No image is silently dropped or moved.
@@ -549,7 +599,7 @@ Clef-omni's official input schema establishes the hosted video contract used her
 
 ## Custom providers
 
-Like image-gen, `customProviders` adds a named endpoint and explicit model list. Supported protocols are `openai-decisions`, `perplexity-decisions`, `system-one`, `liquid-system-one`, `cloudflare-system-one`, `cloudflare-clairic`, and `microsoft-system-one` (Foundry resource root and API-key authentication). A custom URL cannot make an arbitrary API compatible. Custom IDs must not shadow built-in provider/route IDs.
+Like image-gen, `customProviders` adds a named endpoint and explicit model list. Supported protocols are `openai-decisions`, `openrouter-decisions`, `gemini-decisions`, `inception-decisions`, `parallel-decisions`, `local-system-one`, `perplexity-decisions`, `sarvam-system-one`, `system-one`, `liquid-system-one`, `cloudflare-system-one`, `cloudflare-clairic`, `openrouter-extractions`, `litellm-extraction`, and `microsoft-system-one` (Foundry resource root and API-key or Entra bearer authentication). A custom URL cannot make an arbitrary API compatible. Custom IDs must not shadow built-in provider/route IDs.
 
 ```json
 {
@@ -569,6 +619,50 @@ Like image-gen, `customProviders` adds a named endpoint and explicit model list.
 ```
 
 Custom endpoints use their route ID as the Pi stored-credential provider ID. They have no implicit environment variable; use an explicit key reference. SystemOne image endpoints must implement Jev's assets protocol, declare image input and opt into `experimentalImages`. Box additionally requires `box: true` on the model and `experimentalBox: true` on the provider.
+
+### LiteLLM decision gateways
+
+LiteLLM documents both `POST /v1/decisions` and `POST /v1/systemone` with bearer virtual keys. Add the decision model to LiteLLM's `model_list`, then configure either protocol explicitly:
+
+```json
+{
+  "pi-classifier": {
+    "default": { "provider": "litellm-decisions", "model": "luna" },
+    "customProviders": {
+      "litellm-decisions": {
+        "api": "openai-decisions",
+        "baseUrl": "https://litellm.example/v1",
+        "apiKey": "${LITELLM_VIRTUAL_KEY}",
+        "models": [{ "id": "luna", "input": ["text"] }],
+        "pricing": { "luna": { "inputPerMillion": 0.042, "outputPerMillion": 0 } },
+        "maxChoices": 255
+      }
+    }
+  }
+}
+```
+
+Because `litellm-decisions` is not a built-in route, it must be declared under `customProviders`; an unknown ID placed under `providers` is rejected. Use `"api": "system-one"` with `baseUrl: "https://litellm.example/v1"` to call `/v1/systemone` instead. The price above is illustrative; set it from your actual LiteLLM pricing. `maxChoices` must match the deployment's verified decision limit before choice batching. Text-only payloads fit both routes; LiteLLM image support depends on the selected upstream model and release, so declare image input only for a model you have verified. Custom gateways do not inherit bundled upstream prices.
+
+### OpenRouter pricing and choice limits
+
+The built-in `openrouter-api` route targets the documented `POST /api/v1/systemone` endpoint. It has no bundled USD price and no verified choice cap. Set both from your account and the selected model when you need cost reporting or choice batching:
+
+```json
+{
+  "pi-classifier": {
+    "providers": {
+      "openrouter": {
+        "apiKey": "${OPENROUTER_API_KEY}",
+        "pricing": { "typesafe/jev-1.13": { "inputPerMillion": 0.042, "outputPerMillion": 0 } },
+        "maxChoices": 255
+      }
+    }
+  }
+}
+```
+
+The legacy `openrouter-api` System One route remains text-only in this package. Use `openrouter-decisions-api` for `POST /api/alpha/decisions` and `openrouter-extractions-api` for `POST /api/alpha/extractions`. Both are alpha contracts: media placement, question support and extraction field tiers are selected by model/provider capability registries, and `usage.cost` is reported as `providerCost` without being substituted for the token estimate.
 
 ## Native Durable entrypoint (`/durable`)
 
@@ -631,7 +725,7 @@ No provider calls are made by these commands. Live tests belong to the user:
 3. Try a small PNG on OpenAI, Perplexity and Clef. Enable Jev images explicitly before trying its preview; verify box coordinates separately.
 4. Cancel an in-flight call and check a deliberately invalid model/key. Errors must be safe; only missing keys and HTTP 401/404/429 may select an explicitly configured fallback. Timeout/network/403/5xx/malformed results must not trigger another route.
 5. Use `/classifier use` in a trusted project and confirm unrelated settings and both route lists remain intact. Check legacy-only defaults as well as nested defaults.
-6. Configure your Foundry endpoint and deployment name, select `microsoft-api`, and verify bool/choice/score responses and token usage. Verify an image is rejected locally.
+6. Configure your Foundry endpoint and deployment name, select `microsoft-api`, and verify bool/choice/score responses and token usage. Verify that a PNG image is sent through `assets` and that box is rejected locally; repeat with an Entra bearer token only when you own one.
 7. Configure two `compare` pairs and explicitly invoke `classify_compare`; confirm labeled successes/errors, duration, unchanged defaults, and that cancellation prevents subsequent calls. Each valid entry may be billed.
 8. In your own controlled deployment, verify missing keys and HTTP 401/404/429 allow only configured fallbacks; duplicate routes are never called twice. Verify low confidence and refusals return normally without switching models.
 9. On Jev, enable the image/box flags and try the named scene/reference example above. Compare visual choice/score criteria, then a box plus a separate existence question. Verify repeated references and choice batching do not leave unreferenced assets. Try a 279-pixel side and confirm local rejection.
@@ -643,4 +737,4 @@ No provider calls are made by these commands. Live tests belong to the user:
 
 Provider schemas and previews can change; no live entitlement or model-accuracy claim is made by a local build.
 
-Sources: [Microsoft Decision-1](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision), [OpenAI Decisions](https://developers.openai.com/api/docs/guides/decisions), [Perplexity Decisions](https://docs.perplexity.ai/docs/decisions/quickstart), [TypeSafe images](https://docs.typesafe.ai/images), [TypeSafe box](https://docs.typesafe.ai/primitives/box), [Cloudflare Clef](https://developers.cloudflare.com/workers-ai/models/clef/).
+Sources: [Microsoft Decision-1.1](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-microsoft-decision), [OpenAI Decisions](https://developers.openai.com/api/docs/guides/decisions), [OpenRouter Decisions](https://openrouter.ai/docs/guides/features/decisions), [OpenRouter multimodal contracts](https://openrouter.ai/docs/guides/community/multimodal-decisions), [OpenRouter Extractions](https://openrouter.ai/docs/guides/community/extractions), [Vercel Decisions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-decisions), [Gemini Decisions API](https://aistudio.google.com/docs/decisions-api), [Inception Decisions](https://docs.inceptionlabs.ai/capabilities/decisions), [Parallel Decisions](https://docs.parallel.ai/decisions/decisions-quickstart), [Perplexity Decisions](https://docs.perplexity.ai/docs/decisions/decisions), [Sarvam Decisions](https://docs.sarvam.ai/api-reference/decisions/systemone), [TypeSafe images](https://docs.typesafe.ai/images), [TypeSafe box](https://docs.typesafe.ai/primitives/box), [Liquid decisions](https://docs.liquid.ai/api/guides/decisions), [Liquid open weights](https://docs.liquid.ai/lfm/models/decision-models), [Cloudflare Clef](https://developers.cloudflare.com/workers-ai/models/clef/), [Cloudflare Clairic](https://developers.cloudflare.com/workers-ai/models/clairic/), [LiteLLM decisions](https://docs.litellm.ai/docs/decisions), [LiteLLM extraction](https://docs.litellm.ai/docs/extraction), [Cloudflare AI Gateway REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/).

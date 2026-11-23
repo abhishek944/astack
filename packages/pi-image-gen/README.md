@@ -33,6 +33,8 @@ Upstream API docs (handy when debugging gateway behavior or adding new models):
 - Microsoft MAI Image — [Azure Foundry generation and edits API](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-mai-image), [retirement schedule](https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule)
 - Meta Muse Image — [official image generation guide](https://dev.meta.ai/docs/image-generation)
 - OpenRouter image API — [generation guide](https://openrouter.ai/docs/guides/overview/multimodal/image-generation), [API reference](https://openrouter.ai/docs/api/api-reference/images/generate-an-image), [changelog](https://openrouter.ai/docs/changelog)
+- Cloudflare AI Gateway — [REST API](https://developers.cloudflare.com/ai-gateway/usage/rest-api/), [authentication](https://developers.cloudflare.com/ai-gateway/configuration/authentication/), [FLUX.1 schnell model contract](https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/)
+- LiteLLM — [supported endpoints](https://docs.litellm.ai/docs/supported_endpoints), [image generations](https://docs.litellm.ai/docs/image_generation)
 - Black Forest Labs FLUX.2 — [integration guide](https://docs.bfl.ml/api_integration/integration_guidelines), [text-to-image](https://docs.bfl.ml/flux_2/flux2_text_to_image), [image editing](https://docs.bfl.ml/flux_2/flux2_image_editing), [get result](https://docs.bfl.ml/api-reference/utility/get-result)
 - Adobe Firefly Image5 — [feature guide](https://developer.adobe.com/firefly-services/docs/firefly-api/guides/how-tos/cm-generate-image/feature-guide), [authentication](https://developer.adobe.com/firefly-services/docs/firefly-api/getting-started/), [async APIs](https://developer.adobe.com/firefly-services/docs/firefly-api/guides/how-tos/using-async-apis)
 - Stability AI — [API reference](https://docs.stability.ai/api-reference), [Stable Image Core](https://docs.stability.ai/api-reference/generate/stable-image-core), [Stable Diffusion 3.5](https://docs.stability.ai/api-reference/generate/stable-diffusion-35)
@@ -576,7 +578,7 @@ Each custom provider declares:
 
 | Field      | Required | Notes                                                                                |
 | ---------- | -------- | ------------------------------------------------------------------------------------ |
-| `api` | yes      | One of `openai`, `gemini`, `dashscope`, `openrouter`, `ark`, `meta`, `mai`. Picks the image-API wire shape. |
+| `api` | yes      | One of `openai`, `gemini`, `dashscope`, `openrouter`, `cloudflare`, `ark`, `meta`, `mai`, `bfl`, `adobe-firefly`, `stability`, `recraft`. Picks the image-API wire shape. |
 | `baseUrl`  | no       | API endpoint URL; defaults to the selected `api` adapter's built-in endpoint when omitted, except `mai`, which requires a resource-specific URL. Environment interpolation follows the settings-file rules above. |
 | `apiKey`   | usually  | Credential string. `$VAR` syntax supported. Required for `bearer` and `header` authentication. |
 | `auth`     | no       | `{ "type": "bearer" }`, `{ "type": "header", "header": "x-api-key" }`, or explicit `{ "type": "none" }`. Omission preserves the adapter's legacy default (Gemini uses `x-goog-api-key`, MAI uses `api-key`; the others use bearer). |
@@ -608,7 +610,7 @@ A custom model whose `id` names a built-in model **inherits that model's capabil
 }
 ```
 
-> Note: pi.dev custom providers also have an `api` field, but its values (`openai-completions`, `anthropic-messages`, …) are LLM streaming formats that don't apply to image generation. The values here (`openai`, `gemini`, `dashscope`, `openrouter`, `ark`, `meta`, `mai`) are image-API wire shapes — same field name, different namespace.
+> Note: pi.dev custom providers also have an `api` field, but its values (`openai-completions`, `anthropic-messages`, …) are LLM streaming formats that don't apply to image generation. The values here (`openai`, `gemini`, `dashscope`, `openrouter`, `cloudflare`, `ark`, `meta`, `mai`, `bfl`, `adobe-firefly`, `stability`, `recraft`) are image-API wire shapes — same field name, different namespace.
 
 ### Example: self-hosted Stable Diffusion (OpenAI-compatible)
 
@@ -651,6 +653,61 @@ The agent calls `image_generate({prompt: ...})`; the extension sees `defaultMode
   }
 }
 ```
+
+### Example: Cloudflare Workers AI REST image generation
+
+The `cloudflare` wire shape uses Cloudflare's documented REST model-in-path endpoint. It posts `{ prompt }` to `POST /accounts/{account_id}/ai/run/{model}`, sends the Cloudflare API token as a bearer credential, requires `cf-aig-gateway-id` for Workers AI, and reads the documented base64 `image` from the REST API's `{ result: { image } }` envelope (the raw model output `{ image }` is also accepted). `baseUrl` must include the account path and end in `/ai/run`. Only text prompts and an optional `seed` are sent. `size`, `quality`, `aspectRatio` and `imageSize` are rejected before dispatch instead of being silently dropped or recorded as effective; image edits and output-format knobs are not claimed. The separate local `resize` option still runs after generation.
+
+```json
+{
+  "pi-image-gen": {
+    "default": { "provider": "cf-images", "model": "cf-flux" },
+    "customProviders": {
+      "cf-images": {
+        "api": "cloudflare",
+        "baseUrl": "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/run",
+        "apiKey": "${CLOUDFLARE_API_TOKEN}",
+        "headers": { "cf-aig-gateway-id": "${CLOUDFLARE_AI_GATEWAY_ID}" },
+        "models": [
+          {
+            "id": "@cf/black-forest-labs/flux-1-schnell",
+            "alias": "cf-flux",
+            "capabilities": {
+              "nMax": 1,
+              "supportsSeed": true,
+              "maxReferenceImages": 0
+            }
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+This is distinct from the trusted host-only Cloudflare binding/catalog route. It does not call `gateway.ai.cloudflare.com` provider-native endpoints, and those endpoints' chat/response documentation does not establish image support.
+
+### Example: LiteLLM image gateway (OpenAI wire shape)
+
+LiteLLM documents `POST /v1/images/generations` and `POST /v1/images/edits` with OpenAI-shaped requests and bearer virtual keys. Configure the model in LiteLLM's `model_list` first, then use the ordinary OpenAI adapter:
+
+```json
+{
+  "pi-image-gen": {
+    "default": { "provider": "litellm-images", "model": "my-image-model" },
+    "customProviders": {
+      "litellm-images": {
+        "api": "openai",
+        "baseUrl": "https://litellm.example/v1",
+        "apiKey": "${LITELLM_VIRTUAL_KEY}",
+        "models": [{ "id": "my-image-model" }]
+      }
+    }
+  }
+}
+```
+
+This is generic OpenAI-compatible behavior, not a package-blessed LiteLLM profile. Model capabilities and provider-reported cost remain unknown unless declared in settings or returned by the gateway.
 
 ### Example: a Gemini-shape proxy
 

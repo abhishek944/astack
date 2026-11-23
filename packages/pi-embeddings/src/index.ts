@@ -28,10 +28,9 @@ export type {
   EmbeddingUsage,
   EmbeddingAttempt,
   EmbeddingOutcome,
+  EmbeddingGeneration,
   EmbeddingResult,
   EmbeddingCompareEntry,
   EmbeddingCompareResult,
-  EmbeddingDiagnostic,
-  EmbeddingDescribe,
   EmbeddingErrorCode,
 } from './schemas.js';

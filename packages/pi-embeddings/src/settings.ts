@@ -5,8 +5,10 @@ import { loadPiSettings, resolveConfigDir } from '@amaster.ai/pi-shared/settings
 import { Value } from 'typebox/value';
 import { EmbeddingsError } from './errors.js';
 import {
+  CLOUDFLARE_EMBEDDING_MODELS,
   EMBEDDINGS_SETTINGS_KEY,
   GATEWAY_EMBEDDING_MODELS,
+  OPENROUTER_EMBEDDING_MODELS,
   embeddingSettingsSchema,
   type EmbeddingRoute,
   type EmbeddingSettings,
@@ -17,6 +19,8 @@ const MODELS_BY_PROVIDER: Readonly<Record<EmbeddingRoute['provider'], readonly s
   openai: ['text-embedding-3-small'],
   sarvam: ['embeddinggemma-2'],
   gateway: GATEWAY_EMBEDDING_MODELS,
+  openrouter: OPENROUTER_EMBEDDING_MODELS,
+  cloudflare: CLOUDFLARE_EMBEDDING_MODELS,
 };
 
 export const isEmbeddingSettings = (value: unknown): value is EmbeddingSettings =>

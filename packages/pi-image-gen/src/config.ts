@@ -895,6 +895,7 @@ function isCustomApiStyle(value: unknown): value is CustomApiStyle {
     value === 'gemini' ||
     value === 'dashscope' ||
     value === 'openrouter' ||
+    value === 'cloudflare' ||
     value === 'ark' ||
     value === 'meta' ||
     value === 'mai' ||

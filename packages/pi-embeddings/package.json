@@ -1,6 +1,6 @@
 {
   "name": "@abhishek944/pi-embeddings",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Config-driven text embeddings for Pi and MCP with local, OpenAI, Sarvam and gateway routes, ordered fallback and explicit comparisons.",
   "keywords": [
     "pi-package",

@@ -17,6 +17,25 @@ const responseSchema = Type.Object({
   }),
 });
 
+const cloudflareResponseSchema = Type.Object({
+  shape: Type.Optional(Type.Array(Type.Integer({ minimum: 0 }))),
+  data: Type.Array(Type.Array(Type.Number())),
+  pooling: Type.Optional(Type.Union([Type.Literal('mean'), Type.Literal('cls')])),
+});
+
+/** Cloudflare REST wraps model output in a standard API envelope; bindings return the raw model output. */
+function unwrapCloudflareModelOutput(response: unknown): unknown {
+  if (typeof response !== 'object' || response === null || Array.isArray(response))
+    throw new EmbeddingsError('provider-response-invalid', { knownUsage: {} });
+  const envelope = response as Record<string, unknown>;
+  if (
+    envelope.success === false ||
+    (Array.isArray(envelope.errors) && envelope.errors.length > 0)
+  )
+    throw new EmbeddingsError('provider-response-invalid', { knownUsage: {} });
+  return Object.hasOwn(envelope, 'result') ? envelope.result : envelope;
+}
+
 /** Stable, overflow-safe L2 normalization. The identity is recorded in every success outcome. */
 export function normalizeVector(vector: readonly number[], dimensions: number): number[] {
   if (vector.length !== dimensions || vector.some((value) => !Number.isFinite(value)))
@@ -68,6 +87,38 @@ export function parseBatchResponse(args: {
     usage: {
       providerReportedInputTokens: parsed.usage.prompt_tokens,
       preparedInputTokens: prepared,
+      billedTokens: null,
+    },
+  };
+}
+
+/** Cloudflare Workers AI `/ai/run` wraps ordered vectors without usage in the REST API envelope. */
+export function parseCloudflareBatchResponse(args: {
+  response: unknown;
+  space: EmbeddingSpace;
+  expectedCount: number;
+}): ProviderBatchResult {
+  const output = unwrapCloudflareModelOutput(args.response);
+  if (!Value.Check(cloudflareResponseSchema, output))
+    throw new EmbeddingsError('provider-response-invalid', { knownUsage: {} });
+  const parsed = output;
+  if (parsed.data.length !== args.expectedCount)
+    throw new EmbeddingsError('provider-response-mismatch', { knownUsage: {} });
+  let vectors: number[][];
+  try {
+    vectors = parsed.data.map((vector) => normalizeVector(vector, args.space.dimensions));
+  } catch (error) {
+    if (error instanceof EmbeddingsError)
+      throw new EmbeddingsError(error.code === 'vector-zero' ? 'vector-zero' : 'vector-invalid', {
+        knownUsage: {},
+      });
+    throw error;
+  }
+  return {
+    vectors,
+    usage: {
+      providerReportedInputTokens: null,
+      preparedInputTokens: null,
       billedTokens: null,
     },
   };

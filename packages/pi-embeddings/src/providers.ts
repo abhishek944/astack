@@ -4,8 +4,9 @@ import {
   EMBEDDING_DOCUMENT_PREFIX,
   EMBEDDING_FORMAT_VERSION,
   EMBEDDING_NORMALIZATION_VERSION,
+  CLOUDFLARE_EMBEDDING_MODELS,
+  OPENROUTER_EMBEDDING_MODELS,
   type EmbeddingContext,
-  type EmbeddingDiagnostic,
   type EmbeddingRoute,
   type EmbeddingSettings,
   type EmbeddingSpace,
@@ -13,7 +14,7 @@ import {
 import { fixedOrigin, headerValueIsSafe, requestJson } from './provider-http.js';
 import { acquireLocalRuntime, LOCAL_EMBEDDING_SPACE, type AcquiredLocalRuntime } from './local-runtime.js';
 import type { EmbeddingsProvider, PreparedInput, ProviderBatchResult } from './provider-types.js';
-import { parseBatchResponse } from './response.js';
+import { parseBatchResponse, parseCloudflareBatchResponse } from './response.js';
 
 export const OPENAI_EMBEDDING_SPACE: EmbeddingSpace = Object.freeze({
   provider: 'openai',
@@ -39,9 +40,27 @@ export const SARVAM_EMBEDDING_SPACE: EmbeddingSpace = Object.freeze({
   normalization: EMBEDDING_NORMALIZATION_VERSION,
 });
 
+type CloudflarePooling = 'mean' | 'cls';
+
+export const cloudflareEmbeddingSpace = (pooling: CloudflarePooling): EmbeddingSpace =>
+  Object.freeze({
+    provider: 'cloudflare',
+    model: CLOUDFLARE_EMBEDDING_MODELS[0],
+    revision: null,
+    quantization: null,
+    runtime: 'cloudflare-workers-ai',
+    dimensions: 768,
+    pooling,
+    format: EMBEDDING_FORMAT_VERSION,
+    prefix: EMBEDDING_DOCUMENT_PREFIX,
+    normalization: EMBEDDING_NORMALIZATION_VERSION,
+  });
+
 const OPENAI_MODEL = 'text-embedding-3-small';
 const SARVAM_MODEL = 'embeddinggemma-2';
 const SARVAM_ORIGIN = 'https://api.sarvam.ai';
+const OPENROUTER_EMBEDDINGS_URL = 'https://openrouter.ai/api/v1/embeddings';
+const CLOUDFLARE_ORIGIN = 'https://api.cloudflare.com/client/v4/accounts';
 
 const OPENAI_MAX_INPUT_TOKENS = 8192;
 const OPENAI_MAX_REQUEST_INPUTS = 2048;
@@ -53,6 +72,11 @@ const trim = (value: string | undefined): string | undefined => {
 };
 
 export const routeKey = (route: EmbeddingRoute): string => `${route.provider}\u0000${route.model}`;
+
+export type EmbeddingDiagnostic = Readonly<{
+  readonly code: string;
+  readonly severity: 'error' | 'warning' | 'info';
+}>;
 
 /** Diagnostics are provider-free and never contain keys, origins or model paths. */
 export function routeDiagnostics(settings: EmbeddingSettings, route: EmbeddingRoute): EmbeddingDiagnostic[] {
@@ -83,6 +107,20 @@ export function routeDiagnostics(settings: EmbeddingSettings, route: EmbeddingRo
         add('gateway-key-unconfigured');
       break;
     }
+    case 'openrouter':
+      if (trim(settings.providers?.openrouter?.apiKey) === undefined && trim(process.env.OPENROUTER_API_KEY) === undefined)
+        add('openrouter-key-unconfigured');
+      break;
+    case 'cloudflare': {
+      const cloudflare = settings.providers?.cloudflare;
+      if (trim(cloudflare?.accountId) === undefined && trim(process.env.CLOUDFLARE_ACCOUNT_ID) === undefined)
+        add('cloudflare-account-unconfigured');
+      if (trim(cloudflare?.apiKey) === undefined && trim(process.env.CLOUDFLARE_API_TOKEN) === undefined)
+        add('cloudflare-key-unconfigured');
+      if (trim(cloudflare?.gatewayId) === undefined && trim(process.env.CLOUDFLARE_AI_GATEWAY_ID) === undefined)
+        add('cloudflare-gateway-unconfigured');
+      break;
+    }
   }
   return diagnostics;
 }
@@ -90,6 +128,12 @@ export function routeDiagnostics(settings: EmbeddingSettings, route: EmbeddingRo
 const credential = (configured: string | undefined, env: string | undefined): string => {
   const value = trim(configured) ?? trim(env);
   if (value === undefined) throw new EmbeddingsError('missing-credentials');
+  return value;
+};
+
+const headerCredential = (configured: string | undefined, env: string | undefined): string => {
+  const value = credential(configured, env);
+  if (!headerValueIsSafe(value)) throw new EmbeddingsError('configuration-invalid');
   return value;
 };
 
@@ -257,6 +301,109 @@ class GatewayProvider implements EmbeddingsProvider {
   }
 }
 
+class OpenRouterProvider implements EmbeddingsProvider {
+  readonly route = 'openrouter' as const;
+  readonly model = OPENROUTER_EMBEDDING_MODELS[0];
+  readonly space: EmbeddingSpace = OPENAI_EMBEDDING_SPACE;
+  readonly maxRequestInputs = OPENAI_MAX_REQUEST_INPUTS;
+  readonly maxRequestTokens = OPENAI_MAX_REQUEST_TOKENS;
+  readonly #encoding = getEncoding('cl100k_base');
+  readonly #key: string;
+
+  constructor(key: string) {
+    this.#key = key;
+  }
+
+  async prepare(text: string, signal: AbortSignal): Promise<PreparedInput> {
+    return openAIPrepare(this.#encoding, text, signal);
+  }
+
+  async embed(inputs: readonly PreparedInput[], signal: AbortSignal): Promise<ProviderBatchResult> {
+    const response = await requestJson({
+      url: new URL(OPENROUTER_EMBEDDINGS_URL),
+      signal,
+      headers: { authorization: `Bearer ${this.#key}` },
+      body: {
+        model: this.model,
+        dimensions: this.space.dimensions,
+        input: providerTexts(inputs),
+        encoding_format: 'float',
+      },
+    });
+    const count = preparedTokens(inputs);
+    return parseBatchResponse({
+      response,
+      space: this.space,
+      expectedModels: [this.model],
+      expectedPreparedTokens: count,
+      preparedInputTokens: count,
+    });
+  }
+
+  async close(): Promise<void> {
+    // js-tiktoken is pure JavaScript and owns no process or handle.
+  }
+}
+
+class CloudflareProvider implements EmbeddingsProvider {
+  readonly route = 'cloudflare' as const;
+  readonly model = CLOUDFLARE_EMBEDDING_MODELS[0];
+  readonly space: EmbeddingSpace;
+  // Workers AI documents a 512-token input ceiling for this model but no aggregate request cap.
+  // The model-owned tokenizer is not available here, so no approximate local cap is invented.
+  readonly maxRequestInputs = Number.POSITIVE_INFINITY;
+  readonly maxRequestTokens = Number.POSITIVE_INFINITY;
+  readonly #url: URL;
+  readonly #key: string;
+  readonly #gatewayId: string;
+  readonly #pooling: CloudflarePooling;
+
+  constructor(config: {
+    accountId: string;
+    apiKey: string;
+    gatewayId: string;
+    model: typeof CLOUDFLARE_EMBEDDING_MODELS[number];
+    pooling: CloudflarePooling;
+  }) {
+    this.#url = new URL(
+      `${CLOUDFLARE_ORIGIN}/${encodeURIComponent(config.accountId)}/ai/run/${config.model}`
+    );
+    this.#key = config.apiKey;
+    this.#gatewayId = config.gatewayId;
+    this.#pooling = config.pooling;
+    this.space = cloudflareEmbeddingSpace(config.pooling);
+    // The model is pinned from settings; this guard keeps the fixed URL invariant explicit.
+    if (config.model !== CLOUDFLARE_EMBEDDING_MODELS[0])
+      throw new EmbeddingsError('configuration-invalid');
+  }
+
+  async prepare(text: string, signal: AbortSignal): Promise<PreparedInput> {
+    signal.throwIfAborted();
+    return { kind: 'text', text: EMBEDDING_DOCUMENT_PREFIX + text, tokenCount: null };
+  }
+
+  async embed(inputs: readonly PreparedInput[], signal: AbortSignal): Promise<ProviderBatchResult> {
+    const response = await requestJson({
+      url: this.#url,
+      signal,
+      headers: {
+        authorization: `Bearer ${this.#key}`,
+        'cf-aig-gateway-id': this.#gatewayId,
+      },
+      body: { text: providerTexts(inputs), pooling: this.#pooling },
+    });
+    return parseCloudflareBatchResponse({
+      response,
+      space: this.space,
+      expectedCount: inputs.length,
+    });
+  }
+
+  async close(): Promise<void> {
+    // Native fetch owns no long-lived resource.
+  }
+}
+
 export type AcquiredProvider = Readonly<{
   readonly provider: EmbeddingsProvider;
   readonly release: () => Promise<void>;
@@ -319,17 +466,52 @@ export async function acquireProvider({
         release: noRelease,
       };
     }
+    case 'openrouter':
+      return {
+        provider: new OpenRouterProvider(
+          headerCredential(settings.providers?.openrouter?.apiKey, process.env.OPENROUTER_API_KEY)
+        ),
+        release: noRelease,
+      };
+    case 'cloudflare': {
+      const configured = settings.providers?.cloudflare;
+      const accountId = trim(configured?.accountId) ?? trim(process.env.CLOUDFLARE_ACCOUNT_ID);
+      const gatewayId = trim(configured?.gatewayId) ?? trim(process.env.CLOUDFLARE_AI_GATEWAY_ID);
+      if (accountId === undefined || gatewayId === undefined)
+        throw new EmbeddingsError('configuration-invalid');
+      if (!headerValueIsSafe(accountId) || !headerValueIsSafe(gatewayId))
+        throw new EmbeddingsError('configuration-invalid');
+      const model = trim(configured?.model) ?? CLOUDFLARE_EMBEDDING_MODELS[0];
+      if (model !== CLOUDFLARE_EMBEDDING_MODELS[0]) throw new EmbeddingsError('configuration-invalid');
+      const pooling: CloudflarePooling = configured?.pooling ?? 'mean';
+      return {
+        provider: new CloudflareProvider({
+          accountId,
+          apiKey: headerCredential(configured?.apiKey, process.env.CLOUDFLARE_API_TOKEN),
+          gatewayId,
+          model,
+          pooling,
+        }),
+        release: noRelease,
+      };
+    }
   }
 }
 
-export const spaceForRoute = (route: EmbeddingRoute): EmbeddingSpace => {
+export const spaceForRoute = (
+  route: EmbeddingRoute,
+  settings?: EmbeddingSettings | undefined
+): EmbeddingSpace => {
   switch (route.provider) {
     case 'local':
       return LOCAL_EMBEDDING_SPACE;
     case 'openai':
     case 'gateway':
+    case 'openrouter':
       return OPENAI_EMBEDDING_SPACE;
     case 'sarvam':
       return SARVAM_EMBEDDING_SPACE;
+    case 'cloudflare':
+      return cloudflareEmbeddingSpace(settings?.providers?.cloudflare?.pooling ?? 'mean');
   }
 };

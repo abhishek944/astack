@@ -3,8 +3,12 @@ import type { SpriteGenerationSettings } from '../sprite/types.js';
 import type { GenerateImageParams, ImageDimensions, ImageModelCapabilities } from './image.js';
 import type { ApiStyle, CustomApiStyle, CustomProviderAuth, ResolvedProvider } from './provider.js';
 
-/** Provider identity is separate from wire format: Azure shares the OpenAI API. */
-export type BuiltInProviderId = ApiStyle | 'azure-openai';
+/**
+ * Provider identity is separate from wire format: Azure shares the OpenAI API.
+ * Cloudflare is an operator-configured wire shape only; there is no built-in
+ * account-specific route, so it is excluded from built-in provider maps.
+ */
+export type BuiltInProviderId = Exclude<ApiStyle, 'cloudflare'> | 'azure-openai';
 
 /** User-facing provider route. Authentication paths are intentionally distinct. */
 export type BuiltInProviderRouteId =

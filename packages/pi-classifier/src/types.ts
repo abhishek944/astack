@@ -1,10 +1,18 @@
 export type ApiStyle =
   | "openai-decisions"
+  | "openrouter-decisions"
+  | "gemini-decisions"
+  | "inception-decisions"
+  | "parallel-decisions"
+  | "local-system-one"
   | "perplexity-decisions"
+  | "sarvam-system-one"
   | "system-one"
   | "liquid-system-one"
   | "cloudflare-system-one"
   | "cloudflare-clairic"
+  | "openrouter-extractions"
+  | "litellm-extraction"
   | "microsoft-system-one";
 
 /** Explicit references are resolved only from the request's named images. */
@@ -25,8 +33,9 @@ export type Question =
       instructions: QuestionContent;
       criteria?: { true?: QuestionContent; false?: QuestionContent };
     }
-  | { type: "choice"; instructions: QuestionContent; criteria: Record<string, QuestionContent> }
-  | { type: "score"; instructions: QuestionContent; criteria: QuestionContent[] }
+  | { type: "choice"; instructions: QuestionContent; criteria: Record<string, QuestionContent>; booleanValues?: boolean }
+  | { type: "score"; instructions: QuestionContent; criteria: QuestionContent[]; descriptions?: string[] }
+  | { type: "extract"; instructions?: QuestionContent; criteria: Record<string, QuestionContent>; source?: string; threshold?: number; snapToWords?: boolean; debug?: boolean }
   | { type: "box"; instructions: QuestionContent }
   | { type: "locate"; instructions: QuestionContent }
   | { type: "text"; instructions: QuestionContent }
@@ -60,6 +69,12 @@ export type WebFetchedResult = {
   snippet: string;
 };
 
+export type DecisionCitation = {
+  url: string;
+  title?: string;
+  excerpts?: string[];
+};
+
 export type NonTokenCost = {
   currency: "USD";
   webGrounding: {
@@ -73,6 +88,13 @@ export type NonTokenCost = {
     totalMaximum: number;
     note: string;
   };
+};
+
+export type ProviderCost = {
+  currency: "USD";
+  total: number;
+  source: "provider" | "gateway";
+  note?: string;
 };
 
 export type Answer =
@@ -99,9 +121,10 @@ export type Answer =
       found?: number;
     }
   | { type: "locate"; spans: TextSpan[] }
-  | { type: "text"; text: string; span?: CharSpan | null; found?: number }
-  | { type: "number"; value: number | null; unit?: string | null; text?: string | null; span?: CharSpan | null; found?: number }
-  | { type: "date"; date: string | null; text?: string | null; span?: CharSpan | null; found?: number }
+  | { type: "extract"; spans: Record<string, TextSpan[]>; notStated: Record<string, number> }
+  | { type: "text"; text: string; span?: CharSpan | null; found?: number; path?: string }
+  | { type: "number"; value: number | null; unit?: string | null; text?: string | null; span?: CharSpan | null; found?: number; path?: string }
+  | { type: "date"; date: string | null; text?: string | null; span?: CharSpan | null; found?: number; path?: string }
   | {
       type: "spans";
       spans: { text: string; span: CharSpan; found: number }[];
@@ -129,10 +152,19 @@ export interface ClassifyParams {
   images?: ImageInput[];
   /** Shared audio/video inputs for providers that document media support. */
   media?: MediaInput[];
+  /** OpenAI Decisions input items: messages, function calls/outputs and custom tool calls/outputs. */
+  conversation?: unknown[];
   /** Explicit opt-in to Perplexity web search and page fetching. This can upload state text and incur per-search fees. */
   mode?: "web_grounding";
-  /** Maximum stored-page age in seconds for a URL-only state with web grounding. */
-  maxStaleness?: number;
+  /** Image detail hint for adapters that publish one; ignored by routes without a documented field. */
+  imageDetail?: "auto" | "low" | "high" | "original";
+  /** OpenAI-compatible prompt-cache controls; rejected by routes without a documented contract. */
+  promptCache?: {
+    key?: string;
+    mode?: "implicit" | "explicit";
+    ttl?: "30m";
+    breakpoints?: boolean;
+  };
 }
 
 export type ClassificationTreeNode = {
@@ -217,17 +249,32 @@ export type ClassifierCost =
         | "calculation_overflow";
     };
 
+export type RouteLimits = {
+  maxQuestions: number;
+  maxImages: number;
+  maxAudio: number;
+  maxVideo: number;
+};
+
 export interface ProviderSettings {
   apiKey?: string;
   baseUrl?: string;
   headers?: Record<string, string>;
   accountId?: string;
+  /** Cloudflare AI Gateway selection; emitted as `cf-aig-gateway-id`. */
+  gatewayId?: string;
   experimentalImages?: boolean;
   experimentalBox?: boolean;
+  /** Microsoft Foundry accepts API-key or Entra bearer credentials on the same endpoint. */
+  authMode?: "api-key" | "bearer" | "google-api-key" | "parallel-api-key" | "none";
+  /** TypeSafe Jev long-context opt-in; sends `TypeSafe-Danger-Zone-Long-Context: true`. */
+  longContext?: boolean;
   /** Model ID (or Azure deployment name) to explicit token rates. */
   pricing?: Record<string, TokenPricing>;
   /** Verified wire choice limit; needed for batching on endpoints without a known limit. */
   maxChoices?: number;
+  /** Verified per-request envelope overrides for custom or account-specific endpoints. */
+  limits?: Partial<RouteLimits>;
 }
 
 export interface CustomProviderSettings extends ProviderSettings {
@@ -260,9 +307,10 @@ export interface ResolvedModel {
   model: string;
   api: ApiStyle;
   /** Provider wire format used by the selected route. */
-  mediaFormat: "jev-assets" | "base64-object";
+  mediaFormat: "jev-assets" | "base64-object" | "openrouter-parts";
   baseUrl: string;
   headers: Record<string, string>;
+  gatewayId?: string;
   configuredApiKey?: string;
   credentialProvider: string;
   envVar?: string;
@@ -271,7 +319,11 @@ export interface ResolvedModel {
   video: boolean;
   box: boolean;
   experimentalImages: boolean;
+  authMode: "api-key" | "bearer" | "subscription-key" | "google-api-key" | "parallel-api-key" | "none";
+  longContext: boolean;
   requestTimeoutMs: number;
+  /** Envelope used before a request; values come from verified route contracts or explicit settings. */
+  limits: RouteLimits;
   pricing?: { rates: TokenPricing; source: "builtin" | "configured" };
   maxChoices?: number;
 }
@@ -297,7 +349,9 @@ export interface PreparedInput {
   images: PreparedImage[];
   media: PreparedMedia[];
   mode?: ClassifyParams["mode"];
-  maxStaleness?: number;
+  conversation?: ClassifyParams["conversation"];
+  imageDetail?: ClassifyParams["imageDetail"];
+  promptCache?: ClassifyParams["promptCache"];
 }
 
 export type ClassifierResult = {
@@ -315,6 +369,10 @@ export type ClassifierResult = {
   providerCalls?: number;
   /** Estimate for completed requests in this result, not an invoice or total of failed attempts. */
   cost: ClassifierCost;
+  /** Gateway/provider-reported charge when the API exposes one; never substituted for the token estimate. */
+  providerCost?: ProviderCost;
+  /** Request-wide web evidence returned by grounded Decision APIs such as Parallel. */
+  citations?: DecisionCitation[];
   requestId?: string;
   /** Evidence returned by Perplexity web grounding, with the same order and counts as the provider response. */
   webGrounding?: {
@@ -394,7 +452,7 @@ export type ExtractionField = {
 export type ExtractParams = {
   state?: ClassifyParams["state"];
   fields: Record<string, ExtractionField>;
-  images?: string[];
+  images?: (string | { path: string; rotation?: 0 | 90 | 180 | 270 })[];
   documents?: string[];
   referenceDate?: string;
   options?: { includeQuantiles?: boolean; returnStateText?: boolean };
@@ -421,6 +479,7 @@ export type ExtractResult = {
   truncated: boolean;
   usage?: NonNullable<ClassifierResult["usage"]>;
   cost: ClassifierCost;
+  providerCost?: ProviderCost;
   requestId?: string;
   stateText?: string;
 };

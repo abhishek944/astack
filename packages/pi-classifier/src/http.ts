@@ -1,5 +1,34 @@
 import { ClassifierError, type ResolvedModel } from "./types.js";
 
+/** Optional bounded parser for provider error envelopes; receives the active key so echoed credentials can be omitted. */
+export type JsonErrorDetail = (status: number, body: unknown, apiKey: string) => string | undefined;
+
+/** Optional sanitizer for a validated response-header request ID; omitted values fall back to provider-body IDs. */
+export type JsonRequestIdDetail = (value: string, apiKey: string) => string | undefined;
+
+async function readBoundedText(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader)
+    throw new ClassifierError("response", "Classifier returned an empty response.");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      size += next.value.length;
+      if (size > 1024 * 1024) {
+        await reader.cancel();
+        throw new ClassifierError("response", "Classifier response exceeds 1 MiB.");
+      }
+      chunks.push(next.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 export async function postJson(
   route: ResolvedModel,
   path: string,
@@ -7,7 +36,9 @@ export async function postJson(
   apiKey: string,
   signal?: AbortSignal,
   extraHeaders?: Record<string, string>,
-): Promise<{ body: unknown; requestId?: string }> {
+  errorDetail?: JsonErrorDetail,
+  requestIdDetail?: JsonRequestIdDetail,
+): Promise<{ body: unknown; requestId?: string; costHeader?: string }> {
   if (signal?.aborted)
     throw new ClassifierError("aborted", "Classification was cancelled.");
   const encoded = JSON.stringify(body);
@@ -24,7 +55,15 @@ export async function postJson(
     const headers = new Headers(route.headers);
     for (const [key, value] of Object.entries(extraHeaders ?? {}))
       headers.set(key, value);
-    if (route.api === "microsoft-system-one") {
+    if (route.authMode === "none") {
+      // Local runtimes are reached over loopback without an API key.
+    } else if (route.authMode === "subscription-key") {
+      headers.set("api-subscription-key", apiKey);
+    } else if (route.authMode === "google-api-key") {
+      headers.set("x-goog-api-key", apiKey);
+    } else if (route.authMode === "parallel-api-key") {
+      headers.set("x-api-key", apiKey);
+    } else if (route.authMode === "api-key") {
       headers.set("api-key", apiKey);
     } else {
       headers.set("authorization", "Bearer " + apiKey);
@@ -39,54 +78,46 @@ export async function postJson(
       redirect: "error",
     });
     if (!response.ok) {
-      await response.body?.cancel();
+      let detail: string | undefined;
+      if (errorDetail) {
+        try {
+          const raw = await readBoundedText(response);
+          if (raw) detail = errorDetail(response.status, JSON.parse(raw), apiKey);
+        } catch {
+          // Keep the generic error when an error body is absent, oversized or not JSON.
+        }
+      } else {
+        await response.body?.cancel();
+      }
       throw new ClassifierError(
         "http",
         "Classifier request failed (HTTP " +
           response.status +
-          "). Check credentials, model, limits and provider availability.",
+          "). Check credentials, model, limits and provider availability." +
+          (detail ? " " + detail : ""),
         response.status,
       );
     }
-    const reader = response.body?.getReader();
-    if (!reader)
-      throw new ClassifierError(
-        "response",
-        "Classifier returned an empty response.",
-      );
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    try {
-      while (true) {
-        const next = await reader.read();
-        if (next.done) break;
-        size += next.value.length;
-        if (size > 1024 * 1024) {
-          await reader.cancel();
-          throw new ClassifierError(
-            "response",
-            "Classifier response exceeds 1 MiB.",
-          );
-        }
-        chunks.push(next.value);
-      }
-    } finally {
-      reader.releaseLock();
-    }
+    const raw = await readBoundedText(response);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      parsed = JSON.parse(raw);
     } catch {
       throw new ClassifierError(
         "response",
         "Classifier returned invalid JSON.",
       );
     }
-    const result: { body: unknown; requestId?: string } = { body: parsed };
+    const result: { body: unknown; requestId?: string; costHeader?: string } = { body: parsed };
     const id =
       response.headers.get("x-request-id") ??
       response.headers.get("request-id");
-    if (id && /^[a-zA-Z0-9_.:-]{1,128}$/.test(id)) result.requestId = id;
+    if (id && /^[a-zA-Z0-9_.:-]{1,128}$/.test(id)) {
+      const safeId = requestIdDetail ? requestIdDetail(id, apiKey) : id;
+      if (safeId !== undefined) result.requestId = safeId;
+    }
+    const cost = response.headers.get("x-litellm-response-cost");
+    if (cost && /^\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(cost)) result.costHeader = cost;
     return result;
   } catch (error) {
     if (controller.signal.aborted)

@@ -819,7 +819,9 @@ export function resolveImageToolCapabilities(
         }
     : provider.api === 'mai'
       ? genericCapabilitiesForApi('mai')
-      : provider.api === 'openrouter'
+      : provider.api === 'cloudflare'
+        ? genericCapabilitiesForApi('cloudflare')
+        : provider.api === 'openrouter'
         ? { ...genericCapabilitiesForApi('openrouter'), ...(discovered ?? {}) }
         : discovered
           ? { ...genericCapabilitiesForApi('openrouter'), ...discovered }

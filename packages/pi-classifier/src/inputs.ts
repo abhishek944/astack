@@ -16,7 +16,13 @@ import {
   type ResolvedModel,
 } from "./types.js";
 import { hasBox } from "./validation.js";
-import { imageReferences } from "./image-content.js";
+import { imageReferences, isImageReference } from "./image-content.js";
+import { openRouterDecisionCapabilities, openRouterExtractionCapabilities } from "./config.js";
+
+function topLevelImagePartsOnly(value: unknown): boolean {
+  if (isImageReference(value)) return true;
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string" || isImageReference(entry));
+}
 
 /** Programmatic image ingress. Never accepted as model-facing tool arguments. */
 export interface MemoryImage {
@@ -31,6 +37,15 @@ export async function prepareInput(
   signal?: AbortSignal,
   memoryImages: readonly MemoryImage[] = [],
 ): Promise<PreparedInput> {
+  const questionCount = Object.keys(params.questions).length;
+  if (questionCount > route.limits.maxQuestions)
+    throw new ClassifierError(
+      "input",
+      "The selected route accepts at most " + route.limits.maxQuestions + " questions in this package.",
+    );
+  if (route.api === "perplexity-decisions" && params.mode === "web_grounding" && questionCount > 100)
+    throw new ClassifierError("input", "Perplexity web grounding accepts at most 100 questions.");
+  const openRouter = route.api === "openrouter-decisions" ? openRouterDecisionCapabilities(route.model) : undefined;
   const imageCount = (params.images?.length ?? 0) + memoryImages.length;
   if (imageCount && !route.images)
     throw new ClassifierError("capability", "The selected model does not support images, or experimental Jev images are disabled.");
@@ -38,16 +53,54 @@ export async function prepareInput(
     throw new ClassifierError("capability", "box requires an enabled Jev 1.14 model, experimentalImages/experimentalBox and an image.");
   if (params.mode === "web_grounding" && route.api !== "perplexity-decisions")
     throw new ClassifierError("capability", "Web grounding is supported only by Perplexity Decisions routes.");
-  if (params.maxStaleness !== undefined && params.mode !== "web_grounding")
-    throw new ClassifierError("input", "maxStaleness requires mode: web_grounding on a Perplexity route.");
   if (route.api === "cloudflare-clairic")
     throw new ClassifierError("capability", "Clairic extraction uses classify_extract with fields, not classify questions.");
+  if (params.imageDetail !== undefined && !["openai-decisions", "openrouter-decisions"].includes(route.api))
+    throw new ClassifierError("capability", "imageDetail is supported only by OpenAI-compatible and OpenRouter Decisions routes.");
+  if (params.promptCache !== undefined && route.api !== "openai-decisions")
+    throw new ClassifierError("capability", "promptCache is supported only by the OpenAI Decisions wire contract.");
+  if (params.conversation !== undefined && route.api !== "openai-decisions")
+    throw new ClassifierError("capability", "conversation input is supported only by the OpenAI Decisions wire contract.");
   const liquidQuestions = ["bool", "choice", "score", "text", "number", "date", "spans", "boxes", "estimate", "multi_choice", "box"];
   const decisionQuestions = ["bool", "choice", "score", "box", "locate"];
-  const allowed = route.api === "liquid-system-one" ? liquidQuestions : decisionQuestions;
+  const coreQuestions = ["bool", "choice", "score"];
+  const sarvamQuestions = ["bool", "choice", "score"];
+  const openRouterQuestions = route.box
+    ? ["bool", "choice", "score", "box"]
+    : ["bool", "choice", "score"];
+  const allowed =
+    route.api === "liquid-system-one"
+      ? liquidQuestions
+      : route.api === "sarvam-system-one"
+        ? sarvamQuestions
+        : route.api === "inception-decisions"
+          ? [...coreQuestions, "extract"]
+          : ["gemini-decisions", "parallel-decisions", "local-system-one"].includes(route.api)
+            ? coreQuestions
+            : openRouter
+              ? openRouterQuestions
+              : decisionQuestions;
   const unsupported = Object.values(params.questions).find((question) => !allowed.includes(question.type));
   if (unsupported)
     throw new ClassifierError("capability", "The selected route does not support " + unsupported.type + " questions.");
+  const extracts = Object.values(params.questions).filter((question) => question.type === "extract");
+  if (extracts.length > 0 && route.api !== "inception-decisions")
+    throw new ClassifierError("capability", "extract questions are supported only by Inception Mercury Decide.");
+  if (extracts.length > 0) {
+    if (imageCount > 0 || (params.media?.length ?? 0) > 0)
+      throw new ClassifierError("input", "Inception extract questions cannot be combined with images or media.");
+    if (typeof params.state !== "string") {
+      if (!isRecord(params.state) && !Array.isArray(params.state))
+        throw new ClassifierError("input", "Inception extract questions require text or JSON state.");
+      for (const question of extracts) {
+        if (typeof question.source !== "string" || !question.source.trim())
+          throw new ClassifierError("input", "Inception extract questions require source when state is JSON.");
+        const value = (params.state as Record<string, unknown>)[question.source];
+        if (typeof value !== "string")
+          throw new ClassifierError("input", "Inception extract source must name a string field in the JSON state.");
+      }
+    }
+  }
   const locate = Object.values(params.questions).some((question) => question.type === "locate");
   if (locate) {
     const v13 = ["pplx-decider-v1.3", "pplx-decider-flash-v1.3", "pplx-decider-latest", "pplx-decider-flash-latest"];
@@ -60,22 +113,29 @@ export async function prepareInput(
   }
   const clef = route.api === "cloudflare-system-one" && route.images;
   const liquid = route.api === "liquid-system-one";
-  const maxImages = liquid || route.api === "perplexity-decisions" ? 8 : clef ? 4 : 5;
-  if (imageCount > maxImages)
-    throw new ClassifierError("input", "The selected route accepts at most " + maxImages + " images in this package.");
-  if (imageReferences(params.state).length && !["system-one", "openai-decisions", "perplexity-decisions"].includes(route.api))
-    throw new ClassifierError("capability", "This route does not support explicit image references in state; use shared image paths instead.");
+  if (imageCount > route.limits.maxImages)
+    throw new ClassifierError("input", "The selected route accepts at most " + route.limits.maxImages + " images in this package.");
+  const flexibleReferences = openRouter?.flexibleImagePlacement === true;
+  if (imageReferences(params.state).length && !flexibleReferences && !["system-one", "openai-decisions", "perplexity-decisions", "microsoft-system-one", "gemini-decisions", "inception-decisions", "openrouter-decisions"].includes(route.api))
+    throw new ClassifierError("capability", "This route does not support explicit image references in state; use shared image parts instead.");
+  if (
+    route.api === "openrouter-decisions" &&
+    !flexibleReferences &&
+    imageReferences(params.state).length > 0 &&
+    !topLevelImagePartsOnly(params.state)
+  )
+    throw new ClassifierError("capability", "OpenRouter adapters other than TypeSafe and Microsoft read images only as top-level state parts. Put each {$image:id} directly in a state array, not inside an object or another array.");
   for (const question of Object.values(params.questions)) {
-    if (imageReferences(question.instructions).length && !["system-one", "openai-decisions"].includes(route.api))
-      throw new ClassifierError("capability", "Image references in question instructions require Jev or OpenAI Decisions.");
-    if ("criteria" in question && question.criteria && Object.values(question.criteria).some((entry) => imageReferences(entry).length) && route.api !== "system-one")
-      throw new ClassifierError("capability", "Image references in criteria require a Jev assets-protocol route.");
+    if (imageReferences(question.instructions).length && !flexibleReferences && !["system-one", "openai-decisions", "microsoft-system-one", "inception-decisions"].includes(route.api))
+      throw new ClassifierError("capability", "Image references in question instructions require Jev, OpenAI Decisions or a flexible OpenRouter Decisions endpoint.");
+    if (question.type !== "extract" && "criteria" in question && question.criteria && Object.values(question.criteria).some((entry) => imageReferences(entry).length) && route.api !== "system-one" && route.api !== "microsoft-system-one" && !flexibleReferences)
+      throw new ClassifierError("capability", "Image references in criteria require a Jev assets-protocol route or a flexible OpenRouter Decisions endpoint.");
   }
   // Reject unsupported URL placement before opening any local files.
   for (const source of params.images ?? []) {
     if (typeof source !== "string" && "url" in source) {
-      if (route.api !== "openai-decisions")
-        throw new ClassifierError("capability", "Hosted image URLs are supported only by OpenAI Decisions routes. No URL was fetched.");
+      if (route.api !== "openai-decisions" && openRouter?.remoteImageUrls !== true)
+        throw new ClassifierError("capability", "Hosted image URLs are supported only by OpenAI Decisions and documented OpenRouter Decisions endpoints. No URL was fetched.");
       try {
         const url = new URL(source.url);
         if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password || url.hash)
@@ -110,12 +170,22 @@ export async function prepareInput(
     totalBytes += Buffer.byteLength(image.data, "base64");
     if (totalBytes > (clef ? 8 : 10) * 1024 * 1024)
       throw new ClassifierError("input", "Images exceed the selected route's total upload byte limit.");
+    if (route.api === "microsoft-system-one" && image.mimeType === "image/webp")
+      throw new ClassifierError("input", "Microsoft Foundry Decision-1.1 image assets accept PNG and JPEG only.");
     if (route.api === "system-one") {
       if (image.mimeType === "image/webp")
         throw new ClassifierError("input", "Jev image assets accept PNG and JPEG only.");
       const pixels = image.width * image.height;
       if (image.width < 280 || image.width > 1568 || image.height < 280 || image.height > 1568 || pixels < 78_400 || pixels > 2_458_624)
         throw new ClassifierError("input", "Resize or pad Jev images before sending: each side must be 280–1568 pixels and total area 78400–2458624 pixels. Images are not silently resized.");
+    }
+    if (openRouter?.flexibleImagePlacement) {
+      if (image.mimeType === "image/webp")
+        throw new ClassifierError("input", "OpenRouter TypeSafe and Microsoft Decisions endpoints accept PNG and JPEG only.");
+      const minimum = /typesafe\/jev/.test(route.model) ? 256 : 280;
+      if (image.width < minimum || image.width > 1568 || image.height < minimum || image.height > 1568 ||
+          image.width * image.height < minimum * minimum || image.width * image.height > 2_458_624)
+        throw new ClassifierError("input", "Resize or pad this OpenRouter Decisions image: each side must be " + minimum + "–1568 pixels and the area must stay within the endpoint's documented range.");
     }
     if (liquid) {
       const patches = Math.ceil(image.width / 32) * Math.ceil(image.height / 32);
@@ -133,7 +203,9 @@ export async function prepareInput(
     images,
     media,
     ...(params.mode !== undefined ? { mode: params.mode } : {}),
-    ...(params.maxStaleness !== undefined ? { maxStaleness: params.maxStaleness } : {}),
+    ...(params.conversation !== undefined ? { conversation: params.conversation } : {}),
+    ...(params.imageDetail !== undefined ? { imageDetail: params.imageDetail } : {}),
+    ...(params.promptCache !== undefined ? { promptCache: params.promptCache } : {}),
   };
 }
 
@@ -330,10 +402,10 @@ async function prepareMedia(
     throw new ClassifierError("capability", "The selected route does not support audio input.");
   if (video.length && !route.video)
     throw new ClassifierError("capability", "The selected route does not support video input.");
-  if (audio.length > (route.api === "liquid-system-one" ? 8 : 4))
-    throw new ClassifierError("input", "The selected route accepts at most " + (route.api === "liquid-system-one" ? 8 : 4) + " audio clips.");
-  if (video.length > 2)
-    throw new ClassifierError("input", "Clef-omni accepts at most two videos.");
+  if (audio.length > route.limits.maxAudio)
+    throw new ClassifierError("input", "The selected route accepts at most " + route.limits.maxAudio + " audio clips.");
+  if (video.length > route.limits.maxVideo)
+    throw new ClassifierError("input", "The selected route accepts at most " + route.limits.maxVideo + " videos.");
   const result: PreparedMedia[] = [];
   for (const source of [...audio, ...video]) {
     const maxBytes = source.type === "video" ? 16 * 1024 * 1024 : route.api === "cloudflare-system-one" ? 8 * 1024 * 1024 : 20 * 1024 * 1024;
@@ -347,10 +419,12 @@ async function prepareMedia(
   return result;
 }
 
+export type PreparedExtractionImage = PreparedLocalImage & { rotation?: 0 | 90 | 180 | 270 };
+
 export type PreparedExtractionInput = {
   state: string | Record<string, unknown> | unknown[];
   fields: NonNullable<ExtractParams["fields"]>;
-  images: PreparedLocalImage[];
+  images: PreparedExtractionImage[];
   documents: { mimeType: "application/pdf"; data: string }[];
   referenceDate?: string;
   options?: ExtractParams["options"];
@@ -361,15 +435,87 @@ const EXTRACTION_TYPES = new Set([
   "boolean", "enum", "object", "list", "estimate", "forecast",
 ]);
 
-function validateExtractionFields(value: unknown): NonNullable<ExtractParams["fields"]> {
-  if (!isRecord(value) || Object.keys(value).length === 0)
-    throw new ClassifierError("input", "fields must be a non-empty map of named field specifications.");
+const OPENROUTER_EXTRACTION_FIELD_KEYS: Record<string, { allowed: string[]; required: string[] }> = {
+  text: { allowed: ["type", "instructions", "null_threshold", "unit"], required: ["type"] },
+  number: { allowed: ["type", "decimals", "instructions", "integer", "null_threshold", "unit"], required: ["type"] },
+  date: { allowed: ["type", "instructions", "null_threshold", "unit"], required: ["type"] },
+  time: { allowed: ["type", "instructions", "null_threshold", "unit"], required: ["type"] },
+  datetime: { allowed: ["type", "instructions", "null_threshold", "unit"], required: ["type"] },
+  duration: { allowed: ["type", "decimals", "instructions", "integer", "null_threshold", "unit"], required: ["type"] },
+  list: { allowed: ["type", "decimals", "instructions", "integer", "items", "null_threshold", "unit"], required: ["type", "items"] },
+  estimate: { allowed: ["type", "instructions", "max", "min", "scale", "step", "unit"], required: ["type", "min", "max"] },
+  forecast: { allowed: ["type", "horizon", "instructions", "interval", "max", "min", "scale", "step", "unit"], required: ["type", "min", "max", "horizon", "interval"] },
+};
+
+function validateOpenRouterExtractionFields(
+  fields: NonNullable<ExtractParams["fields"]>,
+  model: string,
+): void {
+  const isClairic = model === "cloudflare/clairic";
+  const isLiquid = /^liquid\/d1\.2/.test(model);
+  const isScaleDown = model === "scaledown/extract";
+  const textItemsOnly = isScaleDown || isLiquid || model.startsWith("inception/") || model.startsWith("perplexity/");
+  const noNullThreshold = isScaleDown || model.startsWith("perplexity/") || model.startsWith("inference-net/");
+  for (const [name, field] of Object.entries(fields)) {
+    if (!isRecord(field) || typeof field.type !== "string")
+      throw new ClassifierError("input", "Each extraction field needs a type.");
+    const schema = OPENROUTER_EXTRACTION_FIELD_KEYS[field.type];
+    if (!schema)
+      throw new ClassifierError("input", "OpenRouter extraction does not support field type " + field.type + ".");
+    const keys = Object.keys(field);
+    const unknown = keys.filter((key) => !schema.allowed.includes(key));
+    if (unknown.length > 0)
+      throw new ClassifierError("input", "Field " + name + " uses keys OpenRouter does not accept: " + unknown.join(", ") + ".");
+    const missing = schema.required.filter((key) => !Object.hasOwn(field, key));
+    if (missing.length > 0)
+      throw new ClassifierError("input", "Field " + name + " is missing required OpenRouter keys: " + missing.join(", ") + ".");
+    if (field.null_threshold !== undefined) {
+      const threshold = field.null_threshold;
+      if (typeof threshold !== "number" || !Number.isFinite(threshold) || threshold < 0 || threshold > 1)
+        throw new ClassifierError("input", "Field " + name + " has an invalid null_threshold.");
+      if (noNullThreshold || (isClairic && ["list", "estimate", "forecast"].includes(field.type)) || (isLiquid && field.type === "list"))
+        throw new ClassifierError("capability", "The selected extraction model does not accept null_threshold on this field.");
+      if (isClairic && threshold === 0)
+        throw new ClassifierError("input", "Clairic requires null_threshold above zero.");
+      if (isLiquid && ["text", "number", "date"].includes(field.type) && threshold <= 0)
+        throw new ClassifierError("input", "Liquid extraction requires null_threshold above zero on text, number and date fields.");
+    } else if (isLiquid && ["text", "number", "date"].includes(field.type)) {
+      throw new ClassifierError("input", "Liquid extraction requires null_threshold above zero on text, number and date fields.");
+    }
+    if (field.unit !== undefined && !isClairic && !(isLiquid && field.type === "estimate"))
+      throw new ClassifierError("capability", "The selected extraction model does not accept unit on this field.");
+    if (field.type === "list") {
+      if (typeof field.items !== "string" || !["text", "number", "date"].includes(field.items))
+        throw new ClassifierError("input", "OpenRouter list fields require items of text, number or date.");
+      if (textItemsOnly && field.items !== "text")
+        throw new ClassifierError("capability", "The selected extraction model supports only text list items.");
+      if (isLiquid && (field.unit !== undefined || field.integer !== undefined || field.decimals !== undefined))
+        throw new ClassifierError("capability", "Liquid list fields accept only items: text.");
+    }
+    if (field.type === "estimate" && isLiquid) {
+      if ((typeof field.min !== "number" || !Number.isFinite(field.min)) ||
+          (typeof field.max !== "number" || !Number.isFinite(field.max)) ||
+          (field.step !== undefined && typeof field.step !== "number"))
+        throw new ClassifierError("input", "Liquid estimate fields require numeric min, max and optional numeric step.");
+      if (field.scale !== undefined && field.scale !== "linear")
+        throw new ClassifierError("capability", "Liquid extraction accepts only linear estimates.");
+    }
+  }
+}
+
+function validateExtractionFields(
+  value: unknown,
+  allowedTypes: ReadonlySet<string> = EXTRACTION_TYPES,
+  maxFields = 128,
+): NonNullable<ExtractParams["fields"]> {
+  if (!isRecord(value) || Object.keys(value).length === 0 || Object.keys(value).length > maxFields)
+    throw new ClassifierError("input", "fields must be a non-empty map of at most " + maxFields + " named field specifications.");
   for (const [name, field] of Object.entries(value)) {
-    if (!/^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(name) || !isRecord(field) || typeof field.type !== "string" || !EXTRACTION_TYPES.has(field.type))
-      throw new ClassifierError("input", "Each field needs a provider field name and a documented Clairic type.");
-    if (field.properties !== undefined) validateExtractionFields(field.properties);
+    if (!/^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(name) || !isRecord(field) || typeof field.type !== "string" || !allowedTypes.has(field.type))
+      throw new ClassifierError("input", "Each field needs a provider field name and a documented type for the selected extraction model.");
+    if (field.properties !== undefined) validateExtractionFields(field.properties, allowedTypes, maxFields);
     if (field.items !== undefined && isRecord(field.items) && field.items.properties !== undefined)
-      validateExtractionFields(field.items.properties);
+      validateExtractionFields(field.items.properties, allowedTypes, maxFields);
   }
   return value as NonNullable<ExtractParams["fields"]>;
 }
@@ -425,12 +571,21 @@ export async function prepareExtractionInput(
   cwd: string,
   signal?: AbortSignal,
 ): Promise<PreparedExtractionInput> {
-  if (route.api !== "cloudflare-clairic")
-    throw new ClassifierError("capability", "Clairic extraction requires the clairic-api route.");
+  if (!["cloudflare-clairic", "openrouter-extractions", "litellm-extraction"].includes(route.api))
+    throw new ClassifierError("capability", "Extraction requires a clairic-api, openrouter-extractions-api or litellm-extraction-api route.");
   if (params.state !== undefined &&
       !(typeof params.state === "string" || Array.isArray(params.state) || isRecord(params.state)))
     throw new ClassifierError("input", "state must be text, a JSON object or an array.");
-  const fields = validateExtractionFields(params.fields);
+  const extractionCaps = route.api === "openrouter-extractions" ? openRouterExtractionCapabilities(route.model) : undefined;
+  const fields = validateExtractionFields(
+    params.fields,
+    extractionCaps ? new Set(extractionCaps.fieldTypes) : EXTRACTION_TYPES,
+    extractionCaps?.maxFields,
+  );
+  if (route.api === "openrouter-extractions")
+    validateOpenRouterExtractionFields(fields, route.model);
+  if (extractionCaps?.referenceDate === false && params.referenceDate !== undefined)
+    throw new ClassifierError("capability", "The selected extraction model does not accept referenceDate.");
   if (params.referenceDate !== undefined &&
       (typeof params.referenceDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(params.referenceDate)))
     throw new ClassifierError("input", "referenceDate must use YYYY-MM-DD.");
@@ -440,25 +595,58 @@ export async function prepareExtractionInput(
         Object.values(params.options).some((value) => typeof value !== "boolean"))
       throw new ClassifierError("input", "options may only set includeQuantiles and returnStateText to booleans.");
   }
-  if (params.images !== undefined && (!Array.isArray(params.images) || params.images.some((image) => typeof image !== "string" || !image.trim() || image.length > 4096)))
-    throw new ClassifierError("input", "images must be local path strings inside cwd.");
+  if (params.images !== undefined && (!Array.isArray(params.images) || params.images.some((image) =>
+    typeof image === "string"
+      ? !image.trim() || image.length > 4096
+      : !isRecord(image) || Object.keys(image).some((key) => key !== "path" && key !== "rotation") ||
+        typeof image.path !== "string" || !image.path.trim() || image.path.length > 4096 ||
+        (image.rotation !== undefined && ![0, 90, 180, 270].includes(image.rotation as number)))))
+    throw new ClassifierError("input", "images must be local path strings or {path, rotation} objects with rotation 0, 90, 180 or 270.");
+  if (route.api !== "cloudflare-clairic" && (params.images ?? []).some((image) => typeof image !== "string" && image.rotation !== undefined))
+    throw new ClassifierError("capability", "Image rotation is documented only for direct Cloudflare Clairic.");
   if (params.documents !== undefined && (!Array.isArray(params.documents) || params.documents.some((document) => typeof document !== "string" || !document.trim() || document.length > 4096)))
     throw new ClassifierError("input", "documents must be local PDF path strings inside cwd.");
-  const images = await Promise.all((params.images ?? []).map((image) => loadLocalImage(image, cwd, signal, 4 * 1024 * 1024)));
+  const maxDocuments = route.api === "cloudflare-clairic"
+    ? 4
+    : route.api === "openrouter-extractions"
+      ? extractionCaps?.maxDocuments ?? 0
+      : 0;
+  if ((params.documents?.length ?? 0) > maxDocuments)
+    throw new ClassifierError("capability", "The selected extraction route accepts at most " + maxDocuments + " PDF documents.");
+  const isScaleDown = route.api === "openrouter-extractions" && route.model === "scaledown/extract";
+  if (isScaleDown && (params.images?.length ?? 0) + (params.documents?.length ?? 0) > 0 && params.state !== undefined && params.state !== "")
+    throw new ClassifierError("input", "ScaleDown Extract reads either text state or one asset, not both. Omit state when sending a PDF or image.");
+  const images = await Promise.all((params.images ?? []).map(async (image) => {
+    const spec = typeof image === "string" ? { path: image } : image;
+    const loaded = await loadLocalImage(spec.path, cwd, signal, 4 * 1024 * 1024);
+    return spec.rotation === undefined ? loaded : { ...loaded, rotation: spec.rotation as 0 | 90 | 180 | 270 };
+  }));
   const documents = await Promise.all((params.documents ?? []).map(async (document) => ({
     mimeType: "application/pdf" as const,
     data: (await loadDocumentFile(document, cwd, signal)).toString("base64"),
   })));
-  if (images.length > 4 || documents.length > 4 || images.length + documents.length > 4)
-    throw new ClassifierError("input", "Clairic accepts at most four rendered images and PDF pages combined.");
+  if (route.api === "openrouter-extractions" && /^liquid\/d1\.2/.test(route.model) && images.length > 0 &&
+      Object.values(fields).some((field) => isRecord(field) && field.type !== "estimate"))
+    throw new ClassifierError("capability", "OpenRouter Liquid extraction models read images only for estimate fields.");
+  if (isScaleDown && images.some((image) => image.mimeType === "image/webp"))
+    throw new ClassifierError("capability", "ScaleDown Extract does not read WebP images.");
+  if (images.length > route.limits.maxImages)
+    throw new ClassifierError("input", "The selected extraction model accepts at most " + route.limits.maxImages + " images.");
+  const maxAssets = route.api === "cloudflare-clairic"
+    ? 4
+    : extractionCaps?.maxAssets ?? route.limits.maxImages;
+  if (images.length + documents.length > maxAssets)
+    throw new ClassifierError("input", "The selected extraction model accepts at most " + maxAssets + " media assets in total.");
+  if (route.api === "cloudflare-clairic" && images.length + documents.length > 4)
+    throw new ClassifierError("input", "Direct Clairic accepts at most four rendered images and PDF pages combined.");
   let bytes = 0;
   for (const media of [...images.map((image) => Buffer.from(image.data, "base64")), ...documents.map((document) => Buffer.from(document.data, "base64"))]) {
     bytes += media.byteLength;
     if (bytes > 8 * 1024 * 1024)
-      throw new ClassifierError("input", "Clairic media exceeds the provider's 8 MiB combined decoded limit.");
+      throw new ClassifierError("input", "Extraction media exceeds the provider's 8 MiB combined decoded limit.");
   }
   if ((params.state === undefined || params.state === "") && images.length === 0 && documents.length === 0)
-    throw new ClassifierError("input", "Clairic requires a non-empty state or media input.");
+    throw new ClassifierError("input", "Extraction requires a non-empty state or media input.");
   return {
     state: params.state ?? "",
     fields,

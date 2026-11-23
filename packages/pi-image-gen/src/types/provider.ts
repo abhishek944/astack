@@ -5,6 +5,7 @@ export type ApiStyle =
   | 'gemini'
   | 'dashscope'
   | 'openrouter'
+  | 'cloudflare'
   | 'ark'
   | 'meta'
   | 'mai'

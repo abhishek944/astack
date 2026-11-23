@@ -2,7 +2,7 @@ import { resolveApiKey, type CredentialSource } from "./auth.js";
 import { resolveModel } from "./config.js";
 import { estimateCost, tokenCount } from "./cost.js";
 import { postJson } from "./http.js";
-import { prepareExtractionInput } from "./inputs.js";
+import { prepareExtractionInput, type PreparedExtractionInput } from "./inputs.js";
 import { unwrapCloudflare } from "./providers.js";
 import {
   ClassifierError,
@@ -25,7 +25,7 @@ const CLAIRIC_LABEL = "Cloudflare Clairic";
 const ANSWER_METADATA = [
   "valid", "complete", "decoder", "tokens", "raw", "retry_input_tokens", "null_recovered",
   "guess", "p_null", "p_null_method", "p_nulls", "confidence", "confidences", "confidence_method", "log_probability",
-  "span", "spans", "property_spans", "span_method", "grounding_method", "printed_value", "normalization_method", "failure_reason", "source",
+  "span", "spans", "path", "property_spans", "span_method", "grounding_method", "printed_value", "normalization_method", "failure_reason", "source",
   "unit", "mean", "median", "p10", "p90", "p_below", "p_above", "quantiles", "steps",
 ] as const;
 
@@ -35,6 +35,12 @@ function usageFrom(value: unknown): ExtractResult["usage"] {
   const output = tokenCount(value.output_tokens);
   if (input === undefined || output === undefined) return undefined;
   return { inputTokens: input, outputTokens: output, totalTokens: input + output };
+}
+
+function reportedCost(value: unknown): ExtractResult["providerCost"] {
+  if (!isRecord(value) || typeof value.cost !== "number" || !Number.isFinite(value.cost) || value.cost < 0)
+    return undefined;
+  return { currency: "USD", total: value.cost, source: "provider" };
 }
 
 function jsonLike(value: unknown): value is JsonLike {
@@ -72,6 +78,7 @@ export async function extract(params: unknown, options: ExtractOptions): Promise
   if (options.signal?.aborted)
     throw new ClassifierError("aborted", "Extraction was cancelled.");
   const route = resolveModel(options.settings, undefined, options.credentialSource ?? "pi-store");
+  const apiKey = route.authMode === "none" ? "" : resolveApiKey(route, options.credentialSource ?? "pi-store");
   const prepared = await prepareExtractionInput(
     input,
     route,
@@ -80,7 +87,10 @@ export async function extract(params: unknown, options: ExtractOptions): Promise
   );
   if (options.signal?.aborted)
     throw new ClassifierError("aborted", "Extraction was cancelled.");
-  const apiKey = resolveApiKey(route, options.credentialSource ?? "pi-store");
+  if (route.api === "openrouter-extractions")
+    return extractWithOpenRouter(route, prepared, apiKey, options.signal);
+  if (route.api === "litellm-extraction")
+    return extractWithLiteLLM(route, prepared, apiKey, options.signal);
   const payload: Record<string, unknown> = {
     model: "clairic",
     fields: prepared.fields,
@@ -100,6 +110,7 @@ export async function extract(params: unknown, options: ExtractOptions): Promise
     payload.images = prepared.images.map((image) => ({
       content_type: image.mimeType,
       base64: image.data,
+      ...(image.rotation !== undefined ? { rotation: image.rotation } : {}),
     }));
   if (prepared.documents.length)
     payload.documents = prepared.documents.map((document) => ({
@@ -114,9 +125,24 @@ export async function extract(params: unknown, options: ExtractOptions): Promise
     options.signal,
   );
   const result = unwrapCloudflare(CLAIRIC_LABEL, body);
+  return finalizeExtraction(route, result, prepared, costOf(route, result.usage), requestId);
+}
+
+function costOf(route: import("./types.js").ResolvedModel, usage: unknown): ClassifierCost {
+  return estimateCost(route, usage);
+}
+
+function finalizeExtraction(
+  route: import("./types.js").ResolvedModel,
+  result: Record<string, unknown>,
+  prepared: PreparedExtractionInput,
+  cost: ClassifierCost,
+  requestId?: string,
+  providerCost?: ExtractResult["providerCost"],
+  stateText?: string,
+): ExtractResult {
   if (typeof result.truncated !== "boolean")
-    throw new ClassifierError("response", CLAIRIC_LABEL + " did not report whether output was truncated.");
-  const cost: ClassifierCost = estimateCost(route, result.usage);
+    throw new ClassifierError("response", "Extraction did not report whether output was truncated.");
   const extracted: ExtractResult = {
     provider: route.route,
     model: route.model,
@@ -127,11 +153,76 @@ export async function extract(params: unknown, options: ExtractOptions): Promise
   const usage = usageFrom(result.usage);
   if (usage !== undefined) extracted.usage = usage;
   if (requestId !== undefined) extracted.requestId = requestId;
-  if (prepared.options?.returnStateText && typeof result.state_text === "string")
-    extracted.stateText = result.state_text;
+  if (providerCost !== undefined) extracted.providerCost = providerCost;
+  const text = stateText ?? (prepared.options?.returnStateText && typeof result.state_text === "string" ? result.state_text : undefined);
+  if (text !== undefined) extracted.stateText = text;
   if (Buffer.byteLength(JSON.stringify(extracted, null, 2)) > 40 * 1024)
-    throw new ClassifierError("response", "Clairic result exceeds the 40 KiB tool output limit. Ask for fewer or smaller fields.");
+    throw new ClassifierError("response", "Extraction result exceeds the 40 KiB tool output limit. Ask for fewer or smaller fields.");
   return extracted;
+}
+
+function extractionOptions(prepared: PreparedExtractionInput): Record<string, boolean> | undefined {
+  if (prepared.options === undefined) return undefined;
+  const wire: Record<string, boolean> = {};
+  if (prepared.options.includeQuantiles !== undefined) wire.include_quantiles = prepared.options.includeQuantiles;
+  if (prepared.options.returnStateText !== undefined) wire.return_state_text = prepared.options.returnStateText;
+  return Object.keys(wire).length > 0 ? wire : undefined;
+}
+
+async function extractWithOpenRouter(
+  route: import("./types.js").ResolvedModel,
+  prepared: PreparedExtractionInput,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<ExtractResult> {
+  const payload: Record<string, unknown> = { model: route.model, fields: prepared.fields };
+  const media = [
+    ...prepared.images.map((image) => ({
+      type: "image",
+      format: image.mimeType === "image/png" ? "png" : image.mimeType === "image/jpeg" ? "jpg" : "webp",
+      data_base64: image.data,
+    })),
+    ...prepared.documents.map((document) => ({ type: "document", format: "pdf", data_base64: document.data })),
+  ];
+  const refs = media.map((_, index) => "asset-" + index);
+  let state = typeof prepared.state === "string" ? prepared.state : JSON.stringify(prepared.state);
+  if (refs.length > 0 && state !== "") state = state + "\n" + refs.join(" ");
+  if (state !== "") payload.state = state;
+  if (refs.length > 0)
+    payload.assets = Object.fromEntries(media.map((entry, index) => [refs[index], entry]));
+  if (prepared.referenceDate !== undefined) payload.reference_date = prepared.referenceDate;
+  const options = extractionOptions(prepared);
+  if (options)
+    payload.provider = { options: { cloudflare: options } };
+  const { body, requestId } = await postJson(route, "alpha/extractions", payload, apiKey, signal);
+  if (!isRecord(body)) throw new ClassifierError("response", "OpenRouter Extractions returned an unexpected response.");
+  return finalizeExtraction(
+    route,
+    body,
+    prepared,
+    estimateCost(route, body.usage),
+    requestId,
+    reportedCost(body.usage),
+  );
+}
+
+async function extractWithLiteLLM(
+  route: import("./types.js").ResolvedModel,
+  prepared: PreparedExtractionInput,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<ExtractResult> {
+  const payload: Record<string, unknown> = { model: route.model, fields: prepared.fields };
+  if (prepared.state !== "") payload.state = prepared.state;
+  if (prepared.referenceDate !== undefined) payload.reference_date = prepared.referenceDate;
+  const options = extractionOptions(prepared);
+  if (options) payload.options = options;
+  if (prepared.images.length)
+    payload.images = prepared.images.map((image) => ({ content_type: image.mimeType, base64: image.data }));
+  const { body, requestId, costHeader } = await postJson(route, "extraction", payload, apiKey, signal);
+  if (!isRecord(body)) throw new ClassifierError("response", "LiteLLM extraction returned an unexpected response.");
+  const providerCost = costHeader ? { currency: "USD" as const, total: Number(costHeader), source: "gateway" as const } : undefined;
+  return finalizeExtraction(route, body, prepared, estimateCost(route, body.usage), requestId, providerCost);
 }
 
 export { userError };

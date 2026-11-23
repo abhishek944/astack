@@ -1,7 +1,7 @@
 import { defineExtension, defineTool } from '@earendil-works/pi-durable';
 import type { Extension, ToolRegistration } from '@earendil-works/pi-durable';
 import { Type } from 'typebox';
-import { capabilitiesForApi, MAX_GIF_FRAMES, MIN_GIF_FRAMES, MIN_GIF_FRAME_DURATION_MS } from './capabilities.js';
+import { capabilitiesForApi, genericCapabilitiesForApi, MAX_GIF_FRAMES, MIN_GIF_FRAMES, MIN_GIF_FRAME_DURATION_MS } from './capabilities.js';
 import { normalizeImageGenSettings, resolveModel } from './config.js';
 import { errorMessageForUser, ImageGenError, type RetainedPartialFailure } from './errors.js';
 import type { ImageToolCapabilities } from './extension.js';
@@ -200,7 +200,11 @@ function durableSpriteCaps(settings: ImageGenSettings): ImageToolCapabilities {
   return {
     api: provider.api,
     quality,
-    model: resolved.capabilities ? capabilitiesForApi(resolved.capabilities, provider.api) : null,
+    model: resolved.capabilities
+      ? capabilitiesForApi(resolved.capabilities, provider.api)
+      : provider.api === 'cloudflare'
+        ? genericCapabilitiesForApi('cloudflare')
+        : null,
   };
 }
 

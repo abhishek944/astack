@@ -45,6 +45,7 @@ function storedValue(
 }
 
 export function resolveApiKey(route: ResolvedModel, source: CredentialSource = "pi-store"): string {
+  if (route.authMode === "none") return "";
   if (route.configuredApiKey) return route.configuredApiKey;
   if (source === "explicit") {
     const key = route.envVar ? process.env[route.envVar]?.trim() : undefined;

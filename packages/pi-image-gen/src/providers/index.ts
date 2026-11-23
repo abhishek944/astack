@@ -3,6 +3,7 @@ import type { ApiStyle, ImageProviderAdapter } from '../types.js';
 import { adobeFireflyAdapter } from './adobe-firefly.js';
 import { arkAdapter } from './ark.js';
 import { bflAdapter } from './bfl.js';
+import { cloudflareImageAdapter } from './cloudflare.js';
 import { codexAdapter } from './codex.js';
 import { dashscopeAdapter } from './dashscope.js';
 import { geminiAdapter } from './gemini.js';
@@ -18,6 +19,7 @@ const ADAPTERS: Record<ApiStyle, ImageProviderAdapter> = {
   gemini: geminiAdapter,
   dashscope: dashscopeAdapter,
   openrouter: openrouterAdapter,
+  cloudflare: cloudflareImageAdapter,
   ark: arkAdapter,
   meta: metaAdapter,
   mai: maiAdapter,

@@ -9,6 +9,7 @@ import {
 
 // Standard public USD rates, not account-specific billing. Sources and caveats are in README.
 // Keep exact model matches: newer IDs and other hosts must not inherit guessed prices.
+// Sarvam publishes INR rates, so it has no automatic USD entry here; use explicit pricing overrides.
 const PRICES: Record<string, Record<string, TokenPricing>> = {
   openai: {
     "gpt-6-luna": {

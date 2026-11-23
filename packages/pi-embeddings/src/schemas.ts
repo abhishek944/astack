@@ -8,13 +8,20 @@
 import { Type, type Static } from 'typebox';
 
 export const EMBEDDINGS_SETTINGS_KEY = 'pi-embeddings';
-export const EMBEDDINGS_PROTOCOL_VERSION = 1;
+export const EMBEDDINGS_PROTOCOL_VERSION = 2;
 export const EMBEDDING_FORMAT_VERSION = 'host-display-attributes-v1';
 export const EMBEDDING_DOCUMENT_PREFIX = 'title: none | text: ';
 export const EMBEDDING_NORMALIZATION_VERSION = 'finite-nonzero-l2-v1';
 export const EMBEDDING_CONTEXT_META_KEY = 'pi-embeddings/context';
 
-export const EMBEDDING_ROUTE_IDS = ['local', 'openai', 'sarvam', 'gateway'] as const;
+export const EMBEDDING_ROUTE_IDS = [
+  'local',
+  'openai',
+  'sarvam',
+  'gateway',
+  'openrouter',
+  'cloudflare',
+] as const;
 export type EmbeddingRouteId = (typeof EMBEDDING_ROUTE_IDS)[number];
 
 export const GATEWAY_EMBEDDING_MODELS = [
@@ -22,10 +29,16 @@ export const GATEWAY_EMBEDDING_MODELS = [
   'openai/text-embedding-3-small',
 ] as const;
 
+export const OPENROUTER_EMBEDDING_MODELS = ['openai/text-embedding-3-small'] as const;
+export const CLOUDFLARE_EMBEDDING_MODELS = ['@cf/baai/bge-base-en-v1.5'] as const;
+
 const gatewayModelSchema = Type.Union([
   Type.Literal('text-embedding-3-small'),
   Type.Literal('openai/text-embedding-3-small'),
 ]);
+
+const openRouterModelSchema = Type.Literal('openai/text-embedding-3-small');
+const cloudflareModelSchema = Type.Literal('@cf/baai/bge-base-en-v1.5');
 
 const embeddingErrorCodeSchema = Type.Union([
   Type.Literal('configuration-invalid'),
@@ -89,6 +102,8 @@ const embeddingProviderSchema = Type.Union([
   Type.Literal('openai'),
   Type.Literal('sarvam'),
   Type.Literal('gateway'),
+  Type.Literal('openrouter'),
+  Type.Literal('cloudflare'),
 ]);
 
 export const embeddingRouteSchema = Type.Object(
@@ -146,6 +161,19 @@ export const embeddingSpaceSchema = Type.Union([
     },
     { additionalProperties: false }
   ),
+  Type.Object(
+    {
+      ...spaceCommon,
+      provider: Type.Literal('cloudflare'),
+      model: cloudflareModelSchema,
+      revision: Type.Null(),
+      quantization: Type.Null(),
+      runtime: Type.Literal('cloudflare-workers-ai'),
+      dimensions: Type.Literal(768),
+      pooling: Type.Union([Type.Literal('mean'), Type.Literal('cls')]),
+    },
+    { additionalProperties: false }
+  ),
 ]);
 
 export const embeddingSettingsSchema = Type.Object(
@@ -186,6 +214,26 @@ export const embeddingSettingsSchema = Type.Object(
                 apiKey: Type.String({ minLength: 1 }),
                 model: gatewayModelSchema,
                 stage: Type.Union([Type.Literal('dev'), Type.Literal('prod')]),
+              },
+              { additionalProperties: false }
+            )
+          ),
+          openrouter: Type.Optional(
+            Type.Object(
+              { apiKey: Type.Optional(Type.String({ minLength: 1 })) },
+              { additionalProperties: false }
+            )
+          ),
+          cloudflare: Type.Optional(
+            Type.Object(
+              {
+                accountId: Type.Optional(Type.String({ minLength: 1 })),
+                apiKey: Type.Optional(Type.String({ minLength: 1 })),
+                gatewayId: Type.Optional(Type.String({ minLength: 1 })),
+                model: Type.Optional(cloudflareModelSchema),
+                pooling: Type.Optional(
+                  Type.Union([Type.Literal('mean'), Type.Literal('cls')])
+                ),
               },
               { additionalProperties: false }
             )
@@ -262,9 +310,26 @@ const errorOutcomeSchema = Type.Object(
 
 export const embeddingOutcomeSchema = Type.Union([successOutcomeSchema, errorOutcomeSchema]);
 
+/**
+ * Actual generating identity observed on successful outcomes. `generations` is the complete set;
+ * the singular fields are populated only when every successful vector came from one generation.
+ */
+export const embeddingGenerationSchema = Type.Object(
+  {
+    provider: embeddingProviderSchema,
+    model: Type.String({ minLength: 1 }),
+    space: embeddingSpaceSchema,
+  },
+  { additionalProperties: false }
+);
+
 export const embeddingResultSchema = Type.Object(
   {
     schemaVersion: Type.Literal(EMBEDDINGS_PROTOCOL_VERSION),
+    provider: Type.Union([embeddingProviderSchema, Type.Null()]),
+    model: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    space: Type.Union([embeddingSpaceSchema, Type.Null()]),
+    generations: Type.Array(embeddingGenerationSchema),
     outcomes: Type.Array(embeddingOutcomeSchema),
     attempts: Type.Array(embeddingAttemptSchema),
   },
@@ -289,28 +354,6 @@ export const embeddingCompareResultSchema = Type.Object(
   { additionalProperties: false }
 );
 
-export const embeddingDiagnosticSchema = Type.Object(
-  {
-    code: Type.String({ minLength: 1 }),
-    severity: Type.Union([Type.Literal('error'), Type.Literal('warning'), Type.Literal('info')]),
-  },
-  { additionalProperties: false }
-);
-
-export const embeddingDescribeSchema = Type.Object(
-  {
-    schemaVersion: Type.Literal(EMBEDDINGS_PROTOCOL_VERSION),
-    ready: Type.Boolean(),
-    selected: embeddingRouteSchema,
-    space: Type.Union([embeddingSpaceSchema, Type.Null()]),
-    default: embeddingRouteSchema,
-    fallback: Type.Array(embeddingRouteSchema),
-    compare: Type.Array(embeddingRouteSchema),
-    diagnostics: Type.Array(embeddingDiagnosticSchema),
-  },
-  { additionalProperties: false }
-);
-
 export type EmbeddingSettings = Static<typeof embeddingSettingsSchema>;
 export type EmbeddingRoute = Static<typeof embeddingRouteSchema>;
 export type EmbeddingSpace = Static<typeof embeddingSpaceSchema>;
@@ -319,8 +362,7 @@ export type EmbeddingContext = Static<typeof embeddingContextSchema>;
 export type EmbeddingUsage = Static<typeof embeddingUsageSchema>;
 export type EmbeddingAttempt = Static<typeof embeddingAttemptSchema>;
 export type EmbeddingOutcome = Static<typeof embeddingOutcomeSchema>;
+export type EmbeddingGeneration = Static<typeof embeddingGenerationSchema>;
 export type EmbeddingResult = Static<typeof embeddingResultSchema>;
 export type EmbeddingCompareEntry = Static<typeof embeddingCompareEntrySchema>;
 export type EmbeddingCompareResult = Static<typeof embeddingCompareResultSchema>;
-export type EmbeddingDiagnostic = Static<typeof embeddingDiagnosticSchema>;
-export type EmbeddingDescribe = Static<typeof embeddingDescribeSchema>;
