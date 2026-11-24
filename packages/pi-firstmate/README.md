@@ -15,7 +15,7 @@ npm run build
 pi install /path/to/pi-firstmate
 ```
 
-Run Pi from any project directory. Use `/reload` or restart Pi after installation or changes. The explicit package manifest loads `dist/index.js` and `skills/firstmate/SKILL.md`; do not separately copy the skill into a global skills directory or register the source extension again.
+Run Pi from any project directory. Use `/reload` or restart Pi after installation or changes. The explicit package manifest loads `dist/index.js` and `skills/firstmate/SKILL.md`; do not separately copy the skill into a global skills directory or register the source extension again. The injected `first_mate` guidance comes from `skills/firstmate/SKILL.md`, read when the extension starts a session and cached for that session. A skill-only edit takes effect after `/reload` or restart without `npm run build`; TypeScript changes still need `npm run build` before reload.
 
 First Mate does not install an orchestration backend. Install and authorize pi-herdr or another backend separately if you want delegation. No Herdr, pi-tasks or user-global workflow skill dependency is required to load or enable this package.
 
@@ -167,7 +167,7 @@ Unknown third-party launcher workers cannot be reliably recognized automatically
 
 First Mate is coordinator guidance plus the tool-call allowlist and the optional skill-advertisement filter above. It is not a security sandbox or a guarantee that a model complies, and it does not grant permissions. Project trust, user authorization, specialized workflows and `/ask` or `/btw` restrictions remain intact. Workers follow their assignment and ordinary instructions, not coordinator delegation guidance. Filtered skills remain installed and available to explicit `/skill:name` commands; the filter is not a permission, trust or sandbox boundary.
 
-The extension injects its bundled skill as a structured `first_mate` section before each user or custom-message run, including monitor wakes. Turning it off removes that section and, when earlier guidance was observed, adds a superseding guideline. An unreadable policy reports a diagnostic instead of pretending guidance was installed.
+The extension reads `skills/firstmate/SKILL.md`, strips its frontmatter, and injects the result as a structured `first_mate` section before each effective user or custom-message run, including monitor wakes. Turning it off removes that section and, when earlier guidance was observed, adds a superseding guideline. An unreadable policy reports a diagnostic instead of pretending guidance was installed.
 
 ## Development
 

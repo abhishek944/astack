@@ -23,6 +23,22 @@ const cloudflareResponseSchema = Type.Object({
   pooling: Type.Optional(Type.Union([Type.Literal('mean'), Type.Literal('cls')])),
 });
 
+const geminiEmbeddingResponseSchema = Type.Object({
+  embedding: Type.Object({ values: Type.Array(Type.Number()) }),
+  usageMetadata: Type.Object({ promptTokenCount: Type.Integer({ minimum: 0 }) }),
+});
+
+const geminiCountTokensResponseSchema = Type.Object({
+  totalTokens: Type.Integer({ minimum: 0 }),
+});
+
+/** Exact prepared-prompt count from the model's own tokenizer, used before inference. */
+export function parseGeminiCountTokensResponse(response: unknown): number {
+  if (!Value.Check(geminiCountTokensResponseSchema, response))
+    throw new EmbeddingsError('provider-response-invalid');
+  return response.totalTokens;
+}
+
 /** Cloudflare REST wraps model output in a standard API envelope; bindings return the raw model output. */
 function unwrapCloudflareModelOutput(response: unknown): unknown {
   if (typeof response !== 'object' || response === null || Array.isArray(response))
@@ -87,6 +103,51 @@ export function parseBatchResponse(args: {
     usage: {
       providerReportedInputTokens: parsed.usage.prompt_tokens,
       preparedInputTokens: prepared,
+      billedTokens: null,
+    },
+  };
+}
+
+/**
+ * Gemini `embedContent` returns one embedding and provider-counted prompt tokens. A vector is accepted
+ * only when that response count matches the exact prepared prompt counted before inference; a mismatch
+ * or over-limit count fails closed instead of relying on undocumented truncation semantics.
+ */
+export function parseGeminiEmbeddingResponse(args: {
+  response: unknown;
+  space: EmbeddingSpace;
+  maxInputTokens: number;
+  preparedInputTokens: number;
+}): ProviderBatchResult {
+  if (!Value.Check(geminiEmbeddingResponseSchema, args.response))
+    throw new EmbeddingsError('provider-response-invalid', {
+      knownUsage: { preparedInputTokens: args.preparedInputTokens },
+    });
+  const parsed = args.response;
+  const promptTokens = parsed.usageMetadata.promptTokenCount;
+  const knownUsage = {
+    providerReportedInputTokens: promptTokens,
+    preparedInputTokens: args.preparedInputTokens,
+  };
+  if (promptTokens !== args.preparedInputTokens)
+    throw new EmbeddingsError('provider-response-mismatch', { knownUsage });
+  if (promptTokens > args.maxInputTokens)
+    throw new EmbeddingsError('input-too-long', { knownUsage });
+  let vector: number[];
+  try {
+    vector = normalizeVector(parsed.embedding.values, args.space.dimensions);
+  } catch (error) {
+    if (error instanceof EmbeddingsError)
+      throw new EmbeddingsError(error.code === 'vector-zero' ? 'vector-zero' : 'vector-invalid', {
+        knownUsage,
+      });
+    throw error;
+  }
+  return {
+    vectors: [vector],
+    usage: {
+      providerReportedInputTokens: promptTokens,
+      preparedInputTokens: args.preparedInputTokens,
       billedTokens: null,
     },
   };

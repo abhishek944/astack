@@ -1,10 +1,15 @@
 {
   "snapshot": "2026-11-17",
-  "skills": 11,
+  "skills": 15,
   "files": [
     {
       "path": "skills/aside-browser/SKILL.md",
-      "sha256": "ae57cd7178e845fbaf1d4e54d900c936099d365e63a95afcc3f77792fc084040",
+      "sha256": "28723f6a65c2bc4e5f22b49364a5184663162497e7733f2be92391d07d7a1a28",
+      "executable": false
+    },
+    {
+      "path": "skills/browser-testing/SKILL.md",
+      "sha256": "4ef25f7828cdba0ef26198942b389b70cd9616441e3d67b956619f783484ed96",
       "executable": false
     },
     {
@@ -18,8 +23,8 @@
       "executable": false
     },
     {
-      "path": "skills/commit-and-merge/SKILL.md",
-      "sha256": "98b6b135b21e67f6813cf3fb1bee6c4053f53a10c21104ebebb6011a091783ec",
+      "path": "skills/commit/SKILL.md",
+      "sha256": "9c00899ab0b482cb3b5d3288814d148d91fe9f40157ad55d07c3a8c2f76a9222",
       "executable": false
     },
     {
@@ -29,12 +34,27 @@
     },
     {
       "path": "skills/implement/SKILL.md",
-      "sha256": "64e34b773bc64084022c9eba2a0a0cbbf838c83d5dbed8265c7a8cf372e5c5fe",
+      "sha256": "8126906cb7b859f671b4d181440c5347eba4438a531a8dec8db46a46f29e9f4b",
       "executable": false
     },
     {
       "path": "skills/page-performance/SKILL.md",
       "sha256": "139eda2e4492e219b1d3ed1970b79a1e7a4952d00ee6cae4910ec35933682d85",
+      "executable": false
+    },
+    {
+      "path": "skills/push/SKILL.md",
+      "sha256": "6ee19dbb222722cb0156b77697d853bbbf8059958cf1821727dfd6aadb8d79a1",
+      "executable": false
+    },
+    {
+      "path": "skills/refactor/SKILL.md",
+      "sha256": "34b8e2ce989ba8113479bc097f402d978104d1d89eb301d671446ae4095021d8",
+      "executable": false
+    },
+    {
+      "path": "skills/release-status/SKILL.md",
+      "sha256": "b2e003b25bfe90f295b3475d336eb50d9d88f0f9f7ebb6a62012d00a8da8302c",
       "executable": false
     },
     {
@@ -44,7 +64,7 @@
     },
     {
       "path": "skills/talk-human/SKILL.md",
-      "sha256": "4fa2b943b94c96254b8d7eb4cebbebf8210f9e529e52d6d74d88235335203757",
+      "sha256": "34410841037ee4f740def5431b323f109361f8ac04f23de17f44f4371ea33958",
       "executable": false
     },
     {

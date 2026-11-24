@@ -135,8 +135,25 @@ export async function executeEmbeddings(args: ExecuteArgs): Promise<EmbeddingRes
           if (args.signal.aborted) outcomes[index] = cancelled(index);
           else {
             const code = codeOf(error);
-            failureByIndex.set(index, { code, attemptId: null });
-            outcomes[index] = { status: 'error', index, code, attemptId: null };
+            if (args.allowFallback && isFallbackError(error)) {
+              // Preflight HTTP and credential failures follow the same fallback rule as embed failures.
+              // The failed index stays pending; successful inputs are never replayed on the next route.
+              const attemptId = `${prefix}-${routeIndex}-${attempts.length}`;
+              attempts.push({
+                id: attemptId,
+                route: route.provider,
+                model: provider.model,
+                routeIndex,
+                status: 'error',
+                usage: null,
+                errorCode: code,
+              });
+              failureByIndex.set(index, { code, attemptId });
+              unfinished.push(index);
+            } else {
+              failureByIndex.set(index, { code, attemptId: null });
+              outcomes[index] = { status: 'error', index, code, attemptId: null };
+            }
           }
         }
       }

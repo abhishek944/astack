@@ -45,5 +45,10 @@
     "@earendil-works/pi-coding-agent": "1.4.0",
     "@types/node": "^26.1.2",
     "typescript": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abhishek944/astack.git",
+    "directory": "packages/pi-routing"
   }
 }

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add a versioned cross-extension event-bus contract for `onDone` waits. `pi-loop-monitor:ondone-registered` reports tool-call identity and whether the monitor is a command or Core subscription; `pi-loop-monitor:state-probe` distinguishes waiting, queued, released, and stale wake states so consumers do not release a queued completion before Pi delivers it. No wake is fired and no state owner is added.
+
 ## 0.2.11 - 2026-11-14
 
 - Add `pi-loop-monitor.herdrPanel.enabled` to open or focus the native Loops/Monitors pane at each session start in a local Herdr Core TUI session, after the session projection is bound and flushed. A malformed value reports a diagnostic and stays off.

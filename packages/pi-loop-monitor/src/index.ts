@@ -4,6 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { ActivityProjection } from "./activity-projection.js";
 import { registerLoopCommand } from "./commands/loop-command.js";
 import { registerMonitorsCommand } from "./commands/monitors-command.js";
+import { MONITOR_STATE_PROBE_EVENT, type MonitorStateProbe } from "./cross-extension.js";
 import { setHerdrActivityPaneVisible } from "./herdr-panel.js";
 import { readHerdrPanelSettings } from "./herdr-panel-settings.js";
 import { atMaxFires } from "./loop-reducer.js";
@@ -97,6 +98,7 @@ export default function (pi: ExtensionAPI) {
       "error",
     );
   }
+  const releasedOnDoneWakes = new Set<string>();
   const notificationRuntime = createNotificationRuntime({
     pi,
     getHasPendingMessages: () => latestCtx?.hasPendingMessages() ?? false,
@@ -114,6 +116,10 @@ export default function (pi: ExtensionAPI) {
       retireReadOnlyLoop(notification.loopId);
     },
     onReadOnlyTerminalNotificationDiscarded: (notification) => retireReadOnlyLoop(notification.loopId),
+    onMonitorTerminalReleased: (notification) => {
+      if (!notification.monitorId) return;
+      releasedOnDoneWakes.add(`${sessionGeneration}:${notification.monitorId}:${notification.loopId}`);
+    },
     debug,
   });
   const monitorOnDoneRuntime = createMonitorOnDoneRuntime({ monitorManager, getLoop: (id) => store.get(id), deleteLoop: (id) => { store.delete(id); }, onLoopFire, isContextCurrent: isCurrentExtensionContext, debug });
@@ -195,6 +201,34 @@ export default function (pi: ExtensionAPI) {
 
   pi.events.on("monitor:started", async (event: unknown) => { const data = event as { monitorId?: string; command?: string; description?: string; timestamp?: number }; if (data.monitorId && data.command) await notificationRuntime.queueOrDeliverMonitorStarted({ monitorId: data.monitorId, command: data.command, description: data.description, timestamp: data.timestamp ?? Date.now(), sessionGeneration }); });
   pi.events.on("monitor:finished", (event: unknown) => { const id = (event as { monitorId?: string }).monitorId; if (!id) return; notificationRuntime.discardMonitorStarted(id); notificationRuntime.discardMonitorSignals(id); });
+  pi.on("session_shutdown", () => releasedOnDoneWakes.clear());
+  pi.on("session_switch" as never, () => releasedOnDoneWakes.clear());
+  pi.events.on(MONITOR_STATE_PROBE_EVENT, (request: unknown) => {
+    const probe = request as Partial<MonitorStateProbe>;
+    if (probe?.version !== 1 || typeof probe.respond !== "function" || !isCurrentExtensionContext()) return;
+    probe.respond({
+      getOnDoneWake: ({ monitorId, loopId }) => {
+        const monitor = monitorManager.get(monitorId);
+        const loop = store.get(loopId);
+        const trigger = loop?.trigger;
+        let matches = false;
+        if (trigger?.type === "event" && trigger.source === "monitor:done" && trigger.filter) {
+          try { matches = (JSON.parse(trigger.filter) as { monitorId?: string }).monitorId === monitorId; }
+          catch { matches = false; }
+        }
+        const released = releasedOnDoneWakes.has(`${sessionGeneration}:${monitorId}:${loopId}`);
+        const queued = notificationRuntime.hasPendingMonitorTerminal(monitorId, loopId);
+        const waiting = loop?.status === "active" && matches;
+        const status = released ? "released" : queued ? "queued" : waiting ? "waiting" : "stale";
+        return {
+          active: status === "waiting" || status === "queued",
+          status,
+          ...(monitor ? { monitorStatus: monitor.status } : {}),
+          ...(loop ? { loopStatus: loop.status } : {}),
+        };
+      },
+    });
+  });
 
   registerLoopTools({ pi, getStore: () => store, getTriggerSystem: () => triggerSystem, getScheduler: () => scheduler, getMonitorManager: () => monitorManager, updateWidget: () => widget.update(), isReadOnlyGuardAvailable: () => isReadOnlyWakeGuardAvailable(pi), onDynamicLoopActivated: onLoopFire, onLoopStopped: dismissLoopNotifications });
   registerMonitorTools({

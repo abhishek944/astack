@@ -54,5 +54,13 @@
     "skills": [
       "./skills"
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abhishek944/astack.git",
+    "directory": "packages/pi-firstmate"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

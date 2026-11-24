@@ -29,5 +29,6 @@ export interface DelegationAPI {
     }): void;
 }
 export declare function delegationAPI(pi: ExtensionAPI): DelegationAPI;
+export declare function hasMainWork(pi: ExtensionAPI): boolean;
 export declare function requireMainWork(pi: ExtensionAPI): void;
 export {};

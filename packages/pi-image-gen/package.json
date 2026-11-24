@@ -83,7 +83,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/abhishek944/pi-image-gen.git"
+    "url": "https://github.com/abhishek944/astack.git",
+    "directory": "packages/pi-image-gen"
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",

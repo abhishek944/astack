@@ -28,6 +28,7 @@ export interface NotificationRuntimeOptions {
   onReadOnlyGuardUnavailable?: (notification: PendingNotification, reason: string) => void;
   onReadOnlyNotificationDelivered?: (notification: PendingNotification) => void;
   onReadOnlyTerminalNotificationDiscarded?: (notification: PendingNotification) => void;
+  onMonitorTerminalReleased?: (notification: PendingNotification, reason: "delivered" | "dismissed" | "discarded") => void;
   debug?: (...args: unknown[]) => void;
 }
 export interface NotificationRuntime {
@@ -39,6 +40,7 @@ export interface NotificationRuntime {
   discardLoop(loopId: string): void;
   discardMonitorSignals(monitorId: string): void;
   dismissMonitor(monitorId: string): boolean;
+  hasPendingMonitorTerminal(monitorId: string, loopId: string): boolean;
   flushPendingNotifications(options?: { ignorePendingMessages?: boolean }): Promise<void>;
   clear(reason: "session_shutdown" | "session_switch"): void;
 }
@@ -96,7 +98,7 @@ function lifecycleLabel(monitor: MonitorEntry | undefined): string {
   return lines.join(" · ");
 }
 
-export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle, getMonitor, getLoop, onReadOnlyGuardUnavailable, onReadOnlyNotificationDelivered, onReadOnlyTerminalNotificationDiscarded, debug }: NotificationRuntimeOptions): NotificationRuntime {
+export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle, getMonitor, getLoop, onReadOnlyGuardUnavailable, onReadOnlyNotificationDelivered, onReadOnlyTerminalNotificationDiscarded, onMonitorTerminalReleased, debug }: NotificationRuntimeOptions): NotificationRuntime {
   let state: NotificationReducerState = { notificationsByKey: {}, agentRunning: false, hasPendingMessages: false };
   let flushPromise: Promise<void> | undefined;
   let sessionGeneration = 0;
@@ -288,6 +290,10 @@ export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle
   function deliveryDetails(notification: PendingNotification) {
     return { loopId: notification.loopId, trigger: notification.trigger, recurring: notification.recurring, persistent: notification.persistent, readOnly: notification.readOnly, dynamic: notification.dynamic, monitorOutcome: notification.monitorOutcome, timestamp: notification.timestamp, deliveryGroup: notification.deliveryGroup, monitorId: notification.monitorId, revision: notification.revision, changedAt: notification.changedAt };
   }
+  function releaseTerminal(notification: PendingNotification, reason: "delivered" | "dismissed" | "discarded"): void {
+    if (notification.deliveryGroup !== "monitor-terminal") return;
+    onMonitorTerminalReleased?.(notification, reason);
+  }
   function digestDetails(notifications: PendingNotification[]) {
     return {
       monitorIds: notifications.flatMap((notification) => notification.monitorId ? [notification.monitorId] : []),
@@ -332,6 +338,7 @@ export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle
         debug?.(`read-only loop #${primary.loopId} post-delivery cleanup failed`, error);
       }
     }
+    for (const notification of notifications) releaseTerminal(notification, "delivered");
     return "delivered";
   }
   function requeue(notification: ReducerNotification) {
@@ -348,6 +355,7 @@ export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle
       const current = prepare(notification as PendingNotification);
       if (!current) {
         notifyReadOnlyTerminalDiscard(notification as PendingNotification);
+        releaseTerminal(notification as PendingNotification, "discarded");
         continue;
       }
       prepared.push(current);
@@ -363,6 +371,7 @@ export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle
     for (const notification of Object.values(state.notificationsByKey)) {
       if (!predicate(notification as PendingNotification)) continue;
       notifyReadOnlyTerminalDiscard(notification as PendingNotification);
+      releaseTerminal(notification as PendingNotification, "dismissed");
       apply({ type: "NOTIFICATION_DROPPED", at: Date.now(), source: "system", entityType: "notification", entityId: notification.key, payload: { key: notification.key, reason: "superseded" } });
       dropped++;
     }
@@ -431,5 +440,11 @@ export function createNotificationRuntime({ pi, getHasPendingMessages, getIsIdle
   pi.events.on("pi-ask:guard:released", () => {
     void flushPendingNotifications().catch((error) => debug?.("read-only guard release flush failed", error));
   });
-  return { syncRuntimeState, queueOrDeliverNotification, queueOrDeliverLoopExpired, queueOrDeliverMonitorStarted, discardMonitorStarted, discardLoop, discardMonitorSignals, dismissMonitor, flushPendingNotifications, clear };
+  function hasPendingMonitorTerminal(monitorId: string, loopId: string): boolean {
+    return Object.values(state.notificationsByKey).some((entry) => {
+      const notification = entry as PendingNotification;
+      return notification.monitorId === monitorId && notification.loopId === loopId && notification.deliveryGroup === "monitor-terminal";
+    });
+  }
+  return { syncRuntimeState, queueOrDeliverNotification, queueOrDeliverLoopExpired, queueOrDeliverMonitorStarted, discardMonitorStarted, discardLoop, discardMonitorSignals, dismissMonitor, hasPendingMonitorTerminal, flushPendingNotifications, clear };
 }

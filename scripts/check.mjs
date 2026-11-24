@@ -3,15 +3,39 @@
 //
 // Each package and service is independent: no npm workspaces, no hoisting, no
 // shared lockfile. This script only runs each directory's own lifecycle.
+// --skill NAME (repeatable, or --skill=NAME) scopes only the installed-global
+// skill comparison; check-repo.sh still validates names and browser selection.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const args = new Set(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const args = new Set(argv);
 const install = args.has("--install");
 const skillsOnly = args.has("--skills");
+const skillNames = [];
+
+for (let index = 0; index < argv.length; index += 1) {
+  const arg = argv[index];
+  if (arg === "--skill") {
+    const name = argv[index + 1];
+    if (name === undefined || name === "" || name.startsWith("--")) {
+      console.error("ERROR: --skill requires a non-empty skill name");
+      process.exit(2);
+    }
+    skillNames.push(name);
+    index += 1;
+  } else if (arg.startsWith("--skill=")) {
+    const name = arg.slice("--skill=".length);
+    if (name === "") {
+      console.error("ERROR: --skill requires a non-empty skill name");
+      process.exit(2);
+    }
+    skillNames.push(name);
+  }
+}
 
 const results = [];
 let failures = 0;
@@ -88,12 +112,13 @@ function checkDirectory(dir, kind) {
   }
 }
 
-function checkSkills() {
+function checkSkills(names = []) {
   const scripts = join(root, "skills/pi-herdr-skills/scripts");
   const manifest = join(scripts, "check-manifest.py");
   const sync = join(scripts, "check-repo.sh");
 
-  console.log("\n### skills/pi-herdr-skills: manifest and global synchronization");
+  const scope = names.length > 0 ? `, scoped to ${names.join(", ")}` : "";
+  console.log(`\n### skills/pi-herdr-skills: manifest and global synchronization${scope}`);
   if (existsSync(manifest)) {
     const out = spawnSync("python3", [manifest], { stdio: "inherit", env: process.env });
     record("skills manifest", out.status === 0);
@@ -105,7 +130,9 @@ function checkSkills() {
     record("skills global sync", false, "check-repo.sh missing");
     return;
   }
-  const out = spawnSync("bash", [sync], { stdio: "inherit", env: process.env });
+  const syncArgs = [sync, ...names.flatMap((name) => ["--skill", name])];
+  const out = spawnSync("bash", syncArgs, { stdio: "inherit", env: process.env });
+  if (out.status === 2) process.exit(2);
   record("skills global sync", out.status === 0);
 }
 
@@ -120,7 +147,7 @@ if (!skillsOnly) {
   }
 }
 
-if (skillsOnly || args.has("--all")) checkSkills();
+if (skillsOnly || args.has("--all")) checkSkills(skillNames);
 
 const passed = results.length - failures;
 console.log(`\n${failures === 0 ? "PASS" : "FAIL"}: ${passed}/${results.length} checks passed`);

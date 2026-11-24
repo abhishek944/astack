@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fix the cleanup advisory cross-package result-data contract: pi-herdr consumes `cleanupTerminalId` exactly as emitted by pi-tasks, so a fresh completion of a linked delegate can append the advisory when Core ownership checks pass.
+- Mark the first completion of a linked delegate task in the `TodoUpdate` result so pi-herdr can append a one-shot, ownership-checked cleanup advisory. The advisory asks for a decision only; it never sends a command, changes a task status, or targets an unowned worker.
+- Track multiple outstanding command `onDone` waits per task and release each independently; any live or queued wait keeps that task suppressed, with no one-monitor limit.
+- Exclude the exact task that launched a command `MonitorCreate` `onDone` wake from auto-continuation until that wake is delivered or dismissed, including while queued for idle. Match by tool-call identity captured at launch; exclude Core `hcTerminalId` subscriptions and preserve unrelated active tasks and worker signals. No task status is changed for the wait.
+- Cap task auto-continuation at 50 extra runs per fresh accepted main user run by default and as a hard maximum, with visible final-request and stop reporting. Lower configured limits still apply; higher values clamp to 50. Only fresh user input resets the count; steering/follow-up input, extension starts, retries, and session-tree changes preserve it.
 - Require an explicit `dependentOn` classification on every newly blocked task: `"user-decision"` for a user response, decision, or permission, or `"another-agent"` for another agent's output or review. Validate it in the desktop and Durable tools, clear it when leaving blocked, and keep legacy blocked records valid without inventing a value. Show `Dependent on` beside Final thoughts in `/works`, the native Tasks pane, tool listings, and copied Markdown. Automatic delegation uses `"another-agent"`, and tracking guidance no longer uses blocked status for external obstacles that fit neither category.
 - Avoid rendering `Dependent on: null` in native task details for active, completed, cancelled, and legacy blocked tasks; the label appears only for a stored two-value dependency.
 

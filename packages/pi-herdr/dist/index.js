@@ -1,3 +1,4 @@
+import { registerCleanupAdvisory } from "./cleanup-advisory.js";
 import { registerAgentTools } from "./tools.js";
 import { registerUsageFallback } from "./usage-fallback.js";
 const AGENT_TOOLS = ["AgentCreate", "AgentResume", "AgentList", "AgentStatus", "AgentOutput", "AgentSend", "AgentInterrupt", "AgentClose", "AgentFocus"];
@@ -5,6 +6,7 @@ export default function herdrExtension(pi) {
     let registered = false;
     let migrationError;
     registerUsageFallback(pi);
+    registerCleanupAdvisory(pi);
     // Runtime tool discovery is unavailable in the factory. All factories have loaded
     // by session_start, so legacy pi-tasks is detected regardless of package order.
     pi.on("session_start", (_event, ctx) => {

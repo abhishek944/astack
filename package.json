@@ -9,7 +9,8 @@
     "setup:check": "bash scripts/setup.sh --check",
     "check": "node scripts/check.mjs",
     "verify": "node scripts/check.mjs --install",
-    "check:skills": "node scripts/check.mjs --skills"
+    "check:skills": "node scripts/check.mjs --skills",
+    "release:status": "node scripts/release-status.mjs"
   },
   "engines": {
     "node": ">=22"

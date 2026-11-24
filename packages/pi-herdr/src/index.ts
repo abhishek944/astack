@@ -1,5 +1,6 @@
 /** Herdr Core lifecycle tools, the usage fallback, and the bundled coordination skill for Pi. */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { registerCleanupAdvisory } from "./cleanup-advisory.js";
 import { registerAgentTools } from "./tools.js";
 import { registerUsageFallback } from "./usage-fallback.js";
 
@@ -9,6 +10,7 @@ export default function herdrExtension(pi: ExtensionAPI): void {
   let registered = false;
   let migrationError: string | undefined;
   registerUsageFallback(pi);
+  registerCleanupAdvisory(pi);
   // Runtime tool discovery is unavailable in the factory. All factories have loaded
   // by session_start, so legacy pi-tasks is detected regardless of package order.
   pi.on("session_start", (_event, ctx) => {

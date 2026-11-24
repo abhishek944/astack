@@ -16,6 +16,13 @@ export {
   EMBEDDING_CONTEXT_META_KEY,
   EMBEDDING_ROUTE_IDS,
   GATEWAY_EMBEDDING_MODELS,
+  GEMINI_EMBEDDING_MODELS,
+  GEMINI_EMBEDDING_MIN_DIMENSIONS,
+  GEMINI_EMBEDDING_MAX_DIMENSIONS,
+  GEMINI_EMBEDDING_TASK_FORMATS,
+  GEMINI_TASK_PREFIXES,
+  DEFAULT_GEMINI_DIMENSIONS,
+  DEFAULT_GEMINI_TASK_FORMAT,
   EMBEDDING_ERROR_CODES,
 } from './schemas.js';
 export type {
@@ -33,4 +40,6 @@ export type {
   EmbeddingCompareEntry,
   EmbeddingCompareResult,
   EmbeddingErrorCode,
+  GeminiEmbeddingDimension,
+  GeminiEmbeddingTaskFormat,
 } from './schemas.js';

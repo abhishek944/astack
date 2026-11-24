@@ -32,6 +32,10 @@ Monitors run detached process groups, retain a bounded 200-line tool tail, rate-
 
 Events: `monitor:started`, `monitor:output`, `monitor:signal`, `monitor:finished`, `monitor:done`, `monitor:error`, `loop:fire`, and `loops:expired`.
 
+### Cross-extension onDone wait contract
+
+`pi-loop-monitor` emits `pi-loop-monitor:ondone-registered` with `{ version: 1, toolCallId, monitorId, loopId, kind }` after `MonitorCreate` successfully registers a wake. `kind` is `"command"` for shell/process monitors and `"core"` for `hcTerminalId` subscriptions; Core subscriptions use worker signals and are not command-completion waits. Cooperating extensions can query live state synchronously with `pi.events.emit("pi-loop-monitor:state-probe", { version: 1, respond(api) {} })`; the current generation calls `respond` with `getOnDoneWake({ monitorId, loopId })`, which reports `active` and a `status` of `waiting`, `queued`, `released`, or `stale`, plus current `monitorStatus`/`loopStatus` when available. `queued` means the one-shot loop fired but its completion notification is waiting for Pi to become idle; `released` means the wake was delivered, dismissed, or discarded. The probe reads the existing `LoopStore`, `MonitorManager`, and notification queue plus a per-generation release record; it adds no second state owner, does not fire a wake, and does not expose output or mutate monitors. An absent or older installation simply leaves the event/probe unanswered.
+
 ## Monitor tool results
 
 A successful `MonitorCreate` adds `details.monitorId` so other tools can return the actual allocated ID without parsing human text. A successful Core subscription also reports `details.subscriptionReady: true`; a failed handshake reports `false` with the stopped monitor ID. `MonitorList` details include a bounded `monitors` summary with `id`, `status`, `hcTerminalId`, `description` and `subscriptionReady`, so wrappers can find the existing subscription without parsing display text. Text, rendering and callback behavior remain unchanged.

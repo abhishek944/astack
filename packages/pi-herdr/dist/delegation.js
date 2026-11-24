@@ -7,8 +7,11 @@ export function delegationAPI(pi) {
     }
     return api;
 }
-export function requireMainWork(pi) {
+export function hasMainWork(pi) {
     const active = new Set(pi.getActiveTools());
-    if (!["WorkCreate", "WorkList", "WorkUpdate", "TodoCreate", "TodoList", "TodoUpdate"].every((name) => active.has(name)))
+    return ["WorkCreate", "WorkList", "WorkUpdate", "TodoCreate", "TodoList", "TodoUpdate"].every((name) => active.has(name));
+}
+export function requireMainWork(pi) {
+    if (!hasMainWork(pi))
         throw new Error("Use agent tools in tracked main-conversation work, not /ask or /btw.");
 }

@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { MONITOR_ONDONE_REGISTERED_EVENT } from "../cross-extension.js";
 import { hcMonitorCommand } from "../runtime/herdr-monitor-command.js";
 import type { LoopEntry, MonitorEntry, MonitorProgress, Trigger } from "../types.js";
 import { renderToolCall, renderToolResult, toolArg } from "../ui/tool-renderer.js";
@@ -79,7 +80,7 @@ export function registerMonitorTools(options: MonitorToolsOptions): void {
     timeout: Type.Optional(Type.Number({ description: "Stop after N ms without output or progress (default: 300000, 0 = disabled)", default: 300000, minimum: 0 })),
     onDone: Type.Optional(Type.String({ description: "Prompt to run when the monitor completes. Auto-creates a one-shot completion wake — no need for a separate LoopCreate." })),
   }),
-  async execute(_toolCallId, params) {
+  async execute(toolCallId, params) {
     const store = getStore();
     const manager = getMonitorManager();
     if ((params.command === undefined) === (params.hcTerminalId === undefined) || (params.hcTerminalId !== undefined && !params.onSignal)) {
@@ -99,6 +100,7 @@ export function registerMonitorTools(options: MonitorToolsOptions): void {
     const donePrompt = params.onDone ?? (params.hcTerminalId === undefined ? undefined : `${params.onSignal}\nThe Core signal subscription has ended. Inspect MonitorList; reconnect only if monitoring is still needed.`);
     let signalLoop: LoopEntry | undefined;
     let companionLoop: LoopEntry | undefined;
+    let onDoneLoopId: string | undefined;
     let onDoneMsg = "";
     try {
       if (params.onSignal) {
@@ -108,6 +110,7 @@ export function registerMonitorTools(options: MonitorToolsOptions): void {
       if (donePrompt) {
         const doneTrigger: Trigger = { type: "event", source: "monitor:done", filter: JSON.stringify({ monitorId: entry.id }) };
         companionLoop = store.create(doneTrigger, donePrompt, { recurring: false });
+        onDoneLoopId = companionLoop.id;
         handleMonitorDoneLoop(companionLoop, entry.id);
         onDoneMsg = `\nCompletion wake loop #${companionLoop.id}: fires when the monitor completes — no polling needed`;
       } else if (entry.timeout > 0) {
@@ -134,6 +137,15 @@ export function registerMonitorTools(options: MonitorToolsOptions): void {
       return textResult(`Monitor #${entry.id} was stopped: ${detail}`, {
         kind: "monitor", action: "create", tone: "error", summary: `Monitor #${entry.id} setup rolled back`,
         monitorId: entry.id, ...(params.hcTerminalId === undefined ? {} : { subscriptionReady: false }), expanded: [detail],
+      });
+    }
+    if (onDoneLoopId !== undefined) {
+      pi.events.emit(MONITOR_ONDONE_REGISTERED_EVENT, {
+        version: 1,
+        toolCallId,
+        monitorId: entry.id,
+        loopId: onDoneLoopId,
+        kind: params.hcTerminalId === undefined ? "command" : "core",
       });
     }
     updateWidget();

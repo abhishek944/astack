@@ -5,16 +5,27 @@ import {
   EMBEDDING_FORMAT_VERSION,
   EMBEDDING_NORMALIZATION_VERSION,
   CLOUDFLARE_EMBEDDING_MODELS,
+  DEFAULT_GEMINI_DIMENSIONS,
+  DEFAULT_GEMINI_TASK_FORMAT,
+  GEMINI_EMBEDDING_MODELS,
+  GEMINI_TASK_PREFIXES,
   OPENROUTER_EMBEDDING_MODELS,
   type EmbeddingContext,
   type EmbeddingRoute,
   type EmbeddingSettings,
   type EmbeddingSpace,
+  type GeminiEmbeddingDimension,
+  type GeminiEmbeddingTaskFormat,
 } from './schemas.js';
 import { fixedOrigin, headerValueIsSafe, requestJson } from './provider-http.js';
 import { acquireLocalRuntime, LOCAL_EMBEDDING_SPACE, type AcquiredLocalRuntime } from './local-runtime.js';
 import type { EmbeddingsProvider, PreparedInput, ProviderBatchResult } from './provider-types.js';
-import { parseBatchResponse, parseCloudflareBatchResponse } from './response.js';
+import {
+  parseBatchResponse,
+  parseCloudflareBatchResponse,
+  parseGeminiCountTokensResponse,
+  parseGeminiEmbeddingResponse,
+} from './response.js';
 
 export const OPENAI_EMBEDDING_SPACE: EmbeddingSpace = Object.freeze({
   provider: 'openai',
@@ -56,11 +67,30 @@ export const cloudflareEmbeddingSpace = (pooling: CloudflarePooling): EmbeddingS
     normalization: EMBEDDING_NORMALIZATION_VERSION,
   });
 
+export const geminiEmbeddingSpace = (config: {
+  dimensions: GeminiEmbeddingDimension;
+  taskFormat: GeminiEmbeddingTaskFormat;
+}): EmbeddingSpace =>
+  Object.freeze({
+    provider: 'gemini',
+    model: GEMINI_EMBEDDING_MODELS[0],
+    revision: null,
+    quantization: null,
+    runtime: 'gemini-api-v1beta',
+    dimensions: config.dimensions,
+    taskFormat: config.taskFormat,
+    format: EMBEDDING_FORMAT_VERSION,
+    prefix: GEMINI_TASK_PREFIXES[config.taskFormat],
+    normalization: EMBEDDING_NORMALIZATION_VERSION,
+  });
+
 const OPENAI_MODEL = 'text-embedding-3-small';
 const SARVAM_MODEL = 'embeddinggemma-2';
 const SARVAM_ORIGIN = 'https://api.sarvam.ai';
 const OPENROUTER_EMBEDDINGS_URL = 'https://openrouter.ai/api/v1/embeddings';
 const CLOUDFLARE_ORIGIN = 'https://api.cloudflare.com/client/v4/accounts';
+const GEMINI_ORIGIN = 'https://generativelanguage.googleapis.com';
+const GEMINI_MAX_INPUT_TOKENS = 8192;
 
 const OPENAI_MAX_INPUT_TOKENS = 8192;
 const OPENAI_MAX_REQUEST_INPUTS = 2048;
@@ -121,6 +151,10 @@ export function routeDiagnostics(settings: EmbeddingSettings, route: EmbeddingRo
         add('cloudflare-gateway-unconfigured');
       break;
     }
+    case 'gemini':
+      if (trim(settings.providers?.gemini?.apiKey) === undefined && trim(process.env.GEMINI_API_KEY) === undefined)
+        add('gemini-key-unconfigured');
+      break;
   }
   return diagnostics;
 }
@@ -404,6 +438,76 @@ class CloudflareProvider implements EmbeddingsProvider {
   }
 }
 
+class GeminiProvider implements EmbeddingsProvider {
+  readonly route = 'gemini' as const;
+  readonly model = GEMINI_EMBEDDING_MODELS[0];
+  readonly space: EmbeddingSpace;
+  // One exact prepared prompt is counted and embedded per request; no vector is accepted unless the
+  // embed response token count equals that preflight count.
+  readonly maxRequestInputs = 1;
+  readonly maxRequestTokens = Number.POSITIVE_INFINITY;
+  readonly #url = new URL(`/v1beta/models/${GEMINI_EMBEDDING_MODELS[0]}:embedContent`, GEMINI_ORIGIN);
+  readonly #countUrl = new URL(
+    `/v1beta/models/${GEMINI_EMBEDDING_MODELS[0]}:countTokens`,
+    GEMINI_ORIGIN
+  );
+  readonly #key: string;
+  readonly #taskFormat: GeminiEmbeddingTaskFormat;
+
+  constructor(key: string, config: {
+    dimensions: GeminiEmbeddingDimension;
+    taskFormat: GeminiEmbeddingTaskFormat;
+  }) {
+    this.#key = key;
+    this.#taskFormat = config.taskFormat;
+    this.space = geminiEmbeddingSpace(config);
+  }
+
+  async prepare(text: string, signal: AbortSignal): Promise<PreparedInput> {
+    signal.throwIfAborted();
+    const prepared = GEMINI_TASK_PREFIXES[this.#taskFormat] + text;
+    const response = await requestJson({
+      url: this.#countUrl,
+      signal,
+      headers: { 'x-goog-api-key': this.#key },
+      body: { contents: [{ parts: [{ text: prepared }] }] },
+    });
+    const tokenCount = parseGeminiCountTokensResponse(response);
+    if (tokenCount > GEMINI_MAX_INPUT_TOKENS)
+      throw new EmbeddingsError('input-too-long', {
+        knownUsage: { preparedInputTokens: tokenCount },
+      });
+    return { kind: 'text', text: prepared, tokenCount };
+  }
+
+  async embed(inputs: readonly PreparedInput[], signal: AbortSignal): Promise<ProviderBatchResult> {
+    const text = providerTexts(inputs)[0];
+    if (inputs.length !== 1 || text === undefined)
+      throw new EmbeddingsError('provider-response-invalid');
+    const preparedInputTokens = preparedTokens(inputs);
+    const response = await requestJson({
+      url: this.#url,
+      signal,
+      headers: { 'x-goog-api-key': this.#key },
+      body: {
+        model: `models/${this.model}`,
+        content: { parts: [{ text }] },
+        output_dimensionality: this.space.dimensions,
+      },
+    });
+    return parseGeminiEmbeddingResponse({
+      response,
+      space: this.space,
+      maxInputTokens: GEMINI_MAX_INPUT_TOKENS,
+      preparedInputTokens,
+    });
+  }
+
+  async close(): Promise<void> {
+    // Native fetch owns no long-lived resource.
+  }
+}
+
 export type AcquiredProvider = Readonly<{
   readonly provider: EmbeddingsProvider;
   readonly release: () => Promise<void>;
@@ -495,6 +599,19 @@ export async function acquireProvider({
         release: noRelease,
       };
     }
+    case 'gemini': {
+      const configured = settings.providers?.gemini;
+      return {
+        provider: new GeminiProvider(
+          headerCredential(configured?.apiKey, process.env.GEMINI_API_KEY),
+          {
+            dimensions: configured?.dimensions ?? DEFAULT_GEMINI_DIMENSIONS,
+            taskFormat: configured?.taskFormat ?? DEFAULT_GEMINI_TASK_FORMAT,
+          }
+        ),
+        release: noRelease,
+      };
+    }
   }
 }
 
@@ -513,5 +630,10 @@ export const spaceForRoute = (
       return SARVAM_EMBEDDING_SPACE;
     case 'cloudflare':
       return cloudflareEmbeddingSpace(settings?.providers?.cloudflare?.pooling ?? 'mean');
+    case 'gemini':
+      return geminiEmbeddingSpace({
+        dimensions: settings?.providers?.gemini?.dimensions ?? DEFAULT_GEMINI_DIMENSIONS,
+        taskFormat: settings?.providers?.gemini?.taskFormat ?? DEFAULT_GEMINI_TASK_FORMAT,
+      });
   }
 };

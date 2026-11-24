@@ -8,6 +8,7 @@ import {
   CLOUDFLARE_EMBEDDING_MODELS,
   EMBEDDINGS_SETTINGS_KEY,
   GATEWAY_EMBEDDING_MODELS,
+  GEMINI_EMBEDDING_MODELS,
   OPENROUTER_EMBEDDING_MODELS,
   embeddingSettingsSchema,
   type EmbeddingRoute,
@@ -21,6 +22,7 @@ const MODELS_BY_PROVIDER: Readonly<Record<EmbeddingRoute['provider'], readonly s
   gateway: GATEWAY_EMBEDDING_MODELS,
   openrouter: OPENROUTER_EMBEDDING_MODELS,
   cloudflare: CLOUDFLARE_EMBEDDING_MODELS,
+  gemini: GEMINI_EMBEDDING_MODELS,
 };
 
 export const isEmbeddingSettings = (value: unknown): value is EmbeddingSettings =>

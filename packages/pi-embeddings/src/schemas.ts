@@ -21,6 +21,7 @@ export const EMBEDDING_ROUTE_IDS = [
   'gateway',
   'openrouter',
   'cloudflare',
+  'gemini',
 ] as const;
 export type EmbeddingRouteId = (typeof EMBEDDING_ROUTE_IDS)[number];
 
@@ -31,6 +32,36 @@ export const GATEWAY_EMBEDDING_MODELS = [
 
 export const OPENROUTER_EMBEDDING_MODELS = ['openai/text-embedding-3-small'] as const;
 export const CLOUDFLARE_EMBEDDING_MODELS = ['@cf/baai/bge-base-en-v1.5'] as const;
+export const GEMINI_EMBEDDING_MODELS = ['gemini-embedding-2'] as const;
+export const GEMINI_EMBEDDING_MIN_DIMENSIONS = 128;
+export const GEMINI_EMBEDDING_MAX_DIMENSIONS = 3072;
+export const DEFAULT_GEMINI_DIMENSIONS = 3072;
+export const GEMINI_EMBEDDING_TASK_FORMATS = [
+  'retrieval-document',
+  'search-query',
+  'question-answering',
+  'fact-checking',
+  'code-retrieval',
+  'classification',
+  'clustering',
+  'sentence-similarity',
+] as const;
+export const DEFAULT_GEMINI_TASK_FORMAT: GeminiEmbeddingTaskFormat = 'retrieval-document';
+
+export type GeminiEmbeddingDimension = number;
+export type GeminiEmbeddingTaskFormat = (typeof GEMINI_EMBEDDING_TASK_FORMATS)[number];
+
+/** Official Gemini Embedding 2 text task prefixes. `task_type` is not used for this model. */
+export const GEMINI_TASK_PREFIXES = {
+  'retrieval-document': 'title: none | text: ',
+  'search-query': 'task: search result | query: ',
+  'question-answering': 'task: question answering | query: ',
+  'fact-checking': 'task: fact checking | query: ',
+  'code-retrieval': 'task: code retrieval | query: ',
+  classification: 'task: classification | query: ',
+  clustering: 'task: clustering | query: ',
+  'sentence-similarity': 'task: sentence similarity | query: ',
+} as const satisfies Record<GeminiEmbeddingTaskFormat, string>;
 
 const gatewayModelSchema = Type.Union([
   Type.Literal('text-embedding-3-small'),
@@ -39,6 +70,21 @@ const gatewayModelSchema = Type.Union([
 
 const openRouterModelSchema = Type.Literal('openai/text-embedding-3-small');
 const cloudflareModelSchema = Type.Literal('@cf/baai/bge-base-en-v1.5');
+const geminiModelSchema = Type.Literal(GEMINI_EMBEDDING_MODELS[0]);
+const geminiDimensionsSchema = Type.Integer({
+  minimum: GEMINI_EMBEDDING_MIN_DIMENSIONS,
+  maximum: GEMINI_EMBEDDING_MAX_DIMENSIONS,
+});
+const geminiTaskFormatSchema = Type.Union([
+  Type.Literal('retrieval-document'),
+  Type.Literal('search-query'),
+  Type.Literal('question-answering'),
+  Type.Literal('fact-checking'),
+  Type.Literal('code-retrieval'),
+  Type.Literal('classification'),
+  Type.Literal('clustering'),
+  Type.Literal('sentence-similarity'),
+]);
 
 const embeddingErrorCodeSchema = Type.Union([
   Type.Literal('configuration-invalid'),
@@ -104,6 +150,7 @@ const embeddingProviderSchema = Type.Union([
   Type.Literal('gateway'),
   Type.Literal('openrouter'),
   Type.Literal('cloudflare'),
+  Type.Literal('gemini'),
 ]);
 
 export const embeddingRouteSchema = Type.Object(
@@ -158,6 +205,30 @@ export const embeddingSpaceSchema = Type.Union([
       quantization: Type.Null(),
       runtime: Type.Literal('sarvam-v2'),
       dimensions: Type.Literal(768),
+    },
+    { additionalProperties: false }
+  ),
+  Type.Object(
+    {
+      format: Type.Literal(EMBEDDING_FORMAT_VERSION),
+      prefix: Type.Union([
+        Type.Literal('title: none | text: '),
+        Type.Literal('task: search result | query: '),
+        Type.Literal('task: question answering | query: '),
+        Type.Literal('task: fact checking | query: '),
+        Type.Literal('task: code retrieval | query: '),
+        Type.Literal('task: classification | query: '),
+        Type.Literal('task: clustering | query: '),
+        Type.Literal('task: sentence similarity | query: '),
+      ]),
+      normalization: Type.Literal(EMBEDDING_NORMALIZATION_VERSION),
+      provider: Type.Literal('gemini'),
+      model: geminiModelSchema,
+      revision: Type.Null(),
+      quantization: Type.Null(),
+      runtime: Type.Literal('gemini-api-v1beta'),
+      dimensions: geminiDimensionsSchema,
+      taskFormat: geminiTaskFormatSchema,
     },
     { additionalProperties: false }
   ),
@@ -234,6 +305,16 @@ export const embeddingSettingsSchema = Type.Object(
                 pooling: Type.Optional(
                   Type.Union([Type.Literal('mean'), Type.Literal('cls')])
                 ),
+              },
+              { additionalProperties: false }
+            )
+          ),
+          gemini: Type.Optional(
+            Type.Object(
+              {
+                apiKey: Type.Optional(Type.String({ minLength: 1 })),
+                dimensions: Type.Optional(geminiDimensionsSchema),
+                taskFormat: Type.Optional(geminiTaskFormatSchema),
               },
               { additionalProperties: false }
             )

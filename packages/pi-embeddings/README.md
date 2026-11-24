@@ -54,15 +54,20 @@ Settings live under the `pi-embeddings` namespace. Pi loading follows global < a
         "gatewayId": "${CLOUDFLARE_AI_GATEWAY_ID}",
         "model": "@cf/baai/bge-base-en-v1.5",
         "pooling": "cls"
+      },
+      "gemini": {
+        "apiKey": "${GEMINI_API_KEY}",
+        "dimensions": 3072,
+        "taskFormat": "retrieval-document"
       }
     }
   }
 }
 ```
 
-Provider IDs are route identifiers: `local`, `openai`, `sarvam`, `gateway`, `openrouter` and `cloudflare`. Only the declared model pairs are valid. Omitted or empty `fallback` and `compare` lists are inactive. No route is activated by a schema annotation, a present key or existing model files. Credentials and identifiers may also come from `OPENROUTER_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_AI_GATEWAY_ID` in the trusted host environment.
+Provider IDs are route identifiers: `local`, `openai`, `sarvam`, `gateway`, `openrouter`, `cloudflare` and `gemini`. Only the declared model pairs are valid. Omitted or empty `fallback` and `compare` lists are inactive. No route is activated by a schema annotation, a present key or existing model files. Credentials and identifiers may also come from `OPENROUTER_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_AI_GATEWAY_ID` and `GEMINI_API_KEY` in the trusted host environment. An environment fallback works only when the MCP process itself receives that variable; a hosted settings file that is copied without environment forwarding must carry `providers.gemini.apiKey` directly.
 
-Ordinary calls use the configured default, then configured fallback in order, advancing only for typed missing credentials or HTTP 401/404/429. There is no fallback for 403, refusal, 400/422, invalid input or vector, malformed response, ambiguous network failure, timeout, 5xx or cancellation. Successful inputs are never replayed on another route. Explicit comparison runs exactly the configured compare list in order, without fallback, ranking or default mutation.
+Ordinary calls use the configured default, then configured fallback in order, advancing only for typed missing credentials or HTTP 401/404/429 from route acquisition, provider preparation or embedding. Gemini `countTokens` preflight errors therefore follow the same fallback rule. There is no fallback for 403, refusal, 400/422, invalid input or vector, malformed response, token-count mismatch, ambiguous network failure, timeout, 5xx or cancellation. Successful inputs are never replayed on another route. Explicit comparison runs exactly the configured compare list in order, without fallback, ranking or default mutation.
 
 ## Routes and batching
 
@@ -72,6 +77,7 @@ Ordinary calls use the configured default, then configured fallback in order, ad
 - `gateway`: the declared OpenAI recipe through LiteLLM. Only `text-embedding-3-small` and `openai/text-embedding-3-small` aliases are supported. One request carries generic host attribution as `x-litellm-customer-id` and `x-litellm-tags`; missing or unsafe attribution refuses before inference.
 - `openrouter`: `openai/text-embedding-3-small` through `https://openrouter.ai/api/v1/embeddings` with bearer authentication and float output. It shares the OpenAI generating-space descriptor because the declared model, text preparation and normalization are identical.
 - `cloudflare`: `@cf/baai/bge-base-en-v1.5` through Cloudflare's documented REST `POST /ai/run/{model}`. The Cloudflare API token goes in `Authorization`, and the gateway ID goes in `cf-aig-gateway-id` as Workers AI requires. `pooling` defaults to `mean`; `cls` produces a different generating space and is recorded in the result. The REST API wraps the model output in its standard `result` envelope; the parser also accepts the model's raw `{ shape, data, pooling }` form. Cloudflare reports no local token usage, so usage fields are null.
+- `gemini`: `gemini-embedding-2` through the fixed Gemini API `POST /v1beta/models/gemini-embedding-2:embedContent` endpoint with the `x-goog-api-key` header. `dimensions` accepts the documented 128–3072 range (768, 1536 and 3072 are Google's recommended sizes) and defaults to `3072`. `taskFormat` selects the documented Gemini 2 text prefix (`retrieval-document` by default, plus query and single-input formats); the package does not send `task_type`, which applies only to `gemini-embedding-001`. Each exact prepared prompt is counted with the model's `countTokens` endpoint before a single-input `embedContent` request; inputs over the documented 8192-token boundary fail before inference, and the embed response token count must match the preflight count before a vector is accepted. `autoTruncate: false` is deliberately not sent because the official SDK marks it Enterprise/Vertex-only. The exact dimension, task format and prefix are recorded in the generating space.
 
 The package supplies the document prefix `title: none | text: ` exactly once and normalizes vectors with the recorded stable L2 identity. It never summarizes, trims, chunks or truncates input text.
 
@@ -87,12 +93,12 @@ This is attribution only. The authenticated server-to-server boundary supplies c
 
 ## Generating spaces
 
-Descriptors record canonical provider, model, known revision or explicit null, quantization/runtime/pooling provenance, dimensions, preparation prefix and normalization identity. Local, Sarvam and Cloudflare remain distinct at 768 dimensions, and Cloudflare `mean` and `cls` are distinct spaces. Direct OpenAI, the declared gateway alias and the declared OpenRouter alias share the OpenAI descriptor only when the effective text, preparation and normalization remain identical. API keys, service URLs, account IDs and gateway IDs are route metadata, not implicit new spaces. The ordinary embed result carries these descriptors for actual successful work; no separate metadata call is required.
+Descriptors record canonical provider, model, known revision or explicit null, quantization/runtime/pooling provenance, dimensions, preparation prefix and normalization identity. Local, Sarvam and Cloudflare remain distinct at 768 dimensions, and Cloudflare `mean` and `cls` are distinct spaces. Gemini dimensions and task formats are distinct spaces, including Gemini's 768-dimensional MRL output, because the provider, prompt format and normalization provenance differ. Direct OpenAI, the declared gateway alias and the declared OpenRouter alias share the OpenAI descriptor only when the effective text, preparation and normalization remain identical. API keys, service URLs, account IDs and gateway IDs are route metadata, not implicit new spaces. The ordinary embed result carries these descriptors for actual successful work; no separate metadata call is required.
 
 Existing stored vector documents are preserved. Package outcome descriptors allow callers to compare complete identity before persistence; a successful inference from an incompatible space is still reported truthfully.
 
 ## Limits
 
-No application capacity caps are added. Provider request limits above are mandatory documented constraints. Sarvam, local and Cloudflare publish no aggregate request cap, so none is invented. Cloudflare documents a 512-token per-input ceiling for `bge-base-en-v1.5`; this package does not ship that model's tokenizer and does not approximate the ceiling locally, so Cloudflare may reject an oversized input. No cost estimator or pricing table is included; unknown provider accounting is reported as null.
+No application capacity caps are added. Provider request limits above are mandatory documented constraints. Sarvam, local and Cloudflare publish no aggregate request cap, so none is invented. Gemini publishes an 8192-token input boundary and no aggregate request cap; one exact prompt per request is pre-counted with `countTokens`, and a mismatched embed token count fails closed. Cloudflare documents a 512-token per-input ceiling for `bge-base-en-v1.5`; this package does not ship that model's tokenizer and does not approximate the ceiling locally, so Cloudflare may reject an oversized input. No cost estimator or pricing table is included; unknown provider accounting is reported as null.
 
 The public result protocol is version 2; stored generating-space documents keep their existing descriptor format. Live cloud or local inference, service deployment and shared database writes are not performed by this package.

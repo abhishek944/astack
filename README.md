@@ -61,20 +61,25 @@ The tables below list the current source-of-record surface: registered tool name
 
 ### Standalone global skills
 
-`skills/pi-herdr-skills` owns these eight standalone skills. Each host selects `browser-use` (default), `aside-browser`, both, or neither; none is bundled by a package.
+`skills/pi-herdr-skills` owns these eleven standalone skills. Each host selects `browser-use` (default), `aside-browser`, both, or neither; none is bundled by a package.
 
 | Skill | Purpose | Invocation |
 |---|---|---|
 | `aside-browser` | Bundled vendor Aside entry point, selected with `--browser aside` or `--browser both`; it directs the agent to `aside guide` for the live instructions. | `/skill:aside-browser` |
+| `browser-testing` | Shared browser QA policy: signed-in versus isolated mode, verification discipline, and user-browser safety on every backend. | `/skill:browser-testing` |
 | `browser-use` | Browser testing, screenshots, forms, and extraction with isolated local Chrome. Selected by default, and alongside Aside with `--browser both`. | `/skill:browser-use` |
-| `commit-and-merge` | Commit requested repository changes and merge into the default branch using repository conventions. | Manual only: `/skill:commit-and-merge` (`disable-model-invocation: true`). |
+| `commit` | Create local milestone commits for coherent, workable, owned changes after verification; never push, merge, tag, or release. | Invoked automatically by `implement`, or `/skill:commit` |
 | `computer-use` | Operate desktop apps through the local Cua Driver with accessibility elements and verified outcomes. | `/skill:computer-use` |
-| `implement` | Coordinate tracked work with artifact paths, ownership decisions, and verification. | `/skill:implement` |
+| `implement` | Coordinate tracked work with artifact paths, ownership decisions, and discovery/invocation of the local commit skill. | `/skill:implement` |
+| `push` | Push existing local commits to an explicitly authorized remote and ref after applicable checks; never commits, merges, tags, releases, or force-pushes. | Manual only: `/skill:push` (`disable-model-invocation: true`). |
+| `release-status` | Check local and GitHub `main` versions against npm with the read-only CLI and explain the dispatch-only trusted publishing workflow. | `/skill:release-status` |
 | `retro` | Run a retrospective on a coding session. | Manual only: `/skill:retro` (`disable-model-invocation: true`). |
 | `talk-human` | Write clear, beginner-oriented user-facing messages. | `/skill:talk-human` |
 | `typescript-best-practices` | Apply type-system rules to TypeScript work: discriminated unions, branded types, boundary validation, exhaustive variants, and schema-derived types. | `/skill:typescript-best-practices` |
 
 All skills, including package-bundled skills, use Pi's generic `/skill:<name>` command when skill commands are enabled. That is separate from extension-registered commands such as `/classifier` and from prompt-template commands such as `/ask`.
+
+The repo-wide `browser-testing` skill carries the shared verification and user-browser safety policy on every backend; it does not own a browser. The selected browser skill owns live operation.
 
 `browser-use` is the default browser backend and skill. A host can instead declare `--browser aside` to install the bundled managed `aside-browser` skill and drop the conflicting `browser-use` default, `--browser both` to keep both skills side by side (Aside for already-signed-in sites, `browser-use` for isolated headless testing, with no cookie transfer), or `--browser none` to install no browser skill. `browser-use` remains installed and current on hosts that keep the default. See [SETUP.md](SETUP.md#browser-backend-selection).
 
@@ -117,7 +122,7 @@ npm run build
 npm pack --dry-run      # inspect published tarball contents
 ```
 
-Install, upgrade, and publish behavior is unchanged: `package.json` names, versions, `exports`, `bin`, `files`, `pi`, `dependencies`, and `peerDependencies` are the originals. Publish manually from the package directory; this repository has no automated release pipeline.
+Install and upgrade behavior is unchanged: `package.json` names, versions, `exports`, `bin`, `files`, `pi`, `dependencies`, and `peerDependencies` are the originals. Check publication readiness with `npm run release:status` from the repository root. Publication runs only through the explicit GitHub Actions dispatch described in [docs/RELEASING.md](docs/RELEASING.md); no drift report or agent decision publishes a package.
 
 ## Workspace checks
 
@@ -125,12 +130,14 @@ Install, upgrade, and publish behavior is unchanged: `package.json` names, versi
 npm run check           # package typecheck/build/pack dry-run (where defined) + service typecheck/build
 npm run verify          # install each directory first, then run npm run check
 npm run check:skills    # verify the skill manifest, then the global skill copies
+npm run release:status  # read-only npm registry, Git tag, worktree and pack drift report
 node scripts/check.mjs --all   # npm run check plus the skills check
 ```
 
 - `npm run check` never installs or edits package metadata. It requires each directory's `node_modules` to exist and fails with the underlying tool error when dependencies are missing.
 - `npm run verify` runs `npm ci` in directories that have a lockfile and `npm install --no-package-lock` in `pi-firstmate` (the only unit without one), then runs the same checks.
-- `npm run check:skills` verifies `skills/pi-herdr-skills/skills-manifest.json` against the repository, then compares the selected `skills/*` entries with `~/.agents/skills/*`. It requires those global installs and does not touch package builds. The selection comes from `--browser`, then `$ASTACK_BROWSER`, then `~/.local/share/astack/env.sh`, then `browser-use`. For a scoped global check, run `bash skills/pi-herdr-skills/scripts/check-repo.sh --skill NAME`; `--skill` narrows only the global comparison, still enforces the browser selection, and does not replace the manifest check.
+- `npm run check:skills` verifies `skills/pi-herdr-skills/skills-manifest.json` against the repository, then compares the selected `skills/*` entries with `~/.agents/skills/*`. It requires those global installs and does not touch package builds. The selection comes from `--browser`, then `$ASTACK_BROWSER`, then `~/.local/share/astack/env.sh`, then `browser-use`. Add `-- --skill NAME` (repeatable, or `--skill=NAME`) to scope the global comparison; `bash skills/pi-herdr-skills/scripts/check-repo.sh --skill NAME` remains available for the global comparison alone. `--skill` still enforces the browser selection and does not replace the manifest check.
+- `npm run release:status` reads local Git, GitHub `main`, and npm state only; use `--strict` as a gate and `--format json` for machine-readable output. See [docs/RELEASING.md](docs/RELEASING.md).
 - None of these commands creates or runs unit tests.
 
 ## Install and cutover
@@ -171,7 +178,7 @@ The package-owned `herdr` and `model-routing-policy` skills ship with `packages/
 
 The `here-now` skill is retired. Its source, global install, provenance files, and installer entries were removed. The independent here.now delivery backend inside `pi-decisions` is unaffected and keeps its own configuration and credentials.
 
-The remaining shared skills are `browser-use`, `commit-and-merge`, `computer-use`, `implement`, `retro`, and `talk-human`; they stay global and follow the contract above.
+The remaining shared skills are `browser-testing`, `browser-use`, `commit`, `push`, `computer-use`, `implement`, `release-status`, `retro`, and `talk-human`; they stay global and follow the contract above.
 
 Run `npm run check:skills` after any skill edit.
 

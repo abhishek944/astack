@@ -24,6 +24,7 @@ export declare class TaskState {
     }): Todo[];
     getWork(workId: string): Work | undefined;
     getTodo(taskId: string): Todo | undefined;
+    getFocusedTodo(): Todo | undefined;
     setAgentRunning(running: boolean): void;
     setWorking(taskId: string, working: boolean): void;
     clearWorking(): void;

@@ -50,5 +50,13 @@
     "extensions": [
       "./dist/index.js"
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abhishek944/astack.git",
+    "directory": "packages/pi-decisions"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

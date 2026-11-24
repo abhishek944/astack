@@ -88,6 +88,11 @@ export class TaskState {
   getWork(workId: string): Work | undefined { return this.read().works.find((work) => work.workId === workId); }
   getTodo(taskId: string): Todo | undefined { return this.read().todos.find((todo) => todo.taskId === taskId); }
 
+  getFocusedTodo(): Todo | undefined {
+    const snapshot = this.read();
+    return snapshot.todos.find((todo) => todo.taskId === snapshot.focusedTaskId);
+  }
+
   setAgentRunning(running: boolean): void {
     // Timing hooks run before storage initialization and after failed startup too.
     if (!this.binding) return;

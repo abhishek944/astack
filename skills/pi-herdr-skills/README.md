@@ -1,6 +1,6 @@
 # pi-herdr-skills
 
-A portable collection of global [Pi](https://pi.dev/) skills for planning, implementation, browser and desktop work, UI/UX auditing, communication, and [Herdr](https://herdr.dev/)-hosted Pi agents. Diagram, review and model-routing skills now ship from Astack packages; see [package-owned skills](#package-owned-skills).
+A portable collection of global [Pi](https://pi.dev/) skills for planning, implementation, evidence-backed refactoring, browser and desktop work, UI/UX auditing, communication, and [Herdr](https://herdr.dev/)-hosted Pi agents. Diagram, review and model-routing skills now ship from Astack packages; see [package-owned skills](#package-owned-skills).
 
 > [!WARNING]
 > Pi extensions run with your user permissions, and skills can instruct an agent to run commands. Review this repository and every extension you install before enabling it.
@@ -89,18 +89,22 @@ If an installed skill was modified, uninstall refuses to remove it unless you ad
 | Skill | Purpose |
 | --- | --- |
 | `aside-browser` | Bundles the vendor Aside entry point as a managed skill, selected with `--browser aside` or `--browser both`. The file directs the agent to run `aside guide` for the live vendor instructions. |
+| `browser-testing` | Shared browser QA policy: choose signed-in Aside or isolated browser-use, verify the observed URL and UI, and protect the user's tabs, profile and sessions. Installed on every backend; read the selected browser skill for live operation. |
 | `browser-use` | Automates browser navigation, forms, screenshots, testing, and extraction. Selected by default, or beside Aside with `--browser both` (isolated testing only). |
-| `commit-and-merge` | Commits real changes and merges into the default branch when explicitly requested. |
+| `commit` | Creates local milestone commits for coherent, workable, owned changes after verification. `implement` discovers and invokes it automatically; it never pushes, merges, tags, or releases. |
 | `computer-use` | Operates desktop apps through local Cua Driver MCP with grounded input, screenshot forwarding, and verified outcomes. |
 | `implement` | Coordinates every tracked Work with session/Work/Task artifact paths, self-versus-delegate decisions, checks, and proportionate review while preserving specialized scope. A UI-changing implementation also hands its changed surface to `ui-ux-testing` in fix-or-flag mode after functional verification, unless the user opted out or asked for read-only review. |
 | `page-performance` | Discovers and refreshes application pages, observes requests and load timings, investigates evidenced slowdowns, and verifies authorized fixes with comparable runtime evidence. |
+| `push` | User-invoke-only skill that pushes existing local commits to an explicitly authorized remote and ref after applicable checks; it never commits, merges, tags, releases, or force-pushes. |
+| `refactor` | Automatically refactors the current repository or project: a no-argument invocation resolves the cwd, discovers UI and backend opportunities that are present, starts ongoing idle-loop passes, reviews and verifies behavior-preserving changes, and honors explicit narrower scope or stop conditions. |
+| `release-status` | Checks local and GitHub `main` package versions against npm with a read-only CLI and explains the dispatch-only trusted publishing workflow; publication authority stays with the human. |
 | `retro` | Reviews a coding session for ways to improve the agent's working environment; invoke explicitly with `/skill:retro`. |
 | `talk-human` | Writes clear, friendly, concise replies with plain language and exact technical detail. |
 | `ui-conventions` | Finds the UI components, tokens and interaction patterns a repository already has before creating or restyling a control; respects project instructions and existing design systems without forcing migrations. |
 | `ui-copy` | Writes and reviews interface text: cuts filler and restated labels while keeping required warnings, error text, labels and accessibility instructions. |
 | `typescript-best-practices` | Applies type-system rules to TypeScript work: discriminated unions, branded types, boundary validation, exhaustive variants, and schema-derived types. |
 
-These eleven skills are the complete set this installer owns. Exactly one of the two browser skills is installed by default, so the default install is ten skills; `--browser both` installs all eleven, and every non-browser skill is always installed. Some of them depend on other installed skills by name. Install the complete set rather than copying only `implement`, unless a host deliberately selects another browser backend with `--browser aside` or `--browser none`.
+These fifteen skills are the complete set this installer owns. Exactly one of the two browser skills is installed by default, so the default install is fourteen skills; `--browser both` installs all fifteen, and every non-browser skill is always installed. Some of them depend on other installed skills by name. Install the complete set rather than copying only `implement`, unless a host deliberately selects another browser backend with `--browser aside` or `--browser none`.
 
 ### Package-owned skills
 
@@ -218,11 +222,13 @@ These skills apply across tasks, so each shared concern needs one owner. The own
 | Text inside a product UI | `ui-copy` | Not chat replies, documentation, release notes or marketing pages. |
 | UI audit and evidence | `ui-ux-testing` | Its review mode is read-only for production source and reports findings without fixing them. |
 | Post-implementation UI disposition | `ui-ux-testing` | Its authorized fix-or-flag mode fixes only clear in-scope defects against the existing design system; anything subjective needs the user. |
-| Independent review of changes | `agent-review` | Read-only, and used when risk, breadth, uncertainty or the user warrants it, not by default. |
+| Independent review of changes | `agent-review` | Read-only, and used when risk, breadth, uncertainty, an explicit workflow requirement or the user warrants it, not by default. |
+| Automatic refactor discovery and execution | `refactor` | Default invocation resolves the current repository or project and runs ongoing, deduplicated, reviewed UI and backend passes; behavior changes need a human decision, explicit narrower scope is honored, and the invoking owner starts and owns an idle loop within its seven-day lifetime. |
 | Subagent lifecycle and presentation | `herdr` | Starts, monitors and cleans up Core workers; Work/Todo records stay in `implement`. |
 | Subagent model, thinking level and Fast mode | `model-routing-policy` | Subagents only; explicit user choices override its defaults. |
 | Read-only investigation and design options | `research`, `read-flows`, `design-council` | No production edits; planning does not authorize implementation. |
 | Unit tests and capacity limits | `no-unit-tests`, `no-arbitrary-limits` | Only the latest explicit user request permits unit tests; only verified platform/SDK constraints or explicit requests justify limits. |
+| Browser testing policy and verification | `browser-testing` | Cross-cutting QA policy only; the selected browser skill owns the live browser and its current guide. |
 | Browser and desktop automation | `aside-browser`, `browser-use`, `computer-use` | `aside-browser` owns the user's signed-in browser, `browser-use` isolated testing, `computer-use` desktop apps. |
 
 ## Permission gates
@@ -290,6 +296,7 @@ Package-provided skills, such as the image-generation skill, remain owned and up
 ## Maintenance and safety
 
 - Run `npm run check` before installing, committing, or publishing. It verifies the manifest, then the installed/global equality. `npm run check -- --skill NAME` narrows only the installed/global part; the manifest step still runs. Running `scripts/check-repo.sh --skill NAME` directly performs only the global comparison.
+- Automatic local milestone commits use the `commit` skill after `implement` discovers and invokes it. They cover only coherent, workable, owned changes with an empty pre-existing index, preserve unrelated and staged work, and run proportionate checks and hooks without bypass. Push uses the separate user-invoke-only `push` skill; merge, tags, publication, and deployment require separate explicit authorization.
 - `npm run check:manifest` verifies `skills-manifest.json` alone: every recorded SHA-256 and executable mode must match the repository, and `skills/` may not contain a missing, stale or unlisted file. It needs no global install.
 - Keep credentials in environment variables or provider login stores, never in skills or examples.
 - Do not commit Pi settings, sessions, Herdr configuration, generated `var/` evidence, package caches, or `node_modules/`.

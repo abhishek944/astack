@@ -74,5 +74,13 @@
     "extensions": [
       "./dist/index.js"
     ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abhishek944/astack.git",
+    "directory": "packages/pi-tasks"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

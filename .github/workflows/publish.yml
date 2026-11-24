@@ -1,0 +1,185 @@
+name: Publish Astack package
+
+# Dispatching this workflow is the human authorization to publish exactly one
+# package at one immutable commit. Configure required reviewers on the
+# npm-publish environment for a second human gate before the publish step.
+# Drift reports never trigger this workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Publish authorization: exact packages/<name> directory"
+        required: true
+        type: string
+      version:
+        description: "Publish authorization: exact version in that package.json"
+        required: true
+        type: string
+      commit:
+        description: "Publish authorization: full immutable 40-character Git commit SHA"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ inputs.package }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish ${{ inputs.package }}@${{ inputs.version }}
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    env:
+      PACKAGE: ${{ inputs.package }}
+      VERSION: ${{ inputs.version }}
+      COMMIT: ${{ inputs.commit }}
+
+    steps:
+      - name: Validate dispatch inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$PACKAGE" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+            echo "ERROR: package must be a directory name under packages/" >&2
+            exit 1
+          fi
+          if [[ ! "$COMMIT" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "ERROR: commit must be a full 40-character Git SHA" >&2
+            exit 1
+          fi
+          echo "Authorized target: package=$PACKAGE version=$VERSION commit=$COMMIT"
+
+      - name: Check out immutable commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify checked-out commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual=$(git rev-parse HEAD)
+          if [[ "${actual,,}" != "${COMMIT,,}" ]]; then
+            echo "ERROR: checkout is $actual, expected $COMMIT" >&2
+            exit 1
+          fi
+          echo "Checked out $actual"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Verify npm trusted publishing runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const parts = process.versions.node.split(".").map(Number);
+          const supported = parts[0] > 22 || (parts[0] === 22 && parts[1] >= 14);
+          if (!supported) {
+            console.error(`ERROR: Node ${process.versions.node} is older than the npm trusted publishing minimum 22.14.0`);
+            process.exit(1);
+          }
+          NODE
+          current=$(npm --version)
+          required=11.5.1
+          needs_upgrade=$(node - "$current" "$required" <<'NODE'
+          const [current, required] = process.argv.slice(2);
+          const parse = (value) => value.split(/[.-]/).map((part) => (/^\d+$/.test(part) ? Number(part) : 0));
+          const a = parse(current);
+          const b = parse(required);
+          let sufficient = true;
+          for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+            const left = a[index] ?? 0;
+            const right = b[index] ?? 0;
+            if (left > right) break;
+            if (left < right) { sufficient = false; break; }
+          }
+          console.log(sufficient ? "no" : "yes");
+          NODE
+          )
+          if [[ "$needs_upgrade" == "yes" ]]; then
+            echo "Upgrading npm $current to $required for trusted publishing"
+            npm install --global "npm@$required"
+          fi
+          npm --version
+
+      - name: Verify publication target
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release-status.mjs \
+            --verify-target \
+            --package "$PACKAGE" \
+            --version "$VERSION" \
+            --commit "$COMMIT" \
+            --no-pack \
+            --format json
+
+      - name: Install package dependencies
+        shell: bash
+        working-directory: packages/${{ inputs.package }}
+        run: |
+          set -euo pipefail
+          if [[ -f package-lock.json ]]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-package-lock --no-audit --no-fund
+          fi
+
+      - name: Run package lifecycle checks
+        shell: bash
+        working-directory: packages/${{ inputs.package }}
+        run: |
+          set -euo pipefail
+          for script in lint typecheck build; do
+            if node -e "process.exit(require('./package.json').scripts?.['$script'] ? 0 : 1)"; then
+              echo "### npm run $script"
+              npm run "$script"
+            else
+              echo "skip $script (not defined)"
+            fi
+          done
+
+      - name: Verify packed artifact and registry state
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release-status.mjs \
+            --verify-target \
+            --package "$PACKAGE" \
+            --version "$VERSION" \
+            --commit "$COMMIT" \
+            --format json
+
+      - name: Publish with npm trusted publishing
+        shell: bash
+        working-directory: packages/${{ inputs.package }}
+        run: |
+          set -euo pipefail
+          echo "Publishing $PACKAGE@$VERSION from $COMMIT to $(npm config get registry)"
+          npm publish --access public
+
+      - name: Write publication summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Publication authorization"
+            echo
+            echo "- Package: \`$PACKAGE\`"
+            echo "- Version: \`$VERSION\`"
+            echo "- Immutable commit: \`$COMMIT\`"
+            echo "- Result: \${{ job.status }}"
+            echo
+            echo "This run was started by workflow dispatch. No drift report or agent decision can start it."
+          } >> "$GITHUB_STEP_SUMMARY"
