@@ -8,6 +8,8 @@ compatibility: Requires a Git repository and support for independent reviewers.
 
 Review changes without editing them. Use this skill when the user asks for review or when an implementation has meaningful risk, breadth, or uncertainty. Skip it for straightforward changes that can be checked confidently by direct inspection.
 
+Review at coherent milestones rather than after every intermediate step. Group related findings into one report and require evidence for the exact scenario each check claims to cover; after narrow fixes, recheck the accepted findings and directly affected code instead of repeating a broad review. Security-sensitive changes still need independent review by an owner separate from the implementer; a milestone review, implementer self-check or coordinator inspection does not replace it.
+
 Before replying to the user, follow the global `talk-human` skill.
 
 ## Session coordination
@@ -31,7 +33,7 @@ Start searches at the changed paths and directly affected callers or contracts, 
 
 ## Review lenses
 
-- **Correctness/safety:** Does the change deliver the original request without breaking required behavior, authorization, cancellation handling, or data-loss protection? Do not invent new guarantees for hypothetical failures.
+- **Correctness/safety:** Does the change deliver the original request without breaking required behavior, authorization, cancellation handling, or data-loss protection? For authentication, authorization, secrets, data isolation or another security control, keep the independent security lens and trace the exact supported failure scenario before accepting a fix. Do not invent new guarantees for hypothetical failures.
 - **Architecture/integration:** Do affected callers still work, and does behavior stay with its existing owner? Look first for unnecessary machinery that can be removed. Do not redesign working code or add abstractions for future flexibility.
 - **Regression:** Trace existing supported behavior through changed code and affected callers. Do not turn a feature review into a repository-wide compatibility audit or require support for new scenarios.
 
@@ -43,7 +45,7 @@ Start searches at the changed paths and directly affected callers or contracts, 
 4. Include this contract in each assignment: "Review whether this change delivers the original request and preserves affected existing behavior. Report concrete defects, not opportunities to improve the system. Prefer deletion or a local correction over new machinery. No actionable findings is a valid result." Ask for severity, the violated requirement or contract, supported failure scenario, code evidence, scope classification, and the smallest complete recommendation. Do not invent findings to fill a review.
 5. Combine duplicates by root cause.
 6. Accept, reject, or leave each finding unresolved with a short reason. Reviewer output is advice, not authorization to expand the task. Only accepted in-scope defects require fixes; keep optional suggestions outside the task unless the user requests them.
-7. After fixes, recheck accepted defects and directly affected code when warranted. Do not restart the full review or reopen settled design decisions unless the fixes introduce a new material risk. Stop when accepted defects are resolved and allowed verification is complete.
+7. After fixes, recheck accepted defects and directly affected code when warranted. For a security-sensitive finding, verify the specific affected control before resolving it. Do not restart the full review or reopen settled design decisions unless the fixes introduce a new material risk. Stop when accepted defects are resolved and allowed verification is complete.
 
 ## Files
 
