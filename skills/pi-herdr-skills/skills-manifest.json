@@ -1,6 +1,6 @@
 {
   "snapshot": "2026-11-17",
-  "skills": 15,
+  "skills": 17,
   "files": [
     {
       "path": "skills/aside-browser/SKILL.md",
@@ -34,12 +34,17 @@
     },
     {
       "path": "skills/implement/SKILL.md",
-      "sha256": "8126906cb7b859f671b4d181440c5347eba4438a531a8dec8db46a46f29e9f4b",
+      "sha256": "195ba64584e9e89dd1f7e96498c158be0b61538f7dddb6d3bc4e42782e7fecb2",
       "executable": false
     },
     {
       "path": "skills/page-performance/SKILL.md",
       "sha256": "139eda2e4492e219b1d3ed1970b79a1e7a4952d00ee6cae4910ec35933682d85",
+      "executable": false
+    },
+    {
+      "path": "skills/pre-launch-mode/SKILL.md",
+      "sha256": "ecf3f23de120b43bc44f1d10aa2da6e3143cba85dd177a2662cb36cc589db30c",
       "executable": false
     },
     {
@@ -60,6 +65,11 @@
     {
       "path": "skills/retro/SKILL.md",
       "sha256": "eacb6e5744744e8c22fa7928e8f09da0840eb2e36d58e2c0467fce533b284548",
+      "executable": false
+    },
+    {
+      "path": "skills/secret-handoff/SKILL.md",
+      "sha256": "ee2a0b5fdf538e7f0497d05d92afdb51d7e2a752916c89853bc789e2f3dec6e2",
       "executable": false
     },
     {
