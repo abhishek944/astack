@@ -25,6 +25,10 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 - Separate required fixes from optional cleanup/hardening and out-of-scope scenarios. Optional suggestions must not block completion or become implementation tasks without user authorization. Omit speculative improvements rather than create a backlog for the implementer.
 - Before recommending more machinery, consider removing the unnecessary guarantee or abstraction that caused the finding. Preserve required behavior, security, cancellation handling and data-loss protection; simplification is not permission to ignore real bugs.
 
+## Evidence scope
+
+Start searches at the changed paths and directly affected callers or contracts, then widen only for a concrete review question. Use the `research` skill's **Focused evidence** procedure for ignore-aware discovery, output projection, image forwarding, output-sized batches and recovery of truncated required sources; this evidence-handling guidance does not change review's read-only rules. Give reviewers exact paths and relevant ranges instead of broad dumps, while retaining access to the complete required evidence.
+
 ## Review lenses
 
 - **Correctness/safety:** Does the change deliver the original request without breaking required behavior, authorization, cancellation handling, or data-loss protection? Do not invent new guarantees for hypothetical failures.

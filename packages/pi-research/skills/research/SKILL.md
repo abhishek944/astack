@@ -24,6 +24,14 @@ When available, use `WorkCreate`/`WorkUpdate` and `TodoCreate`/`TodoUpdate` to k
 - Separate confirmed facts, likely explanations, open hypotheses, and blocked checks.
 - Propose a fix at the boundary that owns the behavior; avoid one-off workarounds.
 
+## Focused evidence
+
+- Start with the question and the narrowest relevant source or documentation roots. Discover filenames with ignore-aware `find` or `rg --files`, then use `grep`/`rg` with explicit paths, globs and precise patterns. Widen only when the evidence points outside that scope; avoid repository-wide shell `find` or recursive grep as the first step.
+- Search dependencies, generated output and `var/` deliberately at the exact relevant path, overriding ignores only where needed. Ignore rules reduce noise; they are neither a security boundary nor proof that a file or behavior is absent. Keep secret and access restrictions intact.
+- Choose the output before calling: filenames or counts for discovery, bounded context for matches, and selected fields for JSON or tool results. Project large results before returning them to the model rather than dumping full payloads or logs. Forward screenshots and other images as images, not serialized text or base64.
+- Batch independent calls by their expected combined output size, not just call count; split large reads. Recover truncated required evidence from the saved full output or successive offset/limit reads until the needed source is complete. A clipped preview or `head` is not complete evidence or an absence check.
+- Keep reports concise with exact source paths and the decisive evidence; link retained full detail instead of pasting it. Narrow output must not conceal uncertainty or skip required reading.
+
 ## Workflow
 
 1. Restate the question and known evidence.
