@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Start the signed macOS service without a full-display cursor overlay, then
+# hand stdio and connection readiness to Cua's native MCP proxy.
+set -euo pipefail
+
+driver=${1:?Usage: cua-driver-macos /path/to/CuaDriver.app/Contents/MacOS/cua-driver [MCP options...]}
+shift
+case "$driver" in
+  /*.app/Contents/MacOS/cua-driver) app=${driver%/Contents/MacOS/cua-driver} ;;
+  *) echo 'cua-driver-macos: expected the signed app executable path' >&2; exit 2 ;;
+esac
+if [ ! -x "$driver" ]; then
+  echo "cua-driver-macos: executable not found: $driver" >&2
+  exit 127
+fi
+
+# Do not use -n: simultaneous MCP clients must reuse the signed app, not launch
+# competing daemons. --no-overlay belongs to serve, not to mcp. This is separate
+# from hiding a session cursor, which leaves the full-display window registered.
+open -g -a "$app" --args serve --no-overlay >&2
+exec "$driver" mcp --socket "$HOME/Library/Caches/cua-driver/cua-driver.sock" "$@"

@@ -98,7 +98,7 @@ bash scripts/setup.sh           # install missing runtimes/capabilities, build, 
 npm run setup                   # same entry after Node exists
 ```
 
-It prepares every package independently, registers the 11 local packages, syncs the selected shared skills, and reports each capability as ready/installed/manual/unsupported/failed. The browser backend is an explicit choice: `--browser browser-use` (default), `--browser aside`, `--browser both`, or `--browser none`. Existing tools, auth, package entries, modified skills, sessions, and user services are preserved; by default only `settings.json` packages and an absent `cua-driver` MCP entry can change, with backups. See [SETUP.md](SETUP.md) for options, platform notes, and the Slack delegation boundary.
+It prepares every package independently, registers the 11 local packages, syncs the selected shared skills, and reports each capability as ready/installed/manual/unsupported/failed. The browser backend is an explicit choice: `--browser browser-use` (default), `--browser aside`, `--browser both`, or `--browser none`. Existing tools, auth, package entries, modified skills, sessions, and user services are preserved; by default only `settings.json` packages and the managed `cua-driver` MCP launch can change, with backups. On macOS, the exact old bare-driver entry is migrated to the signed no-overlay launcher; custom commands and arguments stay untouched. See [SETUP.md](SETUP.md) for options, platform notes, and the Slack delegation boundary.
 
 A headless Ubuntu/Debian host can additionally opt in to a private desktop for the local Cua Driver. It is never installed by default:
 

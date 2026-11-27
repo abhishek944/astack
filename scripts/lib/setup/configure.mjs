@@ -2,7 +2,7 @@
 // Structured config merge for Astack setup.
 //
 //   configure.mjs packages --agent-dir DIR --stamp STAMP --summary-file FILE [--keep-package-paths] PATH...
-//   configure.mjs mcp --agent-dir DIR --stamp STAMP --summary-file FILE --name NAME --command CMD [--arg A]...
+//   configure.mjs mcp --agent-dir DIR --stamp STAMP --summary-file FILE --name NAME --command CMD [--arg A]... [--previous-command CMD --previous-arg A...]
 //
 // Only the `packages` array and the named MCP server are changed. Every write is
 // backed up first and written atomically. Unrelated keys/servers never reach output.
@@ -105,8 +105,8 @@ function resolveEntry(entry, agentDir) {
 }
 
 function parseArgs(argv) {
-  const options = { args: [], paths: [] };
-  const takesValue = new Set(["--agent-dir", "--stamp", "--summary-file", "--name", "--command", "--arg"]);
+  const options = { args: [], previousArgs: [], paths: [] };
+  const takesValue = new Set(["--agent-dir", "--stamp", "--summary-file", "--name", "--command", "--arg", "--previous-command", "--previous-arg"]);
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--keep-package-paths" || arg === "--dry-run") {
@@ -118,6 +118,8 @@ function parseArgs(argv) {
       const value = argv[i + 1];
       i += 1;
       if (arg === "--arg") options.args.push(value);
+      else if (arg === "--previous-arg") options.previousArgs.push(value);
+      else if (arg === "--previous-command") options.previousCommand = value;
       else if (arg === "--agent-dir") options.agentDir = value;
       else if (arg === "--stamp") options.stamp = value;
       else if (arg === "--summary-file") options.summaryFile = value;
@@ -345,9 +347,16 @@ function mergeMcp(options) {
   if (existing) {
     const sameCommand = canonical(String(existing.command || "")) === canonical(options.command);
     const sameArgs = JSON.stringify(existing.args || []) === JSON.stringify(options.args);
-    const sameExposure = (existing.exposure || "codemode") === "codemode";
-    if (sameCommand && sameArgs && sameExposure) {
+    const previousLaunch = options.previousCommand &&
+      canonical(String(existing.command || "")) === canonical(options.previousCommand) &&
+      JSON.stringify(existing.args || []) === JSON.stringify(options.previousArgs);
+    if (sameCommand && sameArgs) {
       conflict = false;
+    } else if (previousLaunch) {
+      // Migrate only the explicitly recognized old launch. Preserve exposure,
+      // enabled state, env, timeouts and all other user-owned server metadata.
+      config.mcpServers[options.name] = { ...existing, command: options.command, args: options.args };
+      changed = true;
     } else {
       conflict = true;
     }

@@ -1264,14 +1264,30 @@ register_cua_mcp() {
     fi
     return 0
   fi
+  local mcp_command="$CUA_BIN"
+  local mcp_args=(--arg mcp)
+  local previous_launch=()
+  if [ "$OS" = macos ]; then
+    case "$CUA_BIN" in
+      /*.app/Contents/MacOS/cua-driver) ;;
+      *) record_cap cua-mcp manual "macOS needs the signed CuaDriver.app executable" ""; return 0 ;;
+    esac
+    if ! "$CUA_BIN" serve --help 2>/dev/null | grep -q -- '--no-overlay'; then
+      record_cap cua-mcp manual "update Cua Driver to a version supporting serve --no-overlay" ""
+      return 0
+    fi
+    mcp_command="$REPO_ROOT/scripts/mcp/cua-driver-macos"
+    mcp_args=(--arg "$CUA_BIN")
+    previous_launch=(--previous-command "$CUA_BIN" --previous-arg mcp)
+  fi
   if [ "$NO_CONFIG" = 1 ]; then
-    record_cap cua-mcp manual "config writes disabled; add: pi mcp add cua-driver --exposure codemode -- $CUA_BIN mcp" ""
+    record_cap cua-mcp manual "config writes disabled; run setup without --no-config to register the platform Cua launcher" ""
     return 0
   fi
   mkdir -p "$AGENT_DIR" "$LOG_DIR"
   if ! node "$REPO_ROOT/scripts/lib/setup/configure.mjs" mcp \
       --agent-dir "$AGENT_DIR" --stamp "$SETUP_STAMP" --summary-file "$result_file" \
-      --name cua-driver --command "$CUA_BIN" --arg mcp >>"$LOG_DIR/configure.log" 2>&1; then
+      --name cua-driver --command "$mcp_command" "${mcp_args[@]}" "${previous_launch[@]}" >>"$LOG_DIR/configure.log" 2>&1; then
     tail_log "$LOG_DIR/configure.log"
     record_cap cua-mcp failed "MCP config merge failed"
     return 1
@@ -1279,7 +1295,7 @@ register_cua_mcp() {
   if [ -f "$result_file" ] && grep -q '^conflicts=1' "$result_file"; then
     record_cap cua-mcp manual "existing cua-driver MCP entry differs; left unchanged"
   elif [ -f "$result_file" ] && grep -q '^changed=1' "$result_file"; then
-    record_cap cua-mcp installed "registered cua-driver via stdio mcp in $AGENT_DIR/mcp.json" ""
+    record_cap cua-mcp installed "registered platform Cua MCP launcher in $AGENT_DIR/mcp.json ($OS; macOS uses --no-overlay)" ""
   else
     record_cap cua-mcp ready "cua-driver MCP already registered" ""
   fi

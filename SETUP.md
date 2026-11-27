@@ -22,7 +22,7 @@ npm run setup:check               # same as --check, after Node exists
 | Shared skills | Runs `skills/pi-herdr-skills/scripts/install.sh`. Modified global skills are preserved and reported, never force-replaced. |
 | Browser | Explicit `--browser browser-use|aside|both|none` selection. `browser-use` (default) installs/repairs uv + the Python CLI and verifies `browser_harness`. `aside` installs the bundled managed `aside-browser` skill and never launches, logs in, updates or registers anything for Aside. `both` keeps that skill and the `browser-use` skill installed side by side and also provisions the CLI. `none` provisions no browser backend or browser skill. |
 | Herdr | Reuses `hc`/`herdr-app` or runs the official installers. GUI capability is reported separately from binary presence and is informational: `AgentCreate` defaults to Core-only and needs a window only when the caller passes `present: true`. |
-| Cua | Reuses/installs the local Cua Driver on desktop hosts, reports macOS permission status read-only, and adds `cua-driver mcp` to `mcp.json` when absent. |
+| Cua | Reuses/installs the local Cua Driver on desktop hosts and reports macOS permission status read-only. On macOS, registers the signed-app no-overlay MCP launcher and migrates the exact old bare `cua-driver mcp` entry. Linux keeps direct `cua-driver mcp`. Custom entries are preserved. |
 | Desktop | Opt-in only (`--desktop`): Xvfb + full XFCE + session D-Bus + AT-SPI + ffmpeg, wired through a systemd user unit. The default path never installs a GUI. |
 | Slack | Installs/builds `services/pi-slack` dependencies only. Never starts a listener, never writes tokens. |
 | Report | Prints a table and optionally writes Markdown + JSON reports and logs. |
@@ -95,9 +95,9 @@ Selecting `aside` or `none` also means the `browser-use` **CLI** is not provisio
 Only two Pi config files can change:
 
 - `<agent-dir>/settings.json` — the `packages` array only.
-- `<agent-dir>/mcp.json` — only the `cua-driver` server, only when that name is absent.
+- `<agent-dir>/mcp.json` — only the `cua-driver` server: add it when absent, or on macOS migrate the exact detected signed-driver command with arguments `["mcp"]` to the no-overlay launcher. Migration preserves exposure, enabled state, environment, timeouts and all other server metadata.
 
-Both are backed up first under `<agent-dir>/backups/astack-setup-<stamp>/` and written atomically. Unrelated keys, package entries, MCP servers, auth, models, sessions, trust, skills, and user services are left alone. An existing `cua-driver` entry with a different command is reported `manual` and not overwritten.
+Both are backed up first under `<agent-dir>/backups/astack-setup-<stamp>/` and written atomically. Unrelated keys, package entries, MCP servers, auth, models, sessions, trust, skills, and user services are left alone. An existing `cua-driver` entry with a different command or custom arguments is reported `manual` and not overwritten.
 
 Object-form package entries keep their `extensions`, `skills`, `prompts`, and `themes` filters: only `source` is replaced with the checkout path. Multiple same-name entries are coalesced only when their filters are identical or the duplicates are bare paths; distinct filtered entries are left untouched and reported `manual` rather than guessing which resources were intended.
 
@@ -120,6 +120,8 @@ The installer does not edit shell profiles.
 ### macOS
 
 Tested on macOS 27.0.1 arm64 with Homebrew. Existing Node, Python, Pi, uv, hc, herdr-app, Cua, Chrome, and the selected shared skills are reused. Cua permission status is read-only (`cua-driver permissions status`); the installer never calls `grant`, starts a daemon, or changes TCC. A desktop session is expected for the Herdr app/Cua; the browser smoke uses isolated headless Chrome.
+
+Cua MCP clients use `scripts/mcp/cua-driver-macos` with the signed app executable as its first argument. At MCP launch (not during setup), it starts/reuses `CuaDriver.app` through LaunchServices with `serve --no-overlay`, then runs the native proxy with `mcp --socket` pointing to the standard user socket. An explicit socket prevents the proxy from racing startup and launching a second, overlay-enabled daemon. Cua owns connection readiness; no polling loop or extra service is added. A cold-start JSON-RPC handshake and the existing-service path were verified with Cua Driver 0.38.0. This removes the visual agent cursor, not computer input or capture, and avoids the invisible full-display window that caused Backdrop 3.0 desktop animation to pause. Existing overlay-enabled daemons are not killed by the launcher; quit that service once when adopting this configuration. Independently launched clients/manual daemons must also select no-overlay mode. Linux startup is unchanged.
 
 Aside is user-installed and the two parts have different support: the Aside **app** is macOS-only, while the vendor instructions explicitly support installing the Aside **CLI** on macOS and Linux. A Linux host can select `--browser aside` for the skill and point the CLI at a remote Aside host; nothing under `--browser` is chosen from the OS.
 

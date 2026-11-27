@@ -163,14 +163,14 @@ Edit `skills/model-routing-policy/SKILL.md` inside the installed pi-herdr packag
 
 ### Desktop computer use
 
-`computer-use` uses Pi's native MCP with an independently installed official [Cua Driver](https://cua.ai/docs/cua-driver/quickstart). It does not install a computer-use extension, replace Pi's model, or invoke another agent. On macOS, after reviewing and installing Driver and approving its OS permissions, register the signed app executable globally:
+`computer-use` uses Pi's native MCP with an independently installed official [Cua Driver](https://cua.ai/docs/cua-driver/quickstart). It does not install a computer-use extension, replace Pi's model, or invoke another agent. On macOS, after reviewing and installing Driver and approving its OS permissions, run Astack setup or register its no-overlay launcher globally:
 
 ```bash
-pi mcp add cua-driver --exposure codemode -- /Applications/CuaDriver.app/Contents/MacOS/cua-driver mcp
+pi mcp add cua-driver --exposure codemode -- /absolute/path/to/astack/scripts/mcp/cua-driver-macos /Applications/CuaDriver.app/Contents/MacOS/cua-driver
 pi mcp list
 ```
 
-On other platforms, use the reviewed `cua-driver` executable's absolute path. The CLI adds one server to personal `mcp.json`; preserve unrelated servers. Run `/reload`, then try `/skill:computer-use Open Calculator, compute 6 × 7, and verify 42 from a fresh window snapshot.`
+The launcher starts the signed app with `serve --no-overlay`, then connects its native MCP proxy to the user socket without an overlay-enabled fallback. This avoids a full-display overlay window pausing live wallpapers. On other platforms, use the reviewed `cua-driver` executable's absolute path with the `mcp` argument. The CLI adds one server to personal `mcp.json`; preserve unrelated servers. Run `/reload`, then try `/skill:computer-use Open Calculator, compute 6 × 7, and verify 42 from a fresh window snapshot.`
 
 The local server controls the real host desktop, not a VM. Screenshots and extracted app text can reach Pi's model provider. The skill recommends narrow captures, live-schema discovery, sequential actions, outcome verification, and explicit authorization for consequential steps; it is not an enforced sandbox or permission gate. For unattended work, use an isolated desktop or a reviewed bounded Driver capability manifest.
 
