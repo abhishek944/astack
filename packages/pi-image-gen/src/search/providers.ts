@@ -2,9 +2,12 @@ import { safeFetch } from '@amaster.ai/pi-shared';
 import { readResponseBytes } from '../core/response.js';
 import { imageSearchCredential, isRecord } from './config.js';
 import { ImageSearchError } from './errors.js';
-import type { ImageSearchCandidate, ImageSearchProvider, ImageSearchSettings } from './types.js';
+import type { ImageSearchCandidate, ImageSearchParallelMode, ImageSearchProvider, ImageSearchSettings } from './types.js';
 
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
+const FALLBACK_STATUSES = new Set([401, 403, 404, 429]);
+const DEFAULT_PARALLEL_MODE: ImageSearchParallelMode = 'fast';
+const DEFAULT_OPENAI_RESPONSES_MODEL = 'gpt-6.2-astra';
 type Row = Record<string, unknown>;
 
 /** Bound the wait too: safeFetch's DNS lookup does not observe AbortSignal. */
@@ -47,6 +50,236 @@ function child(row: Row, key: string): Row {
   return isRecord(row[key]) ? row[key] : {};
 }
 
+function requireCredential(provider: ImageSearchProvider, settings: ImageSearchSettings): string {
+  const key = imageSearchCredential(provider, settings);
+  if (!key) {
+    throw new ImageSearchError(`Image search credentials are missing for ${provider}. Configure its search apiKey or environment variable.`, 'credentials', true);
+  }
+  return key;
+}
+
+/** Shared JSON boundary: no provider response body is ever copied into an error message. */
+async function fetchJson(provider: ImageSearchProvider, url: URL, init: RequestInit, signal: AbortSignal): Promise<Row> {
+  signal.throwIfAborted();
+  const response = await fetchSearch(url, init, signal);
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => {});
+    throw new ImageSearchError(`${provider} image search returned HTTP ${response.status}.`, 'http', FALLBACK_STATUSES.has(response.status));
+  }
+  let body: unknown;
+  try {
+    body = JSON.parse(new TextDecoder().decode(await readResponseBytes(response, MAX_JSON_BYTES)));
+  } catch {
+    signal.throwIfAborted();
+    throw new ImageSearchError(`${provider} returned an unreadable or oversized search response.`, 'response');
+  }
+  if (!isRecord(body)) throw new ImageSearchError(`${provider} returned an invalid search response.`, 'response');
+  if (body.error) throw new ImageSearchError(`${provider} reported an image search error.`, 'response');
+  return body;
+}
+
+async function withProviderErrors<T>(provider: string, signal: AbortSignal, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (signal.aborted) throw error;
+    if (error instanceof ImageSearchError) throw error;
+    throw new ImageSearchError(`${provider} image search could not reach the provider. No automatic retry was made.`, 'network');
+  }
+}
+
+function unique(candidates: ImageSearchCandidate[], limit: number): ImageSearchCandidate[] {
+  const images: ImageSearchCandidate[] = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.imageUrl)) continue;
+    seen.add(candidate.imageUrl);
+    images.push(candidate);
+    if (images.length === limit) break;
+  }
+  return images;
+}
+
+type TavilyImage = { imageUrl: string; title?: string };
+
+function tavilyImage(value: unknown): TavilyImage | undefined {
+  const rawUrl = typeof value === 'string' ? value : isRecord(value) ? value.url : undefined;
+  const imageUrl = link(rawUrl);
+  if (!imageUrl) return undefined;
+  const title = isRecord(value) ? text(value.description) : undefined;
+  return { imageUrl, ...(title ? { title } : {}) };
+}
+
+function tavilyImages(value: unknown): TavilyImage[] {
+  if (!Array.isArray(value)) return [];
+  const images: TavilyImage[] = [];
+  for (const entry of value) {
+    const image = tavilyImage(entry);
+    if (image) images.push(image);
+  }
+  return images;
+}
+
+async function searchTavily(query: string, limit: number, settings: ImageSearchSettings, signal: AbortSignal): Promise<ImageSearchCandidate[]> {
+  const key = requireCredential('tavily', settings);
+  const url = new URL('https://api.tavily.com/search');
+  const init: RequestInit = {
+    method: 'POST',
+    redirect: 'error',
+    signal,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      query,
+      search_depth: 'basic',
+      include_images: true,
+      include_image_descriptions: true,
+      max_results: limit,
+    }),
+  };
+  return withProviderErrors('tavily', signal, async () => {
+    const body = await fetchJson('tavily', url, init, signal);
+    if (body.detail) throw new ImageSearchError('tavily reported an image search error.', 'response');
+    const candidates: ImageSearchCandidate[] = [];
+    for (const image of tavilyImages(body.images)) candidates.push({ provider: 'tavily', ...image });
+    const results = Array.isArray(body.results) ? body.results : [];
+    for (const row of results) {
+      if (!isRecord(row)) continue;
+      const sourcePageUrl = link(row.url);
+      const providerResultId = text(row.id);
+      for (const image of tavilyImages(row.images)) {
+        candidates.push({
+          provider: 'tavily',
+          ...image,
+          ...(sourcePageUrl ? { sourcePageUrl } : {}),
+          ...(providerResultId ? { providerResultId } : {}),
+        });
+      }
+    }
+    return unique(candidates, limit);
+  });
+}
+
+function parallelImage(value: unknown): ImageSearchCandidate | undefined {
+  if (!isRecord(value)) return undefined;
+  const imageUrl = link(value.image_url);
+  if (!imageUrl) return undefined;
+  const title = text(value.title);
+  const sourcePageUrl = link(value.source_page_url);
+  const width = dimension(value.width);
+  const height = dimension(value.height);
+  return {
+    provider: 'parallel',
+    imageUrl,
+    ...(title ? { title } : {}),
+    ...(sourcePageUrl ? { sourcePageUrl } : {}),
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+  };
+}
+
+async function searchParallel(query: string, limit: number, settings: ImageSearchSettings, signal: AbortSignal): Promise<ImageSearchCandidate[]> {
+  const key = requireCredential('parallel', settings);
+  const configuredMode = settings.providers?.parallel?.mode;
+  const mode = configuredMode === 'advanced' ? 'advanced' : DEFAULT_PARALLEL_MODE;
+  const url = new URL('https://api.parallel.ai/v1/images/search');
+  const init: RequestInit = {
+    method: 'POST',
+    redirect: 'error',
+    signal,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+    },
+    body: JSON.stringify({
+      search_queries: [query],
+      mode,
+      advanced_settings: { max_results: limit },
+    }),
+  };
+  return withProviderErrors('parallel', signal, async () => {
+    const body = await fetchJson('parallel', url, init, signal);
+    if (!Array.isArray(body.results)) throw new ImageSearchError('parallel returned an invalid image list.', 'response');
+    const candidates: ImageSearchCandidate[] = [];
+    for (const row of body.results) {
+      const image = parallelImage(row);
+      if (image) candidates.push(image);
+    }
+    return unique(candidates, limit);
+  });
+}
+
+function openAiImage(value: unknown): ImageSearchCandidate | undefined {
+  if (!isRecord(value) || value.type !== 'image_result') return undefined;
+  const imageUrl = link(value.image_url);
+  if (!imageUrl) return undefined;
+  const title = text(value.caption);
+  const sourcePageUrl = link(value.source_website_url);
+  const thumbnailUrl = link(value.thumbnail_url);
+  return {
+    provider: 'openai-responses',
+    imageUrl,
+    ...(title ? { title } : {}),
+    ...(sourcePageUrl ? { sourcePageUrl } : {}),
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+  };
+}
+
+function openAiResults(value: unknown): Row[] {
+  if (!Array.isArray(value)) return [];
+  const results: Row[] = [];
+  for (const item of value) {
+    if (!isRecord(item) || item.type !== 'web_search_call') continue;
+    if (item.status !== undefined && item.status !== 'completed') continue;
+    if (!Array.isArray(item.results)) continue;
+    for (const row of item.results) if (isRecord(row)) results.push(row);
+  }
+  return results;
+}
+
+async function searchOpenAIResponses(query: string, limit: number, settings: ImageSearchSettings, signal: AbortSignal): Promise<ImageSearchCandidate[]> {
+  const key = requireCredential('openai-responses', settings);
+  const configuredModel = settings.providers?.['openai-responses']?.model?.trim();
+  const url = new URL('https://api.openai.com/v1/responses');
+  const init: RequestInit = {
+    method: 'POST',
+    redirect: 'error',
+    signal,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: configuredModel || DEFAULT_OPENAI_RESPONSES_MODEL,
+      input: query,
+      tools: [{
+        type: 'web_search',
+        search_content_types: ['image'],
+        image_settings: { max_results: limit, caption: true },
+      }],
+      include: ['web_search_call.results'],
+    }),
+  };
+  return withProviderErrors('openai-responses', signal, async () => {
+    const body = await fetchJson('openai-responses', url, init, signal);
+    if (body.status === 'incomplete' || body.status === 'failed') {
+      throw new ImageSearchError('openai-responses did not complete the image search.', 'response');
+    }
+    if (!Array.isArray(body.output)) throw new ImageSearchError('openai-responses returned an invalid response.', 'response');
+    const candidates: ImageSearchCandidate[] = [];
+    for (const row of openAiResults(body.output)) {
+      const image = openAiImage(row);
+      if (image) candidates.push(image);
+    }
+    return unique(candidates, limit);
+  });
+}
+
 /** Each adapter owns its provider's wire shape; the caller sees one candidate contract. */
 function normalize(provider: ImageSearchProvider, row: Row): ImageSearchCandidate | undefined {
   const properties = child(row, 'properties');
@@ -76,6 +309,9 @@ export async function searchProvider(
   settings: ImageSearchSettings,
   signal: AbortSignal,
 ): Promise<ImageSearchCandidate[]> {
+  if (provider === 'tavily') return searchTavily(query, limit, settings, signal);
+  if (provider === 'parallel') return searchParallel(query, limit, settings, signal);
+  if (provider === 'openai-responses') return searchOpenAIResponses(query, limit, settings, signal);
   const key = imageSearchCredential(provider, settings);
   if (!key && provider !== 'openverse') {
     throw new ImageSearchError(`Image search credentials are missing for ${provider}. Configure its search apiKey or environment variable.`, 'credentials', true);
@@ -107,22 +343,9 @@ export async function searchProvider(
     if (key) init.headers = { ...init.headers, Authorization: `Bearer ${key}` };
   }
   try {
-    signal.throwIfAborted();
-    const response = await fetchSearch(url, init, signal);
-    if (!response.ok) {
-      await response.body?.cancel().catch(() => {});
-      throw new ImageSearchError(`${provider} image search returned HTTP ${response.status}.`, 'http', [401, 403, 404, 429].includes(response.status));
-    }
-    let body: unknown;
-    try {
-      body = JSON.parse(new TextDecoder().decode(await readResponseBytes(response, MAX_JSON_BYTES)));
-    } catch {
-      signal.throwIfAborted();
-      throw new ImageSearchError(`${provider} returned an unreadable or oversized search response.`, 'response');
-    }
-    if (!isRecord(body)) throw new ImageSearchError(`${provider} returned an invalid search response.`, 'response');
+    const body = await fetchJson(provider, url, init, signal);
     // Provider error payloads are not safe user messages, and are not empty searches.
-    if (body.error || (provider === 'serpapi' && child(body, 'search_metadata').status === 'Error')) {
+    if (provider === 'serpapi' && child(body, 'search_metadata').status === 'Error') {
       throw new ImageSearchError(`${provider} reported an image search error.`, 'response');
     }
     const rows = body[provider === 'serper' ? 'images' : provider === 'serpapi' ? 'images_results' : 'results'];

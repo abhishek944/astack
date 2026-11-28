@@ -340,11 +340,12 @@ export function createImageExtension(
   const searchTool = defineTool({
     name: 'image_search',
     description: 'Search for existing images using pi-image-search.default and its ordered fallback routes. Supports '
-      + 'Serper, Brave, SerpApi and Openverse. Entirely separate from image_generate and its settings. Does not accept '
-      + 'provider/model overrides, generate images, or change settings. Always downloads and validates still '
-      + 'JPEG/PNG/WebP images, excluding failed or unsupported candidates with rejection reasons. Returns local file '
-      + 'paths, source URLs and available license/attribution metadata. Empty results do not trigger fallback. Use '
-      + 'image_search_compare only for an explicit provider comparison.',
+      + 'Serper, Brave, SerpApi, Openverse, Tavily, Parallel Images API, and OpenAI Responses web_search image results. '
+      + 'Tavily, Parallel, and OpenAI Responses can incur provider charges. Entirely separate from image_generate and '
+      + 'its settings. Does not accept provider/model overrides, generate images, or change settings. Always downloads '
+      + 'and validates still JPEG/PNG/WebP images, excluding failed or unsupported candidates with rejection reasons. '
+      + 'Returns local file paths, source URLs and available license/attribution metadata. Empty results do not trigger '
+      + 'fallback. Use image_search_compare only for an explicit provider comparison.',
     parameters: searchParameters,
     replay: 'unsafe',
     executionMode: 'parallel',

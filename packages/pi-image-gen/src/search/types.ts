@@ -1,9 +1,19 @@
 import type { ImageResize } from '../types/image.js';
 
 /** Search routes never contain generation model ids or generation credentials. */
-export const IMAGE_SEARCH_PROVIDERS = ['serper', 'brave', 'serpapi', 'openverse'] as const;
+export const IMAGE_SEARCH_PROVIDERS = [
+  'serper', 'brave', 'serpapi', 'openverse', 'tavily', 'parallel', 'openai-responses',
+] as const;
 export type ImageSearchProvider = typeof IMAGE_SEARCH_PROVIDERS[number];
 export type ImageSearchRoute = { provider: ImageSearchProvider };
+export type ImageSearchParallelMode = 'fast' | 'advanced';
+export type ImageSearchProviderConfig = {
+  apiKey?: string;
+  /** parallel only: documented Images API mode. Defaults to fast. */
+  mode?: ImageSearchParallelMode;
+  /** openai-responses only: Responses model used with web_search image results. */
+  model?: string;
+};
 
 export type ImageSearchSettings = {
   default?: ImageSearchRoute;
@@ -11,8 +21,8 @@ export type ImageSearchSettings = {
   compare?: ImageSearchRoute[];
   /** Whole-search deadline, including fallback and downloads. Default 30 seconds; 1–120 seconds. */
   requestTimeoutMs?: number;
-  /** Openverse apiKey is an optional existing Bearer access token. */
-  providers?: Partial<Record<ImageSearchProvider, { apiKey?: string }>>;
+  /** Openverse can run without an apiKey. */
+  providers?: Partial<Record<ImageSearchProvider, ImageSearchProviderConfig>>;
 };
 
 export type ImageSearchParams = {

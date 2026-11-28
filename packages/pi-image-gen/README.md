@@ -217,7 +217,7 @@ Before replacing a changed file, migration creates a unique adjacent **private b
 
 ## Image search
 
-`image_search` finds **existing images** through Serper, Brave Search, SerpApi or Openverse. It is entirely separate from image generation: no generation models, credentials, default, fallback or compare routes are reused. It always downloads and validates candidates, returning usable local files plus source metadata. Optional `resize` saves exact-sized PNG copies. There is no URL-only mode or `download` flag. It never generates images.
+`image_search` finds **existing images** through Serper, Brave Search, SerpApi, Openverse, Tavily, Parallel Images API, or OpenAI Responses web_search image results. It is entirely separate from image generation: no generation models, credentials, default, fallback or compare routes are reused. It always downloads and validates candidates, returning usable local files plus source metadata. Optional `resize` saves exact-sized PNG copies. There is no URL-only mode or `download` flag. It never generates images.
 
 Configure its separate **`pi-image-search`** namespace in `settings.json`:
 
@@ -239,13 +239,16 @@ Configure its separate **`pi-image-search`** namespace in `settings.json`:
     "providers": {
       "serper": { "apiKey": "${SERPER_API_KEY}" },
       "brave": { "apiKey": "${BRAVE_SEARCH_API_KEY}" },
-      "serpapi": { "apiKey": "${SERPAPI_API_KEY}" }
+      "serpapi": { "apiKey": "${SERPAPI_API_KEY}" },
+      "tavily": { "apiKey": "${TAVILY_API_KEY}" },
+      "parallel": { "apiKey": "${PARALLEL_API_KEY}", "mode": "fast" },
+      "openai-responses": { "apiKey": "${OPENAI_RESPONSES_API_KEY}", "model": "gpt-6.2-astra" }
     }
   }
 }
 ```
 
-The configuration follows the same **default + fallback + compare** pattern as generation. Search routes have only `provider`, not `model`, because these APIs search existing images rather than run generation models. Omit fallback/compare to disable them. No default is silently chosen, and a fallback list cannot repeat its default or another fallback provider.
+The configuration follows the same **default + fallback + compare** pattern as generation. Search routes have only `provider`, not `model`, because these APIs search existing images rather than run generation models. Provider settings may still include `parallel.mode` (`fast` by default, or `advanced`) and `openai-responses.model` (`gpt-6.2-astra` by default, matching OpenAI's documented example). Omit fallback/compare to disable them. No default is silently chosen, and a fallback list cannot repeat its default or another fallback provider.
 
 | Search provider | Credential environment variable | Notes |
 | --- | --- | --- |
@@ -253,6 +256,11 @@ The configuration follows the same **default + fallback + compare** pattern as g
 | `brave` | `BRAVE_SEARCH_API_KEY` | Independent image index; strict safe search |
 | `serpapi` | `SERPAPI_API_KEY` | Google Images via SerpApi; safe search enabled |
 | `openverse` | Optional `OPENVERSE_ACCESS_TOKEN` | Anonymous access works at lower limits; optional `apiKey` is an existing Bearer access token, not a client secret |
+| `tavily` | `TAVILY_API_KEY` | Tavily Search `include_images`; `basic` depth costs 1 API credit per request |
+| `parallel` | `PARALLEL_API_KEY` | Dedicated Parallel Images API; `fast` $1/1,000 requests, `advanced` $5/1,000 |
+| `openai-responses` | `OPENAI_RESPONSES_API_KEY` | Responses `web_search` image results; separate from generation's OpenAI credential; web search including images is $10/1,000 calls plus content tokens |
+
+Official contracts: [Tavily Search API](https://docs.tavily.com/documentation/api-reference/endpoint/search), [Tavily auth](https://docs.tavily.com/documentation/api-headers), [Tavily credits](https://docs.tavily.com/documentation/api-credits), [Parallel Images API](https://docs.parallel.ai/api-reference/search/image-search), [Parallel modes](https://docs.parallel.ai/image-search/modes), [Parallel pricing](https://docs.parallel.ai/getting-started/pricing), [OpenAI image search results](https://developers.openai.com/api/docs/guides/tools-web-search?api-mode=responses), and [OpenAI tool pricing](https://developers.openai.com/api/docs/pricing#built-in-tools). These adapters use only documented image URL fields; source page links remain metadata.
 
 Search reads the same global, agent and trusted-project settings layers, but only its own namespace. Provider `apiKey` takes precedence over its environment variable. Environment placeholders expand only in global/agent settings, never in project settings. Keep keys out of committed project files. Unresolved placeholders are never sent as credentials. The extension never imports credentials from Bloom or another project.
 
@@ -274,7 +282,7 @@ Every search downloads and validates candidates; only still JPEG, PNG and WebP a
 
 - `resize`: optional `{ width, height, fit?: "contain" | "cover" }`. Both dimensions must be integers from 1–8192, with at most 40 million pixels. `contain` (default) preserves proportions and pads transparently; `cover` explicitly crops. Output is PNG, with the original saved unchanged.
 - `outputDir`: optional download directory; default `<cwd>/var/pi-image-gen/search`. The library resolves relative paths against `options.cwd` (or the process cwd).
-- No provider/model overrides are accepted by the tools.
+- No provider/model overrides are accepted by the tool arguments; Parallel `mode` and OpenAI Responses `model` come only from provider settings.
 - The whole ordinary search, including fallback and downloads, shares one deadline: `requestTimeoutMs` defaults to 30000, allowed 1000–120000.
 - Configured fallback runs only for missing credentials or HTTP 401/403/404/429. Empty results are successful and do **not** trigger fallback. Timeout, transport errors, invalid responses and other HTTP failures stop the search; there is no blind retry.
 - Every fallback explicitly authorizes sending the query to another provider, which may have different coverage, terms and billing. Avoid mixing Openverse with general-web fallback when you require an open-license collection.

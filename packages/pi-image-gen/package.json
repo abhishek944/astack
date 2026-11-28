@@ -1,7 +1,7 @@
 {
   "name": "@abhishek944/pi-image-gen",
   "version": "0.11.0",
-  "description": "Image and sprite generation for Pi, plus independent existing-image search via Serper, Brave, SerpApi and Openverse.",
+  "description": "Image and sprite generation for Pi, plus independent existing-image search via Serper, Brave, SerpApi, Openverse, Tavily, Parallel and OpenAI Responses.",
   "keywords": [
     "pi-package",
     "pi",

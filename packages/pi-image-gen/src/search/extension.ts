@@ -43,12 +43,13 @@ export function registerImageSearchTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: 'image_search',
     label: 'ImageSearch',
-    description: 'Search for existing images using pi-image-search.default and its ordered fallback routes. Supports Serper, Brave, SerpApi and Openverse. Entirely separate from image_generate and its settings. Does not accept provider/model overrides, generate images, or change settings. Always downloads and validates still JPEG/PNG/WebP images, excluding failed or unsupported candidates with rejection reasons. Returns local file paths, source URLs and available license/attribution metadata. Optional resize saves exact-sized PNG copies without changing originals. Empty results do not trigger fallback. Use image_search_compare only for an explicit provider comparison.',
+    description: 'Search for existing images using pi-image-search.default and its ordered fallback routes. Supports Serper, Brave, SerpApi, Openverse, Tavily, Parallel Images API, and OpenAI Responses web_search image results. Tavily, Parallel, and OpenAI Responses can incur provider charges. Entirely separate from image_generate and its settings. Does not accept provider/model overrides, generate images, or change settings. Always downloads and validates still JPEG/PNG/WebP images, excluding failed or unsupported candidates with rejection reasons. Returns local file paths, source URLs and available license/attribution metadata. Optional resize saves exact-sized PNG copies without changing originals. Empty results do not trigger fallback. Use image_search_compare only for an explicit provider comparison.',
     promptSnippet: 'Find existing web or openly licensed images; separate from image generation.',
     promptGuidelines: [
       'Use image_search to find existing images, and image_generate to create or edit images. Never substitute one for the other.',
       'Preserve source and license/attribution links. Download validation checks format and decodability, not relevance, quality or reuse permission.',
       'Every search downloads and validates candidates; there is no URL-only mode. Optional resize saves a PNG derivative. Use local path for the downloaded result and originalPath for its untouched original when resized. Generate/edit only when requested and permitted.',
+      'Tavily, Parallel, and OpenAI Responses use their own keys from pi-image-search settings or environment variables, not generation credentials. Each search may incur provider charges.',
     ],
     parameters,
     // Newer Pi hosts use this metadata for structured codemode results; older
